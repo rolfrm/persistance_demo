@@ -176,6 +176,7 @@ void render_game(){
     float r, g, b;
   }colors[10];
   float sizes[10];
+  glClearColor(0.25,0.25,0.25,1);
   glClear(GL_COLOR_BUFFER_BIT);
   u32 incr = array_count(circles2);
   for(u64 i = 0; i < n_circles; i += incr){
