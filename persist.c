@@ -49,7 +49,7 @@ void * persist_alloc(const char * name, size_t min_size){
   }
   
   const char * data_directory = "data";
-  
+  mkdir(data_directory, 0777);
   char path[100];
   sprintf(path, "%s/%s",data_directory, name);
   int fd = open(path, O_RDWR | O_CREAT, 0666);
