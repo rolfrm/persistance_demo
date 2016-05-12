@@ -1,5 +1,5 @@
-OPT = -g3 -O4
-LIB_SOURCES =  iron/mem.c iron/process.c iron/array.c iron/math.c iron/time.c  iron/log.c iron/fileio.c iron/linmath.c iron/test.c iron/error.c iron/image.c iron/gl.c iron/coroutines2.c main.c persist.c shader_utils.c game.c
+OPT = -g3 -O0
+LIB_SOURCES =  iron/mem.c iron/process.c iron/array.c iron/math.c iron/time.c  iron/log.c iron/fileio.c iron/linmath.c iron/test.c iron/error.c iron/image.c iron/gl.c iron/coroutines2.c main.c persist.c shader_utils.c game.c hsv.c
 CC = gcc
 TARGET = run.exe
 LIB_OBJECTS =$(LIB_SOURCES:.c=.o)

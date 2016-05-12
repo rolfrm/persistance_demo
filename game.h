@@ -2,6 +2,8 @@
 typedef struct{
   vec3 axis;
   int btn1_clicks;
+  vec2 direction;
+  bool should_exit;
 }controller_state;
 
 typedef enum{
@@ -9,9 +11,16 @@ typedef enum{
   kind_wall,
   kind_enemy,
   kind_coin,
+  kind_gun,
+  kind_bullet,
   kind_max
 
 }circle_kinds;
+
+typedef struct{
+  vec2 offset;
+  int btn1_last;
+}map_pos;
 
 typedef struct{
   bool active;
