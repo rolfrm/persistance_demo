@@ -229,7 +229,7 @@ void render_game(){
   }colors[10];
   float sizes[10];
   vec2 velocities[10];
-  glClearColor(1.0,1.0,1.0,0);
+  glClearColor(0.9,0.9,1.0,0);
   glClear(GL_COLOR_BUFFER_BIT);
   u32 incr = 10;
   u32 total_drawen = 0;
