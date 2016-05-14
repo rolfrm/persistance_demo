@@ -50,20 +50,25 @@ void load_random_level(){
   }
 }
 
-circle * get_new_circle(circle ** circles, u64 * cnt){
+circle * _get_new_circle(circle ** circles, u64 * cnt){
   for(u64 i = 0; i < *cnt; i++){
     if(!(*circles)[i].active){
-      logd("pick old %i\n", i);
+      
       return (*circles) + i;
     }
   }
 
   *cnt += 1;
-  logd("Reallocating.. %i %i %i\n", sizeof(circle), sizeof(circle) * (*cnt), *cnt);
   *circles = persist_realloc(*circles, sizeof(circle) * *cnt);
-  logd("pick new %i\n", *cnt - 1);
   return &(*circles)[*cnt - 1];
 }
+
+circle * get_new_circle(circle ** circles, u64 * cnt){
+  circle * c = _get_new_circle(circles, cnt);
+  memset(c, 0, sizeof(c[0]));
+  return c;
+}
+
 
 void game_loop(){
   //ad_random_level();
@@ -103,12 +108,10 @@ void game_loop(){
       c->pos = vec2_add(cp->pos , vec2_new(sinf(c->phase) * 10.0, cosf(c->phase) * 10.0));
     }
   }
-  //mpos->offset = vec2_add(mpos->offset, vec2_scale(ctrl->axis.xy, 10));
   mpos->offset = circles[0].pos;
   
   circles[1].phase = atan2f(ctrl->direction.x, ctrl->direction.y);
-  if(ctrl->btn1_clicks != mpos->btn1_last){
-    mpos->btn1_last = ctrl->btn1_clicks;
+  if(ctrl->btn1_clicked){
     circles[0].color = vec3_new(1.0, 0.6, 0.4);
     circle * bullet = get_new_circle(&circles,&n_circles);
     bullet->vel = vec2_add(circles[0].vel, vec2_scale(ctrl->direction, 10));
@@ -155,14 +158,22 @@ void game_loop(){
 	c1_mass = f32_infinity;
       if(c1->kind == kind_wall && c0->kind == kind_wall )
 	continue;
-      if(c1->kind == kind_bullet && c0->kind == kind_bullet)
-	continue;
+      
+      //if(c1->kind == kind_bullet && c0->kind == kind_bullet)
+      //  continue;
       
       vec2 dp = vec2_sub(c0->pos, c1->pos);
       
       float d = vec2_len(dp) - c0->size - c1->size;
       
       if(d < 0){
+	if((c1->kind == kind_target && c0->kind == kind_bullet) || (c0->kind == kind_target && c1->kind == kind_bullet)){
+	  if(c0->kind == kind_target)
+	    c0->active = false;
+	  else
+	    c1->active = false;
+	  continue;
+	}
 	vec2 dpn = vec2_normalize(dp);		
 	float m1;
 	float m0;
@@ -198,7 +209,37 @@ void game_loop(){
       }
     }
   }
-  
+
+  {//update turrets
+    turret * turrets = persist_alloc("turrets", sizeof(turret));
+    u64 turret_cnt = persist_size(turrets) / sizeof(turret);
+    for(u64 i = 0; i < turret_cnt; i++){
+      if(!turrets[i].active)
+	continue;
+      turrets[i].cooldown -= 1;
+      circle bc = circles[turrets[i].base_circle];
+      circle * gun = circles + turrets[i].gun_circle;
+      vec2 pv = vec2_sub(vec2_add(circles[0].vel, circles[0].pos), bc.pos);
+      float player_dist = vec2_len(pv);
+      ASSERT(gun->kind == kind_gun);
+      if(player_dist < 400){
+	gun->pos = vec2_add(bc.pos, vec2_scale(vec2_normalize(pv), bc.size + 1 + gun->size));
+	if(turrets[i].cooldown < 0){
+	  
+	  circle * bullet = get_new_circle(&circles,&n_circles);
+	  bullet->vel = vec2_scale(vec2_normalize(pv), 10);
+	  bullet->pos = gun->pos;
+	  bullet->active = true;
+	  bullet->size = 3;
+	  
+	  bullet->color = vec3_new(1,0,0);
+	  bullet->phase = 0.0;
+	  bullet->kind = kind_bullet;
+	  turrets[i].cooldown = 100;
+	}
+      }
+    }
+  }
   
 }
 
@@ -206,8 +247,8 @@ void render_game(){
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   glBlendEquation(GL_FUNC_ADD);
-  window_state * w = persist_alloc("win_state", sizeof(window_state));
-  circle * circles = persist_alloc("game", sizeof(circle) * 10);
+  window_state * w = persist_alloc("win_state", sizeof(window_state)); 
+  circle * circles = persist_alloc("game", sizeof(circle));
   u64 n_circles = persist_size(circles) / sizeof(circle);
   vec2 offset = circles[0].pos;
   offset.x -= w->width / 2;
@@ -222,37 +263,39 @@ void render_game(){
     initialized = true;
   }
   glUseProgram(shader);
-
-  vec2 positions[10];
+  const u32 incr = 50;
+  vec2 positions[incr];
   struct{
     float r, g, b;
-  }colors[10];
-  float sizes[10];
-  vec2 velocities[10];
-  glClearColor(0.9,0.9,1.0,0);
+  }colors[incr];
+  float sizes[incr];
+  vec2 velocities[incr];
+  glClearColor(0.7,0.7,1.0,0);
   glClear(GL_COLOR_BUFFER_BIT);
-  u32 incr = 10;
+
   u32 total_drawen = 0;
   for(u64 i = 0; i < n_circles; i += incr){
-    memset(sizes,0,sizeof(sizes));
+
     u32 scnt = MIN(n_circles - i, incr);
+    int to_draw = 0;
     for(u32 j = 0; j < scnt && i < n_circles; j++){
       circle c = circles[i + j];
 
-      if(c.active == false) {
+      if(c.active == false || c.size < 1) {
 	j--;
 	i += 1;
 	continue;
       }
-      vec2 rel_pos = vec2_sub(c.pos, offset);
-      if(vec2_len(rel_pos) > 2000){
+      vec2 rel_pos = vec2_sub(c.pos,  offset);
+      if(vec2_len(vec2_sub(c.pos, circles[0].pos)) - c.size > 1100){
 	j--;
 	i += 1;
 	continue;
       }
+      to_draw += 1;
       positions[j] = rel_pos;
       sizes[j] = c.size;
-      velocities[j] = c.vel;
+      velocities[j] = vec2_sub(c.vel, circles[0].vel);
       colors[j].r = c.color.x;
       colors[j].g = c.color.y;
       colors[j].b = c.color.z;
@@ -264,11 +307,12 @@ void render_game(){
     //glUniform1fv(circles_loc, 6 * scnt, (float *) circles2);
     //glUniform1f(colors, circles2[2].x);
     total_drawen += scnt;
-    glUniform1i(glGetUniformLocation(shader, "cnt"), scnt);
-    glUniform1fv(sizes_loc, 10, sizes);
-    glUniform3fv(colors_loc, 10, (float *)colors);
-    glUniform2fv(positions_loc, 10, (float *)positions);
-    glUniform2fv(velocities_loc, 10, (float *)velocities);
+    glUniform1i(glGetUniformLocation(shader, "cnt"), to_draw);
+    glUniform1fv(sizes_loc, incr, sizes);
+    glUniform3fv(colors_loc, incr, (float *)colors);
+    glUniform2fv(positions_loc, incr, (float *)positions);
+    glUniform2fv(velocities_loc, incr, (float *)velocities);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4); 
   }
+  //logd("Total drawen %i\n", total_drawen);
 }

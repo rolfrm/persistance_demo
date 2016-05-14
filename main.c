@@ -71,7 +71,7 @@ void mouse_button_callback(GLFWwindow * window, int button, int action, int mods
   UNUSED(window); UNUSED(mods);
   controller_state * controller = persist_alloc("controller", sizeof(controller_state));
   if(action == GLFW_PRESS && button == 0){
-    controller->btn1_clicks += 1;
+    controller->btn1_clicked = true;
     edit_mode * edit = persist_alloc("edit", sizeof(edit_mode));
     edit->left_clicked = true;
   }
@@ -103,8 +103,23 @@ void key_callback(GLFWwindow* win, int key, int scancode, int action, int mods){
   }
 }
 
+turret * get_new_turret(){
+
+  turret * turrets = persist_alloc("turrets", sizeof(turret));
+  u64 cnt = persist_size(turrets) / sizeof(turret);
+  for(u64 i = 0; i < cnt; i++){
+    if(!turrets[i].active){
+      return turrets + i;
+    }
+  }
+
+  cnt += 1;
+  turrets = persist_realloc(turrets, sizeof(turret) * cnt);
+  return &turrets[cnt - 1];
+}
+
 void edit_loop(){
-  circle_kinds kinds[] = {kind_wall, kind_enemy, kind_coin};
+  circle_kinds kinds[] = {kind_wall, kind_enemy, kind_coin, kind_target, kind_turret};
   edit_mode * edit = persist_alloc("edit", sizeof(edit_mode));
   map_pos * mpos = persist_alloc("map_pos", sizeof(map_pos));
   circle * circles = persist_alloc("game", sizeof(circle));
@@ -112,9 +127,7 @@ void edit_loop(){
   u64 n_circles = persist_size(circles) / sizeof(circle);
   //vec2_print(mpos->offset);logd("\n");
   if(edit->left_clicked){
-    circle * circ = get_new_circle(&circles, &n_circles);
-    circ->kind = kinds[edit->selected_kind];
-    vec2 v = vec2_add(mpos->offset, vec2_sub(edit->mouse_pos, vec2_new(w->width * 0.5, w->height * 0.5)));
+    vec2 v = vec2_add(mpos->offset, vec2_sub(edit->mouse_pos, vec2_new(w->width * 0.5, w->height * 0.5)));    
     if(edit->picking_color || edit->deleting){
       circle * circ2 = NULL;
       for(u64 i = 0; i < n_circles; i++){
@@ -125,22 +138,48 @@ void edit_loop(){
 	}
       }
       if(circ2 != NULL){
-	if(edit->deleting)
+	if(edit->deleting){
 	  circ2->active = false;
+	  if(circ2->kind == kind_turret){
+	    int circ_offset = circ2 - circles;
+	    turret * turrets = persist_alloc("turrets", sizeof(turret));
+	    logd("Deleting turret..\n");
+	    u64 cnt = persist_size(turrets) / sizeof(turret);
+	    for(u64 i = 0; i < cnt; i++){
+	      if(turrets[i].base_circle == circ_offset){
+		turrets[i].active = false;
+	      }
+	    }
+	  }
+	}
 	if(edit->picking_color)
 	  edit->color = circ2->color;
       }
       return;
     }
     
-    logd("Added: ");vec2_print(v);logd(" ");vec2_print(circles[0].pos);logd("\n");
-    
+    circle * circ = get_new_circle(&circles, &n_circles);
+    circ->kind = kinds[edit->selected_kind];
     circ->pos = v;
     circ->size = edit->size;
     circ->color = edit->color;
     circ->active = true;
     circ->phase = 0.0;
     circ->vel = vec2_zero;
+    if(circ->kind == kind_turret){
+      turret * t = get_new_turret();
+      
+      circle * gun = get_new_circle(&circles, &n_circles);
+      gun->kind = kind_gun;
+      gun->pos = vec2_add(v, vec2_new(circ->size + 1, circ->size + 1));
+      gun->size = 3;
+      gun->color = vec3_new(0.25, 0.25, 0.25);
+      gun->active = true;
+      t->base_circle = circ - circles;
+      t->gun_circle = gun - circles;
+      t->active = true;
+      
+    }
   }
   
   if(edit->changing_color_h || edit->changing_color_s || edit->changing_color_v){
@@ -202,8 +241,7 @@ int main(){
     map_pos * mappos = persist_alloc("controller", sizeof(map_pos));
     memset(mappos, 0, sizeof(mappos[0]));
   }
-  bool spaceDown = false;
-
+  glfwSwapInterval(1);
   while(!controller->should_exit){
     controller->axis.x = 0;
     controller->axis.y = 0;
@@ -221,19 +259,13 @@ int main(){
       controller->axis.y -= 1;
     }
 
-    if(glfwGetKey(window, GLFW_KEY_SPACE)){
-      if(spaceDown == false)
-	controller->btn1_clicks += 1;
-      spaceDown = true;
-    }else{
-      spaceDown = false;
-    }
     glViewport(0, 0, w->width, w->height);
     double mx,my;
     glfwGetCursorPos(window, &mx, &my);
     edit_mode * edit = persist_alloc("edit", sizeof(edit_mode));
     edit->mouse_pos.x = mx;
     edit->mouse_pos.y = w->height - my;
+    //u64 t1 = timestamp();
     render_game();
     if(main_mode->mode == MODE_GAME){
       game_loop();
@@ -242,8 +274,9 @@ int main(){
     }
 
     glfwSwapBuffers(window);
-
-
+    //u64 t2 = timestamp();
+    //logd("main time:%f s\n", ((double)(t2 - t1)) * 1e-6);
+    
     edit->scroll_amount = 0;
     edit->picking_color = glfwGetKey(window, GLFW_KEY_P);
     edit->left_clicked = false;
@@ -253,7 +286,7 @@ int main(){
     edit->changing_color_s = glfwGetKey(window, GLFW_KEY_C);
     edit->changing_kind = glfwGetKey(window, GLFW_KEY_K);
     edit->deleting = glfwGetKey(window, GLFW_KEY_D);
-    
+    controller->btn1_clicked = false;
     glfwPollEvents();
     //iron_sleep(0.1);
   }
