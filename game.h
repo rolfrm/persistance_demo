@@ -37,6 +37,7 @@ typedef struct{
   int base_circle;
   int gun_circle;
   float cooldown;
+  int health;
 }turret;
 typedef struct{
   int width, height;
@@ -47,3 +48,7 @@ typedef struct{
 
 void game_loop();
 void render_game();
+
+turret * find_turret(circle * c);
+turret * get_new_turret();
+void turret_disable(turret * t);

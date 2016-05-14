@@ -118,6 +118,28 @@ turret * get_new_turret(){
   return &turrets[cnt - 1];
 }
 
+turret * find_turret(circle * c){
+  circle * circles = persist_alloc("game", sizeof(circle));
+  turret * turrets = persist_alloc("turrets", sizeof(turret));
+  u64 turret_cnt = persist_size(turrets) / sizeof(turret);
+  i32 offset = (i32)(c - circles);
+  for(u64 i = 0; i < turret_cnt; i++)
+    if(turrets[i].active && turrets[i].base_circle == offset)
+      return turrets + i;
+  return NULL;
+}
+
+void turret_disable(turret * turret){
+  circle * circles = persist_alloc("game", sizeof(circle));
+  logd("Deleting turret..\n");
+  ASSERT(turret != NULL);
+  turret->active = false;
+  logd(">> %i %i\n", turret->gun_circle, turret->base_circle);
+  circles[turret->gun_circle].active = false;
+  circles[turret->base_circle].active = false;
+}
+
+
 void edit_loop(){
   circle_kinds kinds[] = {kind_wall, kind_enemy, kind_coin, kind_target, kind_turret};
   edit_mode * edit = persist_alloc("edit", sizeof(edit_mode));
@@ -141,15 +163,9 @@ void edit_loop(){
 	if(edit->deleting){
 	  circ2->active = false;
 	  if(circ2->kind == kind_turret){
-	    int circ_offset = circ2 - circles;
-	    turret * turrets = persist_alloc("turrets", sizeof(turret));
+	    turret * turret = find_turret(circ2);
 	    logd("Deleting turret..\n");
-	    u64 cnt = persist_size(turrets) / sizeof(turret);
-	    for(u64 i = 0; i < cnt; i++){
-	      if(turrets[i].base_circle == circ_offset){
-		turrets[i].active = false;
-	      }
-	    }
+	    turret_disable(turret);
 	  }
 	}
 	if(edit->picking_color)
@@ -159,6 +175,7 @@ void edit_loop(){
     }
     
     circle * circ = get_new_circle(&circles, &n_circles);
+    logd("New item: %i\n", circ - circles);
     circ->kind = kinds[edit->selected_kind];
     circ->pos = v;
     circ->size = edit->size;
@@ -168,13 +185,14 @@ void edit_loop(){
     circ->vel = vec2_zero;
     if(circ->kind == kind_turret){
       turret * t = get_new_turret();
-      
+      t->health = 10;
       circle * gun = get_new_circle(&circles, &n_circles);
       gun->kind = kind_gun;
       gun->pos = vec2_add(v, vec2_new(circ->size + 1, circ->size + 1));
       gun->size = 3;
       gun->color = vec3_new(0.25, 0.25, 0.25);
       gun->active = true;
+      gun->vel = vec2_zero;
       t->base_circle = circ - circles;
       t->gun_circle = gun - circles;
       t->active = true;
