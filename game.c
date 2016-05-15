@@ -112,6 +112,7 @@ void game_loop(){
       circle * c = circles + i;
       circle * cp = circles + i - 1;
       c->pos = vec2_add(cp->pos , vec2_new(sinf(c->phase) * 10.0, cosf(c->phase) * 10.0));
+      c->vel = cp->vel;
     }
   }
   mpos->offset = circles[0].pos;
@@ -120,7 +121,7 @@ void game_loop(){
   if(ctrl->btn1_clicked){
     circles[0].color = vec3_new(1.0, 0.6, 0.4);
     circle * bullet = get_new_circle(&circles,&n_circles);
-    bullet->vel = vec2_add(circles[0].vel, vec2_scale(ctrl->direction, 10));
+    bullet->vel = vec2_scale(ctrl->direction, 10);
     bullet->pos = circles[1].pos;
     bullet->active = true;
     bullet->size = 2;
@@ -252,24 +253,26 @@ void game_loop(){
 	if(i == 0){
 	  logd("Collision with %i, size: %f, kind: %i\n", j, c1->size, c1->kind);
 	}
-	//if(c1->kind == kind_bullet)
-	//  c1->active = false;
+	if(c1->kind == kind_bullet)
+	  c1->active = false;
 	if(c1->kind == kind_bullet && c0->kind == kind_turret){
 	  turret * t = find_turret(c0);
 	  t->health--;
 	  logd("%i \n", t->health);
-	  if(t->health <= 0)
+	  c0->size *= 0.8;
+	  if(c0->size <= 5)
 	    turret_disable(t);
 	}
 	
-	//if(c0->kind == kind_bullet)
-	//  c0->active = false;
+	if(c0->kind == kind_bullet)
+	  c0->active = false;
 	if(c0->kind == kind_bullet && c1->kind == kind_turret){
 
 	  turret * t = find_turret(c1);
 	  t->health--;
 	  logd("%i \n", t->health);
-	  if(t->health <= 0)
+	  c1->size *= 0.8;
+	  if(c1->size <= 5)	    
 	    turret_disable(t);
 	}
 	

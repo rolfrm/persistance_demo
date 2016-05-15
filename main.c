@@ -168,8 +168,16 @@ void edit_loop(){
 	    turret_disable(turret);
 	  }
 	}
-	if(edit->picking_color)
+	if(edit->picking_color){
 	  edit->color = circ2->color;
+	  for(u32 i = 0; i < array_count(kinds); i++){
+	    if(kinds[i] == (circle_kinds)circ2->kind){
+	      edit->selected_kind = i;
+	      break;
+	    }
+	  }
+	  edit->size = circ2->size;
+	}
       }
       return;
     }
@@ -187,7 +195,7 @@ void edit_loop(){
       turret * t = get_new_turret();
       t->health = 10;
       circle * gun = get_new_circle(&circles, &n_circles);
-      gun->kind = kind_gun;
+       gun->kind = kind_gun;
       gun->pos = vec2_add(v, vec2_new(circ->size + 1, circ->size + 1));
       gun->size = 3;
       gun->color = vec3_new(0.25, 0.25, 0.25);
