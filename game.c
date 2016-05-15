@@ -91,11 +91,22 @@ void game_loop(){
     if(!circles[i].active)
       continue;
     
+    bool fix_nan = false;
+    if(fix_nan){
+      if((false == isnan(circles[i].pos.x) && false == isnan(circles[i].pos.y))
+	 &&(false == isnan(circles[i].vel.x) && false == isnan(circles[i].vel.y))
+	 &&(isfinite(circles[i].pos.x) && isfinite(circles[i].pos.y))
+       &&(isfinite(circles[i].vel.x) && isfinite(circles[i].vel.y))){
+      }else{
+	circles[i].active = false;
+	continue;
+      }
+    }
     ASSERT(false == isnan(circles[i].pos.x) && false == isnan(circles[i].pos.y));
     ASSERT(false == isnan(circles[i].vel.x) && false == isnan(circles[i].vel.y));
     ASSERT(isfinite(circles[i].pos.x) && isfinite(circles[i].pos.y));
     ASSERT(isfinite(circles[i].vel.x) && isfinite(circles[i].vel.y));
-
+    
     
     active_circles += 1;
     if(i == 0)
