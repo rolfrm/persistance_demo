@@ -90,6 +90,13 @@ void game_loop(){
     
     if(!circles[i].active)
       continue;
+    
+    ASSERT(false == isnan(circles[i].pos.x) && false == isnan(circles[i].pos.y));
+    ASSERT(false == isnan(circles[i].vel.x) && false == isnan(circles[i].vel.y));
+    ASSERT(isfinite(circles[i].pos.x) && isfinite(circles[i].pos.y));
+    ASSERT(isfinite(circles[i].vel.x) && isfinite(circles[i].vel.y));
+
+    
     active_circles += 1;
     if(i == 0)
       circles[i].vel = vec2_add(circles[i].vel, vec2_scale(ctrl->axis.xy, 0.1));
@@ -184,16 +191,21 @@ void game_loop(){
 	//if(det >= 0 && )
 	//  
 	if(det >= 0 && isnan(det) == false && isfinite(det)){
-	  if(x1 < 0 || x2 > 1)
-	    continue;
-	  logd("%f %i %i\n", det, det != f32_nan, det == f32_nan);
-	  // move them so they touch and resolve collision normally.
-	  c0->pos = vec2_add(c0->pos, vec2_scale(c0->vel, x2));
-	  c1->pos = vec2_add(c1->pos, vec2_scale(c1->vel, x2));
-	  dp = vec2_sub(c0->pos, c1->pos);
-	  d = vec2_len(dp) - c0->size - c1->size;
-	  logd("sweep resolve at t: %f %f %f\n", x1, x2, d);
-	  // resolve collision
+	  if(x1 < 0 || x2 > 1 || x2 < 0){
+	  }else{
+	    
+	    // move them so they touch and resolve collision normally.
+	  
+	    c0->pos = vec2_add(c0->pos, vec2_scale(c0->vel, x2));
+	    c1->pos = vec2_add(c1->pos, vec2_scale(c1->vel, x2));
+	    dp = vec2_sub(c0->pos, c1->pos);
+	    d = vec2_len(dp) - c0->size - c1->size;
+	    vec2_print(v);
+	    vec2_print(dp);
+	    logd("sweep resolve at t: %f %f %f %f %f %f %f\n", x1, x2, d, det, a, b, c);
+	    // resolve collision
+	  }
+	  
 	}
       }
 
