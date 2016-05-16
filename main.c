@@ -263,10 +263,7 @@ int main(){
   glewInit();
   controller_state * controller = persist_alloc("controller", sizeof(controller_state));
   memset(controller, 0, sizeof(controller_state)); // reset controller on start.
-  {
-    map_pos * mappos = persist_alloc("controller", sizeof(map_pos));
-    memset(mappos, 0, sizeof(mappos[0]));
-  }
+  
   glfwSwapInterval(1);
   while(!controller->should_exit){
     controller->axis.x = 0;

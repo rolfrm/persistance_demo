@@ -167,8 +167,6 @@ void game_loop(){
     f32 c0_mass = c0->size;
     if(c0->kind == kind_wall || c0->kind == kind_turret)
       c0_mass = f32_infinity;
-    if(c0->kind == kind_bullet)
-      c0_mass *= 0.2;
     for(u64 j = i + 1; j < n_circles; j++){
       circle * c1 = circles + j;
       if(c1->active == false || c1->kind == kind_coin|| c1->kind == kind_gun)
@@ -178,17 +176,13 @@ void game_loop(){
 	c1_mass = f32_infinity;
       if(c1->kind == kind_wall && c0->kind == kind_wall )
 	continue;
-      if(c1->kind == kind_bullet)
-	c1_mass *= 0.2;
-      //if(c1->kind == kind_bullet && c0->kind == kind_bullet)
-      //  continue;
       
       vec2 dp = vec2_sub(c0->pos, c1->pos);
       
       float d = vec2_len(dp) - c0->size - c1->size;
       vec2 dv = vec2_sub(c0->vel, c1->vel);
       
-      {
+      { // sweep collision detection
 	vec2 v = vec2_scale(dv, -1);
 	float r = c0->size + c1->size;
 	float a = v.x * v.x + v.y * v.y;
@@ -197,32 +191,19 @@ void game_loop(){
 	float det = b * b - 4 * a * c;
 	float x1 = (-b + sqrtf(det)) / (2.0f * a);
 	float x2 = (-b - sqrtf(det)) / (2.0f * a);
-	//if(i == 0 && j == 217){
-	//  logd("Results %f %f %f\n", det, x1, x2);
-	//}
-	//if(det >= 0 && )
-	//  
 	if(det >= 0 && isnan(det) == false && isfinite(det)){
 	  if(x1 < 0 || x2 > 1 || x2 < 0){
 	  }else{
-	    
 	    // move them so they touch and resolve collision normally.
-	  
 	    c0->pos = vec2_add(c0->pos, vec2_scale(c0->vel, x2));
 	    c1->pos = vec2_add(c1->pos, vec2_scale(c1->vel, x2));
 	    dp = vec2_sub(c0->pos, c1->pos);
 	    d = vec2_len(dp) - c0->size - c1->size;
-	    vec2_print(v);
-	    vec2_print(dp);
-	    logd("sweep resolve at t: %f %f %f %f %f %f %f\n", x1, x2, d, det, a, b, c);
-	    // resolve collision
 	  }
 	  
 	}
       }
 
-      
-      
       if(d <= 0.001){
 	if((c1->kind == kind_target && c0->kind == kind_bullet) || (c0->kind == kind_target && c1->kind == kind_bullet)){
 	  if(c0->kind == kind_target)
@@ -248,40 +229,28 @@ void game_loop(){
 	c0->pos = vec2_add(c0->pos, vec2_scale(dpn,-1 * m0 * d));
 	c1->pos = vec2_add(c1->pos, vec2_scale(dpn, m1 * d));
 	dp = vec2_sub(c0->pos, c1->pos);
-	//float d2 = c0->size + c1->size;
-	
-	//vec2 cp = vec2_add(c0->pos, vec2_scale(dpn, c0->size));
-
-	//float vl = vec2_len(dv);
-	
-	//vec2 dcp0 = vec2_normalize(vec2_sub(c0->pos, cp));
 	float b = vec2_mul_inner(dv, dp) / vec2_sqlen(dp);	
 	c0->vel = vec2_sub(c0->vel, vec2_scale(dp, 2 * m0 * b ));
-
-	
-	//vec2 dcp1 = vec2_normalize(vec2_sub(c1->pos, cp));
 	c1->vel = vec2_sub(c1->vel, vec2_scale(dp, -2 * m1 * b));
 	if(i == 0){
 	  logd("Collision with %i, size: %f, kind: %i\n", j, c1->size, c1->kind);
 	}
-	if(c1->kind == kind_bullet)
+	if(c1->kind == kind_bullet && c0->kind != kind_wall)
 	  c1->active = false;
 	if(c1->kind == kind_bullet && c0->kind == kind_turret){
 	  turret * t = find_turret(c0);
 	  t->health--;
-	  logd("%i \n", t->health);
 	  c0->size *= 0.8;
 	  if(c0->size <= 5)
 	    turret_disable(t);
 	}
 	
-	if(c0->kind == kind_bullet)
+	if(c0->kind == kind_bullet && c1->kind != kind_wall)
 	  c0->active = false;
 	if(c0->kind == kind_bullet && c1->kind == kind_turret){
 
 	  turret * t = find_turret(c1);
 	  t->health--;
-	  logd("%i \n", t->health);
 	  c1->size *= 0.8;
 	  if(c1->size <= 5)	    
 	    turret_disable(t);
