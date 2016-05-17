@@ -1,3 +1,9 @@
+typedef struct{
+  int width, height;
+  int x, y;
+  bool initialized;
+  char title[64];
+}window_state;
 
 typedef struct{
   vec3 axis;
@@ -15,6 +21,9 @@ typedef enum{
   kind_bullet,
   kind_target,
   kind_turret,
+  kind_decal,
+  kind_worm,
+  kind_laser,
   kind_max
 
 }circle_kinds;
@@ -32,6 +41,7 @@ typedef struct{
   int kind;
   float phase;
 }circle;
+
 typedef struct{
   bool active;
   int base_circle;
@@ -39,12 +49,22 @@ typedef struct{
   float cooldown;
   int health;
 }turret;
+
 typedef struct{
-  int width, height;
-  int x, y;
-  bool initialized;
-  char title[64];
-}window_state;
+  bool active;
+  u32 bodies[6];
+  u32 body_cnt;
+}worm;
+
+typedef struct{
+  bool active;
+  int bullet;
+  float length;
+  int laser;
+}laser;
+
+
+worm * get_new_worm(worm ** worms, u64 * cnt);
 
 void game_loop();
 void render_game();
@@ -52,3 +72,5 @@ void render_game();
 turret * find_turret(circle * c);
 turret * get_new_turret();
 void turret_disable(turret * t);
+
+circle * get_new_circle(circle ** circles, u64 * cnt);

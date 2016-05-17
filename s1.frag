@@ -7,10 +7,10 @@ struct circle{
   //vec3 color;
 };
 
-uniform vec2 positions[50];
-uniform float sizes[50];
-uniform vec3 colors[50];
-uniform vec2 velocities[50];
+uniform vec2 positions[100];
+uniform float sizes[100];
+uniform vec3 colors[100];
+uniform vec2 velocities[100];
 uniform int cnt;
 out vec4 color;
 
@@ -22,6 +22,7 @@ void main(){
      vec2 v2 = v1 + velocities[i];
      float d = 0.0;
      float vl = length(velocities[i]);
+     d = length(gl_FragCoord.xy - v1);
      if(vl < 0.001 || dot(gl_FragCoord.xy - v1, velocities[i]) < 0){
        d = length(gl_FragCoord.xy - v1);
        

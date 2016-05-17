@@ -13,7 +13,7 @@ vec3 vec3_clamp(vec3 v, float min, float max){
   return v;
 }
 
-circle * get_new_circle(circle ** circles, u64 * cnt);
+
 typedef struct{
   bool left_clicked;
   bool picking_color;
@@ -22,12 +22,14 @@ typedef struct{
   int scroll_amount;
   vec3 color;
   float size;
+  float phase;
   bool changing_size;
 
   bool changing_color_h;
   bool changing_color_s;
   bool changing_color_v;
   bool changing_kind;
+  bool changing_phase;
   bool deleting;
 }edit_mode;
 
@@ -118,6 +120,23 @@ turret * get_new_turret(){
   return &turrets[cnt - 1];
 }
 
+laser * get_new_laser(){
+
+  laser * lasers = persist_alloc("lasers", sizeof(laser));
+  u64 cnt = persist_size(lasers) / sizeof(laser);
+  for(u64 i = 0; i < cnt; i++){
+    if(!lasers[i].active){
+      return lasers + i;
+    }
+  }
+
+  cnt += 1;
+  lasers = persist_realloc(lasers, sizeof(laser) * cnt);
+  return &lasers[cnt - 1];
+}
+
+
+
 turret * find_turret(circle * c){
   circle * circles = persist_alloc("game", sizeof(circle));
   turret * turrets = persist_alloc("turrets", sizeof(turret));
@@ -141,7 +160,10 @@ void turret_disable(turret * turret){
 
 
 void edit_loop(){
-  circle_kinds kinds[] = {kind_wall, kind_enemy, kind_coin, kind_target, kind_turret};
+  circle_kinds kinds[] = {kind_wall, kind_enemy, kind_coin,
+			  kind_target, kind_turret, kind_worm,
+			  kind_laser};
+  
   edit_mode * edit = persist_alloc("edit", sizeof(edit_mode));
   map_pos * mpos = persist_alloc("map_pos", sizeof(map_pos));
   circle * circles = persist_alloc("game", sizeof(circle));
@@ -189,7 +211,7 @@ void edit_loop(){
     circ->size = edit->size;
     circ->color = edit->color;
     circ->active = true;
-    circ->phase = 0.0;
+    circ->phase = edit->phase;
     circ->vel = vec2_zero;
     if(circ->kind == kind_turret){
       turret * t = get_new_turret();
@@ -203,9 +225,39 @@ void edit_loop(){
       gun->vel = vec2_zero;
       t->base_circle = circ - circles;
       t->gun_circle = gun - circles;
-      t->active = true;
-      
+      t->active = true; 
     }
+
+    if(circ->kind == kind_worm){
+      worm * worms = persist_alloc("worms", sizeof(worm) * 10);
+      u64 worm_cnt = persist_size(worms);
+      worm * w = get_new_worm(&worms, &worm_cnt);
+      w->active = true;
+      w->body_cnt = 6;
+      u64 i1 = circ - circles;
+      w->bodies[0] = i1;
+      circle * circ1 = circ;
+      for(u64 i = 1; i < w->body_cnt; i++){
+	circle * circ2 = get_new_circle(&circles, &n_circles);
+	*circ2 = *circ1;
+	circ2->size = circ1->size * 0.7;
+	circ2->pos = vec2_sub(circ1->pos, vec2_new(circ1->size + circ2->size, 0));
+	circ1 = circ2;
+	w->bodies[i] = circ2 - circles;
+      }
+    }
+
+    if(circ->kind == kind_laser){
+      laser * lasers = persist_alloc("lasers", sizeof(laser) * 10);
+      u64 laser_cnt = persist_size(lasers);
+      laser * l = get_new_laser(&lasers, &laser_cnt);
+      l->laser = circ - circles;
+      l->active = true;
+      l->length = 100;
+      l->bullet = -1;
+    }
+    
+    
   }
   
   if(edit->changing_color_h || edit->changing_color_s || edit->changing_color_v){
@@ -232,6 +284,9 @@ void edit_loop(){
     edit->selected_kind += edit->scroll_amount;
     edit->selected_kind %= array_count(kinds);
     logd("Kind: %i\n", edit->selected_kind);
+  }else if(edit->changing_phase){
+    logd("Phase: %f\n", edit->phase);
+    edit->phase += edit->scroll_amount * 0.1;
   }
 }
 
@@ -259,6 +314,7 @@ int main(){
   glfwSetMouseButtonCallback(window, mouse_button_callback);
   glfwSetKeyCallback(window, key_callback);
   glfwSetScrollCallback(window, scroll_callback);
+  
   glfwMakeContextCurrent(window);
   glewInit();
   controller_state * controller = persist_alloc("controller", sizeof(controller_state));
@@ -269,26 +325,25 @@ int main(){
     controller->axis.x = 0;
     controller->axis.y = 0;
     
-    if(glfwGetKey(window, GLFW_KEY_LEFT)){
+    if(glfwGetKey(window, GLFW_KEY_LEFT))
       controller->axis.x -= 1;
-    }
-    if(glfwGetKey(window, GLFW_KEY_RIGHT)){
+    
+    if(glfwGetKey(window, GLFW_KEY_RIGHT))
       controller->axis.x += 1;
-    }
-    if(glfwGetKey(window, GLFW_KEY_UP)){
+    
+    if(glfwGetKey(window, GLFW_KEY_UP))
       controller->axis.y += 1;
-    }
-    if(glfwGetKey(window, GLFW_KEY_DOWN)){
+    
+    if(glfwGetKey(window, GLFW_KEY_DOWN))
       controller->axis.y -= 1;
-    }
-
+    
     glViewport(0, 0, w->width, w->height);
     double mx,my;
     glfwGetCursorPos(window, &mx, &my);
     edit_mode * edit = persist_alloc("edit", sizeof(edit_mode));
     edit->mouse_pos.x = mx;
     edit->mouse_pos.y = w->height - my;
-    //u64 t1 = timestamp();
+    u64 t1 = timestamp();
     render_game();
     if(main_mode->mode == MODE_GAME){
       game_loop();
@@ -297,8 +352,10 @@ int main(){
     }
 
     glfwSwapBuffers(window);
-    //u64 t2 = timestamp();
-    //logd("main time:%f s\n", ((double)(t2 - t1)) * 1e-6);
+    u64 t2 = timestamp();
+    float ds = ((double)(t2 - t1)) * 1e-6;
+    UNUSED(ds);
+    //logd("main time:%f s\n", ds);
     
     edit->scroll_amount = 0;
     edit->picking_color = glfwGetKey(window, GLFW_KEY_P);
@@ -307,6 +364,7 @@ int main(){
     edit->changing_color_v = glfwGetKey(window, GLFW_KEY_I);
     edit->changing_color_h = glfwGetKey(window, GLFW_KEY_H);
     edit->changing_color_s = glfwGetKey(window, GLFW_KEY_C);
+    edit->changing_phase = glfwGetKey(window, GLFW_KEY_F);
     edit->changing_kind = glfwGetKey(window, GLFW_KEY_K);
     edit->deleting = glfwGetKey(window, GLFW_KEY_D);
     controller->btn1_clicked = false;

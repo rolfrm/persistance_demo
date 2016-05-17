@@ -49,7 +49,7 @@ void load_random_level(){
     }
   }
 }
-
+ 
 circle * _get_new_circle(circle ** circles, u64 * cnt){
   for(u64 i = 0; i < *cnt; i++){
     if(!(*circles)[i].active){
@@ -70,20 +70,76 @@ circle * get_new_circle(circle ** circles, u64 * cnt){
 }
 
 
+worm * _get_new_worm(worm ** worms, u64 * cnt){
+  for(u64 i = 0; i < *cnt; i++)
+    if(!(*worms)[i].active)
+      return (*worms) + i;
+    
+  *cnt += 1;
+  *worms = persist_realloc(*worms, sizeof(worm) * *cnt);
+  return &(*worms)[*cnt - 1];
+}
+
+worm * get_new_worm(worm ** worms, u64 * cnt){
+  worm * c = _get_new_worm(worms, cnt);
+  memset(c, 0, sizeof(c[0]));
+  return c;
+}
+
+
+
+
+void hit_target(circle ** circles, u64 * cnt, circle * target){
+  target->active = false;
+  vec2 pos = target->pos;
+  vec3 color = target->color;
+  float size = target->size;
+  for(int i = 0; i < 8; i++){
+    circle * c = get_new_circle(circles, cnt);
+    c->pos = vec2_add(pos, vec2_scale(vec2_normalize(vec2_new((i % 4) / 0.5f - 0.5f, i / 4 - 0.5f)), c->size + size * 0.5 + 3.0));
+    c->vel = vec2_mul(vec2_sub(vec2_rand(), vec2_new(0.5,0.5)), vec2_sub(c->pos, pos));
+    c->active = true;
+    c->color = color;
+    c->phase = 20;
+    c->kind = kind_decal;
+    c->size = size * 0.33;
+  }
+  
+}
+
+
 void game_loop(){
   //ad_random_level();
   
   map_pos * mpos = persist_alloc("map_pos", sizeof(map_pos));
   controller_state * ctrl = persist_alloc("controller", sizeof(controller_state));
 
-  circle * circles = persist_alloc("game", sizeof(circle));
+  circle * circles = persist_alloc("game", sizeof(circle) * 2);
   //if(circles[0].kind != kind_player || circles[0].active == false ||circles[1].kind != kind_gun){
   //  circles[0].active = false;
   //  load_random_level();
   //}
   
-  ASSERT(circles[0].kind == kind_player);
+  //ASSERT(circles[0].kind == kind_player);
   u64 n_circles = persist_size(circles) / sizeof(circle);
+  if(circles[0].kind != kind_player){
+    circle * player = circles;
+    player->kind = kind_player;
+    player->pos = vec2_zero;
+    player->size = 5;
+    player->active = true;
+    player->color = vec3_new(0.7, 0.5, 0.5);
+  }
+
+  if(circles[1].kind != kind_gun){
+    circle * gun = circles + 1;
+    gun->kind = kind_gun;
+    gun->pos = vec2_zero;
+    gun->size = 3;
+    gun->active = true;
+    gun->color = vec3_new(0.5,0.5, 0.7);
+  }
+  
   int active_circles = 0;
 
   for(u64 i = 0; i < n_circles; i++){
@@ -122,8 +178,13 @@ void game_loop(){
     if(circles[i].kind == kind_gun){
       circle * c = circles + i;
       circle * cp = circles + i - 1;
-      c->pos = vec2_add(cp->pos , vec2_new(sinf(c->phase) * 10.0, cosf(c->phase) * 10.0));
+      float s = c->size + cp->size;
+      c->pos = vec2_add(cp->pos , vec2_new(sinf(c->phase) * s, cosf(c->phase) * s));
       c->vel = cp->vel;
+    }
+    if(circles[i].kind == kind_decal){
+      circle * c = circles + i;
+      c->active = (c->phase -= 1.0) > 0;
     }
   }
   mpos->offset = circles[0].pos;
@@ -162,21 +223,22 @@ void game_loop(){
   
   for(u64 i = 0; i < n_circles; i++){
     circle * c0 = circles + i;
-    if(c0->active == false || c0->kind == kind_coin || c0->kind == kind_gun)
+    if(c0->active == false || c0->kind == kind_coin || c0->kind == kind_gun || c0->kind == kind_decal)
       continue;
     f32 c0_mass = c0->size;
     if(c0->kind == kind_wall || c0->kind == kind_turret)
       c0_mass = f32_infinity;
     for(u64 j = i + 1; j < n_circles; j++){
       circle * c1 = circles + j;
-      if(c1->active == false || c1->kind == kind_coin|| c1->kind == kind_gun)
+      if(c1->active == false || c1->kind == kind_coin|| c1->kind == kind_gun || c1->kind == kind_decal)
 	continue;
       f32 c1_mass = c1->size;
       if(c1->kind == kind_wall  || c1->kind == kind_turret)
 	c1_mass = f32_infinity;
       if(c1->kind == kind_wall && c0->kind == kind_wall )
 	continue;
-      
+      if(c1->kind == kind_bullet && c0->kind == kind_bullet)
+	continue;
       vec2 dp = vec2_sub(c0->pos, c1->pos);
       
       float d = vec2_len(dp) - c0->size - c1->size;
@@ -207,9 +269,9 @@ void game_loop(){
       if(d <= 0.001){
 	if((c1->kind == kind_target && c0->kind == kind_bullet) || (c0->kind == kind_target && c1->kind == kind_bullet)){
 	  if(c0->kind == kind_target)
-	    c0->active = false;
+	    hit_target(&circles, &n_circles, c0);
 	  else
-	    c1->active = false;
+	    hit_target(&circles, &n_circles, c1);
 	  continue;
 	}
 	vec2 dpn = vec2_normalize(dp);		
@@ -248,7 +310,7 @@ void game_loop(){
 	if(c0->kind == kind_bullet && c1->kind != kind_wall)
 	  c0->active = false;
 	if(c0->kind == kind_bullet && c1->kind == kind_turret){
-
+	  
 	  turret * t = find_turret(c1);
 	  t->health--;
 	  c1->size *= 0.8;
@@ -259,12 +321,66 @@ void game_loop(){
       }
     }
   }
+
+
+  {
+    worm * worms = persist_alloc("worms", sizeof(worm) * 10);
+    u64 worm_cnt = persist_size(worms);
+    for(u64 i = 0; i < worm_cnt; i++){
+      worm * w = worms + i;
+      if(!w->active) continue;
+      for(u64 i = 1; i < w->body_cnt; i++){
+	vec2 p1 = circles[w->bodies[i - 1]].pos;
+	float s1 = circles[w->bodies[i - 1]].size;
+	vec2 p2 = circles[w->bodies[i]].pos;
+	float s2 = circles[w->bodies[i]].size;
+	vec2 e = vec2_sub(p1, p2);
+	float de = vec2_len(e) - s1 - s2 - 1;
+	if(de > 0){
+	  e = vec2_normalize(e);
+	  circles[w->bodies[i]].vel = vec2_add(circles[w->bodies[i]].vel, vec2_scale(e, 0.001 * de));
+	}
+      }
+    }
+  }
+
+
+  
   
   for(u64 i = 0; i < n_circles; i++){
     if(!circles[i].active)
       continue;
     circles[i].pos = vec2_add(circles[i].pos, circles[i].vel);
   }
+
+  {
+    laser * lasers = persist_alloc("lasers", sizeof(laser) * 10);
+    u64 laser_cnt = persist_size(lasers);
+    for(u64 i = 0; i < laser_cnt; i++){
+      laser * l = lasers + i;
+      if(false == l->active) continue;
+      
+      circle * c;
+      if(l->bullet == -1){
+	c = get_new_circle(&circles, &n_circles);
+	c->color = vec3_new(1,0,0);
+	c->size = 3;
+	c->active = true;
+	c->kind = kind_decal;
+	l->bullet = c - circles;
+      }else{
+	c = circles + l->bullet;	
+	c->kind = kind_decal;
+      }
+      c->phase = 100;
+      //circles[l->laser].phase += 0.1;
+      circle circ = circles[l->laser];
+      vec2 dir = vec2_new(sinf(circ.phase), cosf(circ.phase));
+      c->pos = vec2_add(circ.pos, vec2_scale(dir, circ.size));
+      c->vel = vec2_scale(dir, l->length);
+    }
+  }
+  
   {//update turrets
     turret * turrets = persist_alloc("turrets", sizeof(turret));
     u64 turret_cnt = persist_size(turrets) / sizeof(turret);
