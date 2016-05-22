@@ -74,5 +74,3 @@ turret * get_new_turret();
 void turret_disable(turret * t);
 
 circle * get_new_circle(circle ** circles, u64 * cnt);
-
-static vec2 vec2_zero = {.x = 0, .y = 0};
