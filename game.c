@@ -4,6 +4,7 @@
 #include "persist.h"
 #include "shader_utils.h"
 
+
 vec2 vec2_rand(){
   return vec2_new((rand() % 1000) * 0.001, (rand() % 1000) * 0.001);
 }
@@ -158,6 +159,15 @@ void game_loop(){
 	continue;
       }
     }
+    if((false == isnan(circles[i].pos.x) && false == isnan(circles[i].pos.y))
+       && (false == isnan(circles[i].vel.x) && false == isnan(circles[i].vel.y))
+       &&(isfinite(circles[i].pos.x) && isfinite(circles[i].pos.y))
+       && (isfinite(circles[i].vel.x) && isfinite(circles[i].vel.y))){
+      
+    }else{
+      circles[i].active = false;
+      continue;
+    }
     ASSERT(false == isnan(circles[i].pos.x) && false == isnan(circles[i].pos.y));
     ASSERT(false == isnan(circles[i].vel.x) && false == isnan(circles[i].vel.y));
     ASSERT(isfinite(circles[i].pos.x) && isfinite(circles[i].pos.y));
@@ -229,6 +239,7 @@ void game_loop(){
     if(c0->kind == kind_wall || c0->kind == kind_turret)
       c0_mass = f32_infinity;
     for(u64 j = i + 1; j < n_circles; j++){
+      c0 = circles + i;
       circle * c1 = circles + j;
       if(c1->active == false || c1->kind == kind_coin|| c1->kind == kind_gun || c1->kind == kind_decal)
 	continue;
@@ -325,7 +336,7 @@ void game_loop(){
 
   {
     worm * worms = persist_alloc("worms", sizeof(worm) * 10);
-    u64 worm_cnt = persist_size(worms);
+    u64 worm_cnt = persist_size(worms) / sizeof(worm);;
     for(u64 i = 0; i < worm_cnt; i++){
       worm * w = worms + i;
       if(!w->active) continue;
@@ -370,13 +381,13 @@ void game_loop(){
 	l->bullet = c - circles;
       }else{
 	c = circles + l->bullet;	
-	c->kind = kind_decal;
+	c->kind = kind_bullet;
       }
       c->phase = 100;
       //circles[l->laser].phase += 0.1;
       circle circ = circles[l->laser];
       vec2 dir = vec2_new(sinf(circ.phase), cosf(circ.phase));
-      c->pos = vec2_add(circ.pos, vec2_scale(dir, circ.size));
+      c->pos = vec2_add(circ.pos, vec2_scale(dir, circ.size + 5));
       c->vel = vec2_scale(dir, l->length);
     }
   }
@@ -392,7 +403,7 @@ void game_loop(){
       circle * gun = circles + turrets[i].gun_circle;
       vec2 pv = vec2_sub(vec2_add(circles[0].vel, circles[0].pos), bc.pos);
       float player_dist = vec2_len(pv);
-      ASSERT(gun->kind == kind_gun);
+      //ASSERT(gun->kind == kind_gun);
       if(player_dist < 400){
 	gun->pos = vec2_add(bc.pos, vec2_scale(vec2_normalize(pv), bc.size + 1 + gun->size));
 	if(turrets[i].cooldown < 0){

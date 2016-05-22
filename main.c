@@ -290,9 +290,93 @@ void edit_loop(){
   }
 }
 
+
+typedef struct
+{
+  bool active;
+  int subsec;
+  int next;
+  
+}rope;
+
+typedef struct{
+  bool active;
+  u64 content;
+}hash_entry;
+
+typedef struct{
+  u64 bins;
+  i64 size;
+}persist_hash_table;
+
+i64 get_value(persist_hash_table * table, u64 hash, u64 * value, i64 * in_out_idx){
+  u64 cell = hash % table->bins;
+
+  hash_entry * entries = ((void *) table) + sizeof(persist_hash_table);
+  
+  while(*in_out_idx < table->size){
+    logd("looking at: %i\n", cell + table->bins * *in_out_idx);
+    hash_entry * entry = entries + cell + table->bins * *in_out_idx;
+    *in_out_idx += 1;
+    if(entry->active){
+      *value = entry->content;
+      return 0;
+    }
+    
+  }
+  return -1;
+}
+
+
+void insert_value(persist_hash_table ** _table, u64 hash, u64 value){
+  persist_hash_table * table = *_table;
+  hash_entry * entries = ((void *) table) + sizeof(persist_hash_table);
+  u64 cell = hash % table->bins;
+  hash_entry * entry = NULL;
+  for(i64 i = 0; i < table->size; i++){
+    u64 idx = cell + table->bins * i;
+    
+    if(!entries[idx].active){
+      entry = entries + idx;
+    }
+    if(entries[idx].active && entries[idx].content == value)
+      return;
+  }
+  if(entry == NULL){
+    *_table = persist_realloc(table, sizeof(persist_hash_table) + (table->size + 1) * (sizeof(hash_entry) * table->bins));
+    table = *_table;
+    table->size += 1;
+    hash_entry * entries = ((void *) table) + sizeof(persist_hash_table);
+    u64 idx = cell + table->bins * (table->size - 1);
+    entry = entries + idx;
+  }
+  if(entry != NULL){
+    entry->active = true;
+    entry->content = value;
+  }
+}
+
 int main(){
   if (!glfwInit())
     return -1;
+
+  /*persist_hash_table * ht = persist_alloc("hash_table", sizeof(persist_hash_table));
+  ht->bins = 1024 * 1024;
+  logd("size: %i %i\n", ht->size, ht->bins);
+  insert_value(&ht, 25, 32);
+  insert_value(&ht, 25, 31);
+  insert_value(&ht, 25, 30);
+
+  u64 val;
+  i64 it= 0;
+  get_value(ht, 25, &val, &it);
+  logd("Value: %i %i\n", val, it);
+  get_value(ht, 25, &val, &it);
+  logd("Value: %i %i\n", val, it);
+  get_value(ht, 25, &val, &it);
+  logd("Value: %i %i\n", val, it);
+  return 0;
+  */
   //circle * circles = persist_alloc("game", sizeof(circle) * 40);
   //circles->active = false;
   window_state * w = persist_alloc("win_state", sizeof(window_state));
@@ -369,7 +453,7 @@ int main(){
     edit->deleting = glfwGetKey(window, GLFW_KEY_D);
     controller->btn1_clicked = false;
     glfwPollEvents();
-    //iron_sleep(0.1);
+    iron_sleep(0.016);
   }
   glfwTerminate();
   return 0;
