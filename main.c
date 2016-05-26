@@ -6,158 +6,12 @@
 
 #include <GLFW/glfw3.h>
 #include "hsv.h"
-
+#include "gui_test.h"
 vec3 vec3_clamp(vec3 v, float min, float max){
   for(int i = 0; i < 3; i++)
     v.data[i] = v.data[i] < min ? min : v.data[i] > max ? max : v.data[i];
   return v;
 }
-
-
-typedef struct{
-  bool left_clicked;
-  bool picking_color;
-  vec2 mouse_pos;
-  int selected_kind;
-  int scroll_amount;
-  vec3 color;
-  float size;
-  float phase;
-  bool changing_size;
-
-  bool changing_color_h;
-  bool changing_color_s;
-  bool changing_color_v;
-  bool changing_kind;
-  bool changing_phase;
-  bool deleting;
-}edit_mode;
-
-typedef enum{
-  MODE_GAME = 0,
-  MODE_EDIT
-}main_modes;
-typedef struct{
-  main_modes mode;
-}main_state;
-
-
-void window_pos_callback(GLFWwindow* window, int xpos, int ypos)
-{
-  UNUSED(window);
-  window_state * w = persist_alloc("win_state", sizeof(window_state));
-  w->x = xpos;
-  w->y = ypos;
-  glfwGetWindowPos(window, &w->x, &w->y);
-}
-
-void window_size_callback(GLFWwindow* window, int width, int height)
-{
-  UNUSED(window);
-  window_state * w = persist_alloc("win_state", sizeof(window_state));
-  w->width = width;
-  w->height = height;
-}
-
-void cursor_pos_callback(GLFWwindow * window, double x, double y){
-  UNUSED(window);
-  controller_state * controller = persist_alloc("controller", sizeof(controller_state));
-  window_state * w = persist_alloc("win_state", sizeof(window_state));
-  x -= w->width * 0.5;
-  y -= w->height * 0.5;
-  controller->direction = vec2_normalize(vec2_new(x, -y));
-  
-}
-
-void mouse_button_callback(GLFWwindow * window, int button, int action, int mods){
-  UNUSED(window); UNUSED(mods);
-  controller_state * controller = persist_alloc("controller", sizeof(controller_state));
-  if(action == GLFW_PRESS && button == 0){
-    controller->btn1_clicked = true;
-    edit_mode * edit = persist_alloc("edit", sizeof(edit_mode));
-    edit->left_clicked = true;
-  }
-}
-
-void scroll_callback(GLFWwindow * window, double x, double y){
-  UNUSED(window);UNUSED(x);
-  edit_mode * edit = persist_alloc("edit", sizeof(edit_mode));
-  main_state * main_mode = persist_alloc("main_mode", sizeof(main_state));
-  if(main_mode->mode == MODE_EDIT){
-    int scroll = y > 0 ? 1 : -1;
-    edit->scroll_amount = scroll;
-  }
-}
-
-
-void key_callback(GLFWwindow* win, int key, int scancode, int action, int mods){
-  UNUSED(win);UNUSED(key);UNUSED(scancode);UNUSED(action);UNUSED(mods);
-  controller_state * controller = persist_alloc("controller", sizeof(controller_state));
-  main_state * main_mode = persist_alloc("main_mode", sizeof(main_state));
-  if(key == GLFW_KEY_TAB && action == GLFW_PRESS){
-    if(main_mode->mode == MODE_EDIT){
-      main_mode->mode = MODE_GAME;
-    }else{
-      main_mode->mode = MODE_EDIT;
-    }
-  }else if(key == GLFW_KEY_ESCAPE){
-    controller->should_exit = true;
-  }
-}
-
-turret * get_new_turret(){
-
-  turret * turrets = persist_alloc("turrets", sizeof(turret));
-  u64 cnt = persist_size(turrets) / sizeof(turret);
-  for(u64 i = 0; i < cnt; i++){
-    if(!turrets[i].active){
-      return turrets + i;
-    }
-  }
-
-  cnt += 1;
-  turrets = persist_realloc(turrets, sizeof(turret) * cnt);
-  return &turrets[cnt - 1];
-}
-
-laser * get_new_laser(){
-
-  laser * lasers = persist_alloc("lasers", sizeof(laser));
-  u64 cnt = persist_size(lasers) / sizeof(laser);
-  for(u64 i = 0; i < cnt; i++){
-    if(!lasers[i].active){
-      return lasers + i;
-    }
-  }
-
-  cnt += 1;
-  lasers = persist_realloc(lasers, sizeof(laser) * cnt);
-  return &lasers[cnt - 1];
-}
-
-
-
-turret * find_turret(circle * c){
-  circle * circles = persist_alloc("game", sizeof(circle));
-  turret * turrets = persist_alloc("turrets", sizeof(turret));
-  u64 turret_cnt = persist_size(turrets) / sizeof(turret);
-  i32 offset = (i32)(c - circles);
-  for(u64 i = 0; i < turret_cnt; i++)
-    if(turrets[i].active && turrets[i].base_circle == offset)
-      return turrets + i;
-  return NULL;
-}
-
-void turret_disable(turret * turret){
-  circle * circles = persist_alloc("game", sizeof(circle));
-  logd("Deleting turret..\n");
-  ASSERT(turret != NULL);
-  turret->active = false;
-  logd(">> %i %i\n", turret->gun_circle, turret->base_circle);
-  circles[turret->gun_circle].active = false;
-  circles[turret->base_circle].active = false;
-}
-
 
 void edit_loop(){
   circle_kinds kinds[] = {kind_wall, kind_enemy, kind_coin,
@@ -167,9 +21,8 @@ void edit_loop(){
   edit_mode * edit = persist_alloc("edit", sizeof(edit_mode));
   map_pos * mpos = persist_alloc("map_pos", sizeof(map_pos));
   circle * circles = persist_alloc("game", sizeof(circle));
-  window_state * w = persist_alloc("win_state", sizeof(window_state));
+  window * w = persist_alloc("win_state", sizeof(window));
   u64 n_circles = persist_size(circles) / sizeof(circle);
-  //vec2_print(mpos->offset);logd("\n");
   if(edit->left_clicked){
     vec2 v = vec2_add(mpos->offset, vec2_sub(edit->mouse_pos, vec2_new(w->width * 0.5, w->height * 0.5)));    
     if(edit->picking_color || edit->deleting){
@@ -307,6 +160,7 @@ typedef struct{
 typedef struct{
   u64 bins;
   i64 size;
+  u64 entry_size;
 }persist_hash_table;
 
 i64 get_value(persist_hash_table * table, u64 hash, u64 * value, i64 * in_out_idx){
@@ -356,10 +210,12 @@ void insert_value(persist_hash_table ** _table, u64 hash, u64 value){
   }
 }
 
+
 int main(){
   if (!glfwInit())
     return -1;
-
+  test_gui();
+  return 0;
   /*persist_hash_table * ht = persist_alloc("hash_table", sizeof(persist_hash_table));
   ht->bins = 1024 * 1024;
   logd("size: %i %i\n", ht->size, ht->bins);
@@ -379,27 +235,14 @@ int main(){
   */
   //circle * circles = persist_alloc("game", sizeof(circle) * 40);
   //circles->active = false;
-  window_state * w = persist_alloc("win_state", sizeof(window_state));
-  main_state * main_mode = persist_alloc("main_mode", sizeof(main_state));
-  if(w->initialized == false){
-    w->width = 640;
-    w->height = 640;
-    w->x = 200;
-    w->y = 200;
-    w->initialized = true;
-    sprintf(w->title, "%s", "Win!");
-  }
-  GLFWwindow * window = glfwCreateWindow(w->width, w->height, w->title, NULL, NULL);
-  glfwSetWindowPos(window, w->x, w->y);
 
-  glfwSetWindowPosCallback(window, window_pos_callback);
-  glfwSetWindowSizeCallback(window, window_size_callback);
-  glfwSetCursorPosCallback(window, cursor_pos_callback);
-  glfwSetMouseButtonCallback(window, mouse_button_callback);
-  glfwSetKeyCallback(window, key_callback);
-  glfwSetScrollCallback(window, scroll_callback);
+  for(int i = 0; i < 2; i++){
+    load_window(i);
+  }
+  main_state * main_mode = persist_alloc("main_mode", sizeof(main_state));
+  GLFWwindow * glwin = find_glfw_window(1);
   
-  glfwMakeContextCurrent(window);
+  glfwMakeContextCurrent(glwin);
   glewInit();
   controller_state * controller = persist_alloc("controller", sizeof(controller_state));
   memset(controller, 0, sizeof(controller_state)); // reset controller on start.
@@ -409,21 +252,21 @@ int main(){
     controller->axis.x = 0;
     controller->axis.y = 0;
     
-    if(glfwGetKey(window, GLFW_KEY_LEFT))
+    if(glfwGetKey(glwin, GLFW_KEY_LEFT))
       controller->axis.x -= 1;
     
-    if(glfwGetKey(window, GLFW_KEY_RIGHT))
+    if(glfwGetKey(glwin, GLFW_KEY_RIGHT))
       controller->axis.x += 1;
     
-    if(glfwGetKey(window, GLFW_KEY_UP))
+    if(glfwGetKey(glwin, GLFW_KEY_UP))
       controller->axis.y += 1;
     
-    if(glfwGetKey(window, GLFW_KEY_DOWN))
+    if(glfwGetKey(glwin, GLFW_KEY_DOWN))
       controller->axis.y -= 1;
-    
+    window * w = get_window_glfw(glwin);
     glViewport(0, 0, w->width, w->height);
     double mx,my;
-    glfwGetCursorPos(window, &mx, &my);
+    glfwGetCursorPos(glwin, &mx, &my);
     edit_mode * edit = persist_alloc("edit", sizeof(edit_mode));
     edit->mouse_pos.x = mx;
     edit->mouse_pos.y = w->height - my;
@@ -432,25 +275,25 @@ int main(){
     if(main_mode->mode == MODE_GAME){
       game_loop();
     }else{
-      edit_loop(window);
+      edit_loop(glwin);
     }
 
-    glfwSwapBuffers(window);
+    glfwSwapBuffers(glwin);
     u64 t2 = timestamp();
     float ds = ((double)(t2 - t1)) * 1e-6;
     UNUSED(ds);
     //logd("main time:%f s\n", ds);
     
     edit->scroll_amount = 0;
-    edit->picking_color = glfwGetKey(window, GLFW_KEY_P);
+    edit->picking_color = glfwGetKey(glwin, GLFW_KEY_P);
     edit->left_clicked = false;
-    edit->changing_size = glfwGetKey(window, GLFW_KEY_S);
-    edit->changing_color_v = glfwGetKey(window, GLFW_KEY_I);
-    edit->changing_color_h = glfwGetKey(window, GLFW_KEY_H);
-    edit->changing_color_s = glfwGetKey(window, GLFW_KEY_C);
-    edit->changing_phase = glfwGetKey(window, GLFW_KEY_F);
-    edit->changing_kind = glfwGetKey(window, GLFW_KEY_K);
-    edit->deleting = glfwGetKey(window, GLFW_KEY_D);
+    edit->changing_size = glfwGetKey(glwin, GLFW_KEY_S);
+    edit->changing_color_v = glfwGetKey(glwin, GLFW_KEY_I);
+    edit->changing_color_h = glfwGetKey(glwin, GLFW_KEY_H);
+    edit->changing_color_s = glfwGetKey(glwin, GLFW_KEY_C);
+    edit->changing_phase = glfwGetKey(glwin, GLFW_KEY_F);
+    edit->changing_kind = glfwGetKey(glwin, GLFW_KEY_K);
+    edit->deleting = glfwGetKey(glwin, GLFW_KEY_D);
     controller->btn1_clicked = false;
     glfwPollEvents();
     iron_sleep(0.016);

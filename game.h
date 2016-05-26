@@ -1,9 +1,38 @@
+
 typedef struct{
+  bool left_clicked;
+  bool picking_color;
+  vec2 mouse_pos;
+  int selected_kind;
+  int scroll_amount;
+  vec3 color;
+  float size;
+  float phase;
+  bool changing_size;
+
+  bool changing_color_h;
+  bool changing_color_s;
+  bool changing_color_v;
+  bool changing_kind;
+  bool changing_phase;
+  bool deleting;
+}edit_mode;
+
+typedef enum{
+  MODE_GAME = 0,
+  MODE_EDIT
+}main_modes;
+typedef struct{
+  main_modes mode;
+}main_state;
+
+typedef struct{
+  u64 id;
   int width, height;
   int x, y;
   bool initialized;
   char title[64];
-}window_state;
+}window;
 
 typedef struct{
   vec3 axis;
@@ -74,3 +103,4 @@ turret * get_new_turret();
 void turret_disable(turret * t);
 
 circle * get_new_circle(circle ** circles, u64 * cnt);
+laser * get_new_laser();

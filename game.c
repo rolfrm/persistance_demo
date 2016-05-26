@@ -50,7 +50,61 @@ void load_random_level(){
     }
   }
 }
- 
+
+turret * get_new_turret(){
+
+  turret * turrets = persist_alloc("turrets", sizeof(turret));
+  u64 cnt = persist_size(turrets) / sizeof(turret);
+  for(u64 i = 0; i < cnt; i++){
+    if(!turrets[i].active){
+      return turrets + i;
+    }
+  }
+
+  cnt += 1;
+  turrets = persist_realloc(turrets, sizeof(turret) * cnt);
+  return &turrets[cnt - 1];
+}
+
+laser * get_new_laser(){
+
+  laser * lasers = persist_alloc("lasers", sizeof(laser));
+  u64 cnt = persist_size(lasers) / sizeof(laser);
+  for(u64 i = 0; i < cnt; i++){
+    if(!lasers[i].active){
+      return lasers + i;
+    }
+  }
+
+  cnt += 1;
+  lasers = persist_realloc(lasers, sizeof(laser) * cnt);
+  return &lasers[cnt - 1];
+}
+
+
+
+turret * find_turret(circle * c){
+  circle * circles = persist_alloc("game", sizeof(circle));
+  turret * turrets = persist_alloc("turrets", sizeof(turret));
+  u64 turret_cnt = persist_size(turrets) / sizeof(turret);
+  i32 offset = (i32)(c - circles);
+  for(u64 i = 0; i < turret_cnt; i++)
+    if(turrets[i].active && turrets[i].base_circle == offset)
+      return turrets + i;
+  return NULL;
+}
+
+void turret_disable(turret * turret){
+  circle * circles = persist_alloc("game", sizeof(circle));
+  logd("Deleting turret..\n");
+  ASSERT(turret != NULL);
+  turret->active = false;
+  logd(">> %i %i\n", turret->gun_circle, turret->base_circle);
+  circles[turret->gun_circle].active = false;
+  circles[turret->base_circle].active = false;
+}
+
+
 circle * _get_new_circle(circle ** circles, u64 * cnt){
   for(u64 i = 0; i < *cnt; i++){
     if(!(*circles)[i].active){
@@ -429,7 +483,7 @@ void render_game(){
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   glBlendEquation(GL_FUNC_ADD);
-  window_state * w = persist_alloc("win_state", sizeof(window_state)); 
+  window * w = persist_alloc("win_state", sizeof(window)); 
   circle * circles = persist_alloc("game", sizeof(circle));
   u64 n_circles = persist_size(circles) / sizeof(circle);
   vec2 offset = circles[0].pos;
