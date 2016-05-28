@@ -105,8 +105,15 @@ void load_window(u64 id){
     w->id = id;
     sprintf(w->title, "%s", "Win!");
   }
-  glfwWindowHint(GLFW_DECORATED, GL_FALSE);
-  GLFWwindow * window = glfwCreateWindow(w->width, w->height, w->title, NULL, NULL);
+  //glfwWindowHint(GLFW_DECORATED, GL_FALSE);
+  static GLFWwindow * ctx = NULL;
+  
+  GLFWwindow * window = glfwCreateWindow(w->width, w->height, w->title, NULL, ctx);
+  if(ctx == NULL){
+    ctx = window;
+    glfwMakeContextCurrent(window);
+    glewInit();
+  }
   glfwSetWindowPos(window, w->x, w->y);
   glfwSetWindowSize(window, w->width, w->height);
   windows[index] = window;
@@ -181,21 +188,7 @@ thickness get_margin(u64 itemid){
   return zero;
 }
 
-void render_window(window * win, bool last){
-  thickness margin = get_margin(win->id);
-  margin.left += 0.05f;
-  GLFWwindow * glfwWin = find_glfw_window(win->id);
-  glfwMakeContextCurrent(glfwWin);
-  glClearColor(sinf(margin.left * 0.3)* 0.5 + 0.5, sinf(margin.left * 0.33)* 0.5 + 0.5,
-	       sinf(margin.left * 0.39)* 0.5 + 0.5, 1.0);
-  glClear(GL_COLOR_BUFFER_BIT);
-  set_margin(win->id, margin);
-  if(last)
-    glfwSwapInterval(1);
-  else
-    glfwSwapInterval(0);
-  glfwSwapBuffers(glfwWin);
-}
+
 
 typedef struct{
   bool active;
@@ -207,7 +200,9 @@ u64 get_unique_number(){
   static u64 * w = NULL;
   if(w == NULL){
     w = persist_alloc("get_unique_number", sizeof(u64));
-    *w = 10;
+    if(*w == 0)
+      *w = 10;
+    //*w = 10;
   }
   *w += 1;
   return *w;
@@ -220,9 +215,8 @@ named_item * get_named_item(const char * table, const char * name, bool create){
   for(int i = 0; i < cnt; i++){
     if(w[i].active && 0 == strncmp(name, w[i].name, sizeof(inactive->name))){
       
-      inactive = w + i;
+      return w + i;
    
-      break;
     }else if(!w[i].active && inactive == NULL){
       inactive = w + i;
     }
@@ -237,6 +231,8 @@ named_item * get_named_item(const char * table, const char * name, bool create){
   }
   inactive->active = true;
   memcpy(inactive->name, name, MIN(strlen(name) + 1, sizeof(inactive->name)));
+  inactive->id = 0;
+
   return inactive;
 }
 
@@ -275,6 +271,19 @@ control_pair * add_control(u64 id, u64 other_id){
   return free;
 }
 
+control_pair * get_control_pair_parent(u64 parent_id, u64 * index){
+  control_pair * w = persist_alloc("control_pairs", sizeof(control_pair));
+  u32 cnt = persist_size(w) / sizeof(control_pair);
+  for(; *index < cnt; (*index)++){
+    if(w[*index].parent_id == parent_id && w[*index].active){
+      control_pair * out = w + *index;
+      *index += 1;
+      return out;
+    }
+  }
+  return NULL;
+}
+
 /*
 textline * get_textline(u64 parent_id, const char * name){
 
@@ -289,7 +298,7 @@ stackpanel * get_stackpanel(u64 parent_id, const char * name){
 }
 */
 
-rectangle * find_rectangle(u64 id){
+rectangle * find_rectangle(u64 id, bool create){
   rectangle * w = persist_alloc("rectangles", sizeof(rectangle));
   u32 cnt = persist_size(w) / sizeof(rectangle);
   rectangle * free = NULL;
@@ -300,6 +309,7 @@ rectangle * find_rectangle(u64 id){
       free = w + i;
     }
   }
+  if(!create) return NULL;
   if(free == NULL){
     w = persist_realloc(w, sizeof(rectangle) * (cnt + 1));
     free = w + cnt;
@@ -313,10 +323,186 @@ rectangle * get_rectangle(const char * name){
   named_item * nw = get_named_item("rectangle_name", name, true);
   if(nw->id == 0)
     nw->id = get_unique_number();
-  return find_rectangle(nw->id);
+  return find_rectangle(nw->id, true);
+}
+
+/*u32 get_rectangle_shader(){
+  
+
+  }*/
+__thread vec2 shared_offset, shared_size, window_size;
+
+void measure_rectangle(rectangle * rect, vec2 * offset, vec2 * size){
+  *offset = vec2_zero;
+  vec2 rsize = rect->size;
+  *size = vec2_min(rsize, shared_size);
+}
+
+void render_rectangle(rectangle * rect){
+  UNUSED(rect);
+  //logd("rendering rectangle :"); vec2_print(shared_offset); vec2_print(shared_size);logd("\n");
+  static int initialized = false;
+  static int shader = -1;
+  if(!initialized){
+    char * vs = read_file_to_string("rect_shader.vs");
+    char * fs = read_file_to_string("rect_shader.fs");
+    shader = load_simple_shader(vs, strlen(vs), fs, strlen(fs));
+    logd("Shader: %i\n", shader);
+    initialized = true;
+  }
+  
+  glUseProgram(shader);
+  int color_loc = glGetUniformLocation(shader, "color");
+
+  int offset_loc = glGetUniformLocation(shader, "offset");
+
+  int size_loc = glGetUniformLocation(shader, "size");
+
+  int window_size_loc = glGetUniformLocation(shader, "window_size");
+  glUniform4f(color_loc, rect->color.x, rect->color.y, rect->color.z, 1.0);
+  vec2 size = rect->size;
+  vec2 offset = shared_offset;//vec2_add(shared_offset, rect->offset);
+  glUniform2f(offset_loc, offset.x, offset.y);
+  glUniform2f(size_loc, size.x, size.y);
+  glUniform2f(window_size_loc, window_size.x, window_size.y);
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+}
+
+stackpanel * get_stackpanel(const char * name){
+  named_item * nw = get_named_item("stackpanel_name", name, true);
+  if(nw->id == 0)
+    nw->id = get_unique_number();
+  return find_stackpanel(nw->id);
+}
+
+stackpanel * find_stackpanel(u64 id){
+  stackpanel * w = persist_alloc("stackpanels", sizeof(stackpanel));
+  u32 cnt = persist_size(w) / sizeof(stackpanel);
+  stackpanel * free = NULL;
+
+  for(u32 i = 0; i < cnt; i++){
+    
+    if(w[i].id == id && w[i].active){
+      return w + i;
+    }else if(w[i].active == false){
+      free = w + i;
+    }
+  }
+  if(free == NULL){
+    w = persist_realloc(w, sizeof(stackpanel) * (cnt + 1));
+    free = w + cnt;
+  }
+  free->active = true;
+  free->id = id;
+  return free;
+}
+
+
+
+void measure_control(u64 control, vec2 * offset, vec2 * size){
+  rectangle * rect = find_rectangle(control, false);
+  vec2 soffset = shared_offset;
+  thickness margin = get_margin(control);
+  shared_offset = vec2_add(soffset, vec2_new(margin.left, margin.up));
+  vec2 ssize = shared_size;
+  shared_size = vec2_sub(shared_size, soffset);
+  if(rect != NULL)
+    measure_rectangle(rect, offset, size);
+  *size = vec2_add(*size, vec2_new(margin.right, margin.up));
+  shared_offset = soffset;
+  shared_size = ssize;
+  
+}
+
+void render_stackpanel(stackpanel * stk){
+  u64 index = 0;
+  control_pair * child_control = NULL;
+  vec2 soffset = shared_offset;
+  while((child_control = get_control_pair_parent(stk->id, &index))){
+    if(child_control == NULL)
+      break;
+    vec2 size = vec2_new(0,0);
+    vec2 offset = vec2_new(0, 0);
+    measure_control(child_control->child_id, &offset, &size);
+    rectangle * rect = NULL;
+    stackpanel * sstk = NULL; ;
+    if((rect = find_rectangle(child_control->child_id, false)) != NULL){
+      render_rectangle(rect);
+      
+    } else if((sstk = find_stackpanel(child_control->child_id)) != NULL){
+      render_stackpanel(sstk);
+      
+    }else{
+      child_control->active = false;
+    }
+    if(stk->orientation == ORIENTATION_HORIZONTAL){
+      shared_offset.x += size.x;
+    }else{
+      shared_offset.y += size.y;
+    }
+  }
+  shared_offset = soffset;
+}
+
+void render_window(window * win, bool last){
+  thickness margin = get_margin(win->id);
+  //margin.left += 0.05f;
+  GLFWwindow * glfwWin = find_glfw_window(win->id);
+
+  glfwGetWindowSize(glfwWin, &win->width, &win->height);
+  glfwMakeContextCurrent(glfwWin);
+  glViewport(0, 0, win->width, win->height);
+  window_size = vec2_new(win->width, win->height);
+  
+  
+  glClearColor(0, 0, 0, 1);
+  glClear(GL_COLOR_BUFFER_BIT);
+  shared_offset = vec2_new(margin.left, margin.up);
+  shared_size = vec2_new(win->width - margin.left - margin.right, win->height - margin.up - margin.down);
+  u64 index = 0;
+  control_pair * child_control = NULL;
+  while((child_control = get_control_pair_parent(win->id, &index))){
+    if(child_control == NULL)
+      break;
+    
+    thickness margin = get_margin(child_control->child_id);
+    rectangle * rect = NULL;
+    stackpanel * stk = NULL; ;
+    vec2 offset = vec2_new(margin.left,margin.up);
+    shared_offset = vec2_add(shared_offset, offset);
+
+    if((rect = find_rectangle(child_control->child_id, false)) != NULL){
+      render_rectangle(rect);
+    } else if((stk = find_stackpanel(child_control->child_id)) != NULL){
+      render_stackpanel(stk);
+      
+    }else{
+      child_control->active = false;
+
+    }
+    shared_offset = vec2_sub(shared_offset, offset);
+  }
+  //set_margin(win->id, margin);
+  if(last)
+    glfwSwapInterval(1);
+  else
+    glfwSwapInterval(0);
+  glfwSwapBuffers(glfwWin);
 }
 
 void test_gui(){
+  named_item * item_1 = get_named_item("test_named_item", "hello", true);
+  if(item_1->id == 0)
+    item_1->id = get_unique_number();
+  //return;
+  named_item * item_2 = get_named_item("test_named_item", "hello2", true);
+  logd("New id: %i\n", item_2->id);
+  if(item_2->id == 0)
+    item_2->id = get_unique_number();
+  ASSERT(item_1->id != item_2->id);
+  
+  //return;
+  
   named_item * item = get_named_item("window_name", "error_window2", true);
   if(item->id == 0)
     item->id = get_unique_number();
@@ -330,13 +516,60 @@ void test_gui(){
   
   window * win = get_window2("error_window");
   logd("window opened: %p\n", win);
+
+  stackpanel * panel = get_stackpanel("stackpanel1");
+  panel->orientation = ORIENTATION_VERTICAL;
+  set_margin(panel->id, (thickness){300,100,200,200});
+  ASSERT(panel->id != win->id && panel->id != 0);
+  add_control(win->id, panel->id);
+  
   rectangle * rect = get_rectangle("rect1");
-  rect->offset = vec2_new(10, 10);
+  //rect->offset = vec2_new(10, 10);
   rect->size = vec2_new(30, 30);
   rect->color = vec3_new(1, 0, 0);
-  control_pair * pair = add_control(win->id, rect->id);
-  logd("pair: %i %i\n", pair->parent_id, pair->child_id);
+  set_margin(rect->id, (thickness){1,1,3,3});
+  control_pair * pair = add_control(panel->id, rect->id);
+  ASSERT(rect->id != panel->id);
+  logd("%i %i\n", panel->id, rect->id);
+  UNUSED(pair);
+  rect = get_rectangle("rect2");
+  rect->size = vec2_new(30, 30);
+  rect->color = vec3_new(1, 1, 0);
+  set_margin(rect->id, (thickness){1,1,3,3});
+  pair = add_control(panel->id, rect->id);
+  rect = get_rectangle("rect3");
+  set_margin(rect->id, (thickness){1,1,1,3});
+  rect->size = vec2_new(30, 30);
+  rect->color = vec3_new(1, 1, 1);
+
+  pair = add_control(panel->id, rect->id);  
+  /*//logd("pair: %i %i %i\n", pair->parent_id, pair->child_id, rect->id);
+  rect = get_rectangle("rect2");
+  //rect->offset = vec2_new(40, 40);
+  rect->size = vec2_new(30, 30);
+  rect->color = vec3_new(0.6, 0.9, 1);
+  set_margin(rect->id, (thickness){36,40,30,30});
+  pair = add_control(panel->id, rect->id);  
+  logd("pair: %i %i %i\n", pair->parent_id, pair->child_id, rect->id);
+  rect = get_rectangle("rect3");
+  //  rect->offset = vec2_new(70, 40);
+  rect->size = vec2_new(30, 30);
+  rect->color = vec3_new(0.6, 0.6, 1);
+  set_margin(rect->id, (thickness){30,30,30,30});
+  pair = add_control(win->id, rect->id);
+  rect = get_rectangle("rect4");
+  //  rect->offset = vec2_new(70, 70);
+  rect->size = vec2_new(30, 30);
+  rect->color = vec3_new(0.3, 0.3, 1);
+  pair = add_control(win->id, rect->id);
   
+  rect = get_rectangle("rect5");
+  //  rect->offset = vec2_new(70, 100);
+  rect->size = vec2_new(30, 30);
+  rect->color = vec3_new(0.7, 0.3, 0);
+  pair = add_control(win->id, rect->id);
+  */
+  //return;
 
   char buffer[100];
   
@@ -356,14 +589,13 @@ void test_gui(){
     u64 ts2 = timestamp();
     double dt = ((float)(ts2 - ts)) * 1e-6;
     UNUSED(dt);
-    logd("dt: %fs\n", dt);
+    //logd("dt: %fs\n", dt);
     controller_state * controller = persist_alloc("controller", sizeof(controller_state));
     controller->btn1_clicked = false;
     glfwPollEvents();
     if(controller->btn1_clicked){
       sprintf(buffer, "window%i", get_unique_number());
       get_window2(buffer);
-      
     }
   }
   
