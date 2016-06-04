@@ -6,6 +6,8 @@
 
 #include <GLFW/glfw3.h>
 #include "gui_test.h"
+//#include "command.h"
+
 GLFWwindow * windows[10] = {};
 
 
@@ -153,12 +155,24 @@ window * get_window_glfw(GLFWwindow * win){
   return NULL;
 }
 
+window * get_window2(const char * name){
+  named_item * nw = get_named_item("window_name", name, true);
+  if(nw->id == 0)
+    nw->id = get_unique_number();
+  GLFWwindow * win = find_glfw_window(nw->id);
+  logd("Loading window: %i %p %s %s\n", nw->id, win, name, nw->name);
+  if(win == NULL)
+    load_window(nw->id);
+  ASSERT(find_glfw_window(nw->id) != NULL);
+  return find_window(nw->id);
+}
+
+// #Margin
 typedef struct{
   bool active;
   u64 id;
   thickness t;
 }thickness_item;
-
 
 void set_margin(u64 itemid, thickness t){
   thickness_item * w = persist_alloc("item_thickness", sizeof(thickness_item));
@@ -188,14 +202,6 @@ thickness get_margin(u64 itemid){
   return zero;
 }
 
-
-
-typedef struct{
-  bool active;
-  u64 id;
-  char name[32 - sizeof(u64) - sizeof(bool)];
-}named_item;
-
 u64 get_unique_number(){
   static u64 * w = NULL;
   if(w == NULL){
@@ -206,8 +212,8 @@ u64 get_unique_number(){
   }
   *w += 1;
   return *w;
-
 }
+
 named_item * get_named_item(const char * table, const char * name, bool create){
   named_item * w = persist_alloc(table, sizeof(named_item));
   int cnt = (int)(persist_size(w)  / sizeof(named_item));
@@ -236,19 +242,7 @@ named_item * get_named_item(const char * table, const char * name, bool create){
   return inactive;
 }
 
-
-
-window * get_window2(const char * name){
-  named_item * nw = get_named_item("window_name", name, true);
-  if(nw->id == 0)
-    nw->id = get_unique_number();
-  GLFWwindow * win = find_glfw_window(nw->id);
-  logd("Loading window: %i %p %s %s\n", nw->id, win, name, nw->name);
-  if(win == NULL)
-    load_window(nw->id);
-  ASSERT(find_glfw_window(nw->id) != NULL);
-  return find_window(nw->id);
-}
+__thread vec2 shared_offset, shared_size, window_size;
 
 control_pair * add_control(u64 id, u64 other_id){
   control_pair * w = persist_alloc("control_pairs", sizeof(control_pair));
@@ -284,19 +278,39 @@ control_pair * get_control_pair_parent(u64 parent_id, u64 * index){
   return NULL;
 }
 
-/*
-textline * get_textline(u64 parent_id, const char * name){
-
+// #Bare Controls
+control * find_control(u64 id, bool create){
+  control * w = persist_alloc("controls", sizeof(control));
+  u32 cnt = persist_size(w) / sizeof(control);
+  control * free = NULL;
+  for(u32 i = 0; i < cnt; i++){
+    if(w[i].id == id && w[i].active){
+      return w + i;
+    }else if(w[i].active == false){
+      free = w + i;
+    }
+  }
+  if(!create) return NULL;
+  if(free == NULL){
+    w = persist_realloc(w, sizeof(control) * (cnt + 1));
+    free = w + cnt;
+  }
+  free->active = true;
+  free->id = id;
+  return free;
 }
 
-button * get_button(u64 parent_id, const char * name){
-
+control * get_control(const char * name){
+  named_item * nw = get_named_item("control_name", name, true);
+  if(nw->id == 0)
+    nw->id = get_unique_number();
+  return find_control(nw->id, true);
 }
 
-stackpanel * get_stackpanel(u64 parent_id, const char * name){
-
+control * get_control2(u64 id){
+  return find_control(id, true);
 }
-*/
+// #Rectangles
 
 rectangle * find_rectangle(u64 id, bool create){
   rectangle * w = persist_alloc("rectangles", sizeof(rectangle));
@@ -325,12 +339,6 @@ rectangle * get_rectangle(const char * name){
     nw->id = get_unique_number();
   return find_rectangle(nw->id, true);
 }
-
-/*u32 get_rectangle_shader(){
-  
-
-  }*/
-__thread vec2 shared_offset, shared_size, window_size;
 
 void measure_rectangle(rectangle * rect, vec2 * offset, vec2 * size){
   *offset = vec2_zero;
@@ -368,6 +376,35 @@ void render_rectangle(rectangle * rect){
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
 
+void measure_control(u64 control, vec2 * offset, vec2 * size){
+  rectangle * rect = find_rectangle(control, false);
+  vec2 soffset = shared_offset;
+  thickness margin = get_margin(control);
+  shared_offset = vec2_add(soffset, vec2_new(margin.left, margin.up));
+  vec2 ssize = shared_size;
+  shared_size = vec2_sub(shared_size, soffset);
+  if(rect != NULL)
+    measure_rectangle(rect, offset, size);
+  *size = vec2_add(*size, vec2_new(margin.right, margin.up));
+  shared_offset = soffset;
+  shared_size = ssize;
+}
+
+bool render_control(u64 control){
+  rectangle * rect = NULL;
+  stackpanel * sstk = NULL;
+  if((rect = find_rectangle(control, false)) != NULL){
+    render_rectangle(rect);
+    
+  } else if((sstk = find_stackpanel(control)) != NULL){
+    render_stackpanel(sstk);
+  }else{
+    return false;
+  }
+  return true;
+}
+
+// #Stackpanel
 stackpanel * get_stackpanel(const char * name){
   named_item * nw = get_named_item("stackpanel_name", name, true);
   if(nw->id == 0)
@@ -397,23 +434,6 @@ stackpanel * find_stackpanel(u64 id){
   return free;
 }
 
-
-
-void measure_control(u64 control, vec2 * offset, vec2 * size){
-  rectangle * rect = find_rectangle(control, false);
-  vec2 soffset = shared_offset;
-  thickness margin = get_margin(control);
-  shared_offset = vec2_add(soffset, vec2_new(margin.left, margin.up));
-  vec2 ssize = shared_size;
-  shared_size = vec2_sub(shared_size, soffset);
-  if(rect != NULL)
-    measure_rectangle(rect, offset, size);
-  *size = vec2_add(*size, vec2_new(margin.right, margin.up));
-  shared_offset = soffset;
-  shared_size = ssize;
-  
-}
-
 void render_stackpanel(stackpanel * stk){
   u64 index = 0;
   control_pair * child_control = NULL;
@@ -424,17 +444,9 @@ void render_stackpanel(stackpanel * stk){
     vec2 size = vec2_new(0,0);
     vec2 offset = vec2_new(0, 0);
     measure_control(child_control->child_id, &offset, &size);
-    rectangle * rect = NULL;
-    stackpanel * sstk = NULL; ;
-    if((rect = find_rectangle(child_control->child_id, false)) != NULL){
-      render_rectangle(rect);
-      
-    } else if((sstk = find_stackpanel(child_control->child_id)) != NULL){
-      render_stackpanel(sstk);
-      
-    }else{
+    if(!render_control(child_control->child_id))
       child_control->active = false;
-    }
+    
     if(stk->orientation == ORIENTATION_HORIZONTAL){
       shared_offset.x += size.x;
     }else{
@@ -443,6 +455,7 @@ void render_stackpanel(stackpanel * stk){
   }
   shared_offset = soffset;
 }
+
 
 void render_window(window * win, bool last){
   thickness margin = get_margin(win->id);
@@ -466,20 +479,13 @@ void render_window(window * win, bool last){
       break;
     
     thickness margin = get_margin(child_control->child_id);
-    rectangle * rect = NULL;
-    stackpanel * stk = NULL; ;
+    
     vec2 offset = vec2_new(margin.left,margin.up);
     shared_offset = vec2_add(shared_offset, offset);
 
-    if((rect = find_rectangle(child_control->child_id, false)) != NULL){
-      render_rectangle(rect);
-    } else if((stk = find_stackpanel(child_control->child_id)) != NULL){
-      render_stackpanel(stk);
-      
-    }else{
+    if(!render_control(child_control->child_id))
       child_control->active = false;
-
-    }
+    
     shared_offset = vec2_sub(shared_offset, offset);
   }
   //set_margin(win->id, margin);
@@ -490,18 +496,191 @@ void render_window(window * win, bool last){
   glfwSwapBuffers(glfwWin);
 }
 
+named_item * get_named_item2(const char * table, const char * name){
+  named_item * item = get_named_item(table, name, true);
+  if(item->id == 0)
+    item->id = get_unique_number();
+  return item;
+}
+
+typedef void (* command_handler)(u64 control, ...);
+command_handler * get_command_handler2(u64 control_id, u64 command_id, bool create){
+  static command_handler handlers[10] = {};
+  static bool inited[10] ={};
+  static u64 control_ids[10] = {};
+  static u64 command_ids[100] = {};
+  for(u64 i = 0; i < array_count(inited); i++){
+    if(inited[i] && control_ids[i] == control_id &&  command_ids[i] == command_id)
+      return handlers + i;
+  }
+  if(create){
+    for(u64 i = 0; i < array_count(inited); i++){
+      if(!inited[i]){
+	inited[i] = true;
+	control_ids[i] = control_id;
+	command_ids[i] = command_id;
+	return handlers + i;
+      }
+    }
+  }
+  return NULL;
+}
+
+void attach_handler(u64 control_id, u64 command_id, void * handler){
+  *get_command_handler2(control_id, command_id, true) = handler;
+}
+
+
+command_handler get_command_handler(u64 control_id, u64 command_id){
+  command_handler * item = get_command_handler2(control_id, command_id, false);
+  return item == NULL ? NULL : *item;
+}
+
+typedef struct{
+  u64 id;
+  bool active;
+}class;
+
+class * new_class(u64 id){
+  bool create = true;
+  class * w = persist_alloc("classes", sizeof(class));
+  u32 cnt = persist_size(w) / sizeof(class);
+  class * free = NULL;
+  for(u32 i = 0; i < cnt; i++){
+    if(w[i].id == id && w[i].active){
+      return w + i;
+    }else if(w[i].active == false){
+      free = w + i;
+    }
+  }
+  if(!create) return NULL;
+  if(free == NULL){
+    w = persist_realloc(w, sizeof(class) * (cnt + 1));
+    free = w + cnt;
+  }
+  free->active = true;
+  free->id = id;
+  return free;
+}
+
+u64 intern_string(const char * name){
+  return get_named_item2("interned_strings", name)->id;
+}
+
+typedef struct{
+  bool active;
+  u64 base_class;
+  u64 class;
+}subclass;
+
+subclass * define_subclass(u64 class, u64 base_class){
+  subclass * w = persist_alloc("subclasses", sizeof(subclass));
+  u32 cnt = persist_size(w) / sizeof(subclass);
+  subclass * free = NULL;
+  for(u32 i = 0; i < cnt; i++){
+    if(w[i].base_class == base_class && w[i].class == class && w[i].active){
+      return w + i;
+    }else if(w[i].active == false){
+      free = w + i;
+    }
+  }
+  if(free == NULL){
+    w = persist_realloc(w, sizeof(subclass) * (cnt + 1));
+    free = w + cnt;
+  }
+  free->active = true;
+  free->class = class;
+  free->base_class = base_class;
+  return free;
+}
+
+u64 get_baseclass(u64 class, u64 * index){
+  subclass * w = persist_alloc("subclasses", sizeof(subclass));
+  u64 cnt = persist_size(w) / sizeof(subclass);
+  for(; *index < cnt; *index += 1){
+    u64 i = *index;
+    if(w[i].active && w[i].class == class){
+      u64 result = w[i].base_class;
+      *index += 1;
+      return result;
+    }
+  }
+  return 0;
+}
+
+// idea: Dynamic inheritance. An item can inherit from multiple other items.
+// technically there is no type. Its all just
+// So all buttons inherit from button_class, but button_class is not a type, its just an ID.
+
+void define_method(u64 class_id, u64 method_id, command_handler handler){
+  attach_handler(class_id, method_id, handler);
+}
+
+command_handler get_method(u64 class_id, u64 method_id){
+  command_handler cmd = get_command_handler(class_id, method_id);
+  if(cmd == NULL){
+    u64 idx = 0;
+  next_cls:;
+    u64 baseclass = get_baseclass(class_id, &idx);
+    
+    if(baseclass != 0){
+      logd("Found baseclass: %i\n", baseclass);
+      command_handler handler = get_method(baseclass, method_id);
+      if(handler == NULL)
+	goto next_cls;
+      return handler;
+    }
+  }
+  return cmd;
+}
+
+void on_btn_clicked(u64 control){
+  logd("Control: %i\n", control);
+}
+
+void on_btn_clicked2(u64 control){
+  logd("Control 2: %i\n", control);
+  u64 index = 0;
+  u64 baseclass = get_baseclass(control, &index);
+  logd("Baseclass? %i\n", baseclass);
+  get_method(baseclass, intern_string("button_clicked"))(10);
+}
+
 void test_gui(){
-  named_item * item_1 = get_named_item("test_named_item", "hello", true);
-  if(item_1->id == 0)
-    item_1->id = get_unique_number();
-  //return;
-  named_item * item_2 = get_named_item("test_named_item", "hello2", true);
-  logd("New id: %i\n", item_2->id);
-  if(item_2->id == 0)
-    item_2->id = get_unique_number();
-  ASSERT(item_1->id != item_2->id);
+  class * ui_element_class = new_class(intern_string("element"));
+  class * button_class = new_class(intern_string("button"));
+  UNUSED(ui_element_class);UNUSED(button_class);
   
-  //return;
+  control * button_item = get_control2(intern_string("btn1"));
+  subclass * subcls_ptr = persist_alloc("subclasses", sizeof(subclass));
+  subclass * subcls = define_subclass(button_item->id, button_class->id);
+  UNUSED(subcls);UNUSED(subcls_ptr);
+  u64 button_clicked = intern_string("button_clicked");
+  define_method(button_class->id, button_clicked, (command_handler)on_btn_clicked);
+  define_method(button_item->id, button_clicked, (command_handler)on_btn_clicked2);
+  get_method(button_item->id, button_clicked)(button_item->id);
+  //logd("method: %i\n", );
+  return;
+  
+  //define_subclass(button_class->id, ui_element_class->id);
+  //define_method(button_class->id, button_clicked, on_button_clicked);
+  
+  
+  
+  named_item * item_1 = get_named_item2("test_named_item", "hello");
+  named_item * item_2 = get_named_item2("test_named_item", "hello2");
+  
+  ASSERT(item_1->id != item_2->id);
+  named_item * cmd1 = get_named_item2("cmd2", "hello");
+
+  void handle_cmd1(u64 control){
+    logd("Control: %i\n", control);
+  }
+  
+  attach_handler(cmd1->id, 0, handle_cmd1);
+  get_command_handler(cmd1->id, 0)(cmd1->id);
+  
+  return;
   
   named_item * item = get_named_item("window_name", "error_window2", true);
   if(item->id == 0)
@@ -519,7 +698,7 @@ void test_gui(){
 
   stackpanel * panel = get_stackpanel("stackpanel1");
   panel->orientation = ORIENTATION_VERTICAL;
-  set_margin(panel->id, (thickness){300,100,200,200});
+  set_margin(panel->id, (thickness){30,30,200,200});
   ASSERT(panel->id != win->id && panel->id != 0);
   add_control(win->id, panel->id);
   
@@ -528,6 +707,7 @@ void test_gui(){
   rect->size = vec2_new(30, 30);
   rect->color = vec3_new(1, 0, 0);
   set_margin(rect->id, (thickness){1,1,3,3});
+  rectangle * r0 = rect;
   control_pair * pair = add_control(panel->id, rect->id);
   ASSERT(rect->id != panel->id);
   logd("%i %i\n", panel->id, rect->id);
@@ -535,14 +715,22 @@ void test_gui(){
   rect = get_rectangle("rect2");
   rect->size = vec2_new(30, 30);
   rect->color = vec3_new(1, 1, 0);
+  rectangle * r1 = rect;
   set_margin(rect->id, (thickness){1,1,3,3});
   pair = add_control(panel->id, rect->id);
   rect = get_rectangle("rect3");
   set_margin(rect->id, (thickness){1,1,1,3});
   rect->size = vec2_new(30, 30);
   rect->color = vec3_new(1, 1, 1);
+  rectangle * r2 = rect;
+  pair = add_control(panel->id, rect->id);
 
-  pair = add_control(panel->id, rect->id);  
+  stackpanel * panel2 = get_stackpanel("stackpanel_nested");
+  add_control(panel->id, panel2->id);
+  add_control(panel2->id, r0->id);
+  add_control(panel2->id, r1->id);
+  add_control(panel2->id, r2->id);
+  
   /*//logd("pair: %i %i %i\n", pair->parent_id, pair->child_id, rect->id);
   rect = get_rectangle("rect2");
   //rect->offset = vec2_new(40, 40);
@@ -577,19 +765,24 @@ void test_gui(){
     window * w = persist_alloc("win_state", sizeof(window));
 
     int cnt = (int)(persist_size(w)  / sizeof(window));
-    u64 ts = timestamp();
+    
     for(int j = 0; j < cnt; j++){
+      
       GLFWwindow * win = find_glfw_window(w[j].id);
       if(win == NULL)
 	load_window(w[j].id);
-      if(w[j].initialized)
-	render_window(w + j, j == cnt - 1);
+
+      if(!w[j].initialized)
+	continue;
+      //u64 ts = timestamp();
+      render_window(w + j, j == cnt - 1);
+      // u64 ts2 = timestamp();
+      // double dt = ((float)(ts2 - ts)) * 1e-6;
+      // UNUSED(dt);
+      // logd("dt: %fs\n", dt);
     }
     
-    u64 ts2 = timestamp();
-    double dt = ((float)(ts2 - ts)) * 1e-6;
-    UNUSED(dt);
-    //logd("dt: %fs\n", dt);
+
     controller_state * controller = persist_alloc("controller", sizeof(controller_state));
     controller->btn1_clicked = false;
     glfwPollEvents();
