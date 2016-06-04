@@ -89,10 +89,10 @@ command_handler get_command_handler(u64 control_id, u64 command_id){
 
 typedef void (* command_handler)(u64 control, ...);
 command_handler * get_command_handler2(u64 control_id, u64 command_id, bool create){
-  static command_handler handlers[10] = {};
-  static bool inited[10] ={};
-  static u64 control_ids[10] = {};
-  static u64 command_ids[100] = {};
+  static command_handler handlers[100] = {};
+  static bool inited[100] ={};
+  static u64 control_ids[100] = {};
+  static u64 command_ids[1000] = {};
   for(u64 i = 0; i < array_count(inited); i++){
     if(inited[i] && control_ids[i] == control_id &&  command_ids[i] == command_id)
       return handlers + i;

@@ -27,6 +27,7 @@ typedef struct{
 }main_state;
 
 typedef struct{
+  bool active;
   u64 id;
   int width, height;
   int x, y;
