@@ -64,6 +64,6 @@ window * get_window_glfw(GLFWwindow * window);
 
 stackpanel * get_stackpanel(const char * name);
 stackpanel * find_stackpanel(u64 id);
-void render_stackpanel(stackpanel * stk);
+void render_stackpanel(u64 id);
 
 void test_gui();

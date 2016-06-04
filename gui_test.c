@@ -6,6 +6,7 @@
 
 #include <GLFW/glfw3.h>
 #include "gui_test.h"
+#include "persist_oop.h"
 //#include "command.h"
 
 GLFWwindow * windows[10] = {};
@@ -302,8 +303,6 @@ control * find_control(u64 id, bool create){
 
 control * get_control(const char * name){
   named_item * nw = get_named_item("control_name", name, true);
-  if(nw->id == 0)
-    nw->id = get_unique_number();
   return find_control(nw->id, true);
 }
 
@@ -335,19 +334,20 @@ rectangle * find_rectangle(u64 id, bool create){
 
 rectangle * get_rectangle(const char * name){
   named_item * nw = get_named_item("rectangle_name", name, true);
-  if(nw->id == 0)
-    nw->id = get_unique_number();
   return find_rectangle(nw->id, true);
 }
 
-void measure_rectangle(rectangle * rect, vec2 * offset, vec2 * size){
+void measure_rectangle(u64 rect_id, vec2 * offset, vec2 * size){
+  rectangle * rect = find_rectangle(rect_id, false);
   *offset = vec2_zero;
   vec2 rsize = rect->size;
   *size = vec2_min(rsize, shared_size);
 }
 
-void render_rectangle(rectangle * rect){
-  UNUSED(rect);
+void render_rectangle(u64 rect_id){
+  rectangle * rect = find_rectangle(rect_id, false);
+  ASSERT(rect != NULL);
+						      
   //logd("rendering rectangle :"); vec2_print(shared_offset); vec2_print(shared_size);logd("\n");
   static int initialized = false;
   static int shader = -1;
@@ -377,31 +377,16 @@ void render_rectangle(rectangle * rect){
 }
 
 void measure_control(u64 control, vec2 * offset, vec2 * size){
-  rectangle * rect = find_rectangle(control, false);
+
+  UNUSED(offset);
   vec2 soffset = shared_offset;
   thickness margin = get_margin(control);
   shared_offset = vec2_add(soffset, vec2_new(margin.left, margin.up));
   vec2 ssize = shared_size;
   shared_size = vec2_sub(shared_size, soffset);
-  if(rect != NULL)
-    measure_rectangle(rect, offset, size);
   *size = vec2_add(*size, vec2_new(margin.right, margin.up));
   shared_offset = soffset;
   shared_size = ssize;
-}
-
-bool render_control(u64 control){
-  rectangle * rect = NULL;
-  stackpanel * sstk = NULL;
-  if((rect = find_rectangle(control, false)) != NULL){
-    render_rectangle(rect);
-    
-  } else if((sstk = find_stackpanel(control)) != NULL){
-    render_stackpanel(sstk);
-  }else{
-    return false;
-  }
-  return true;
 }
 
 // #Stackpanel
@@ -433,8 +418,10 @@ stackpanel * find_stackpanel(u64 id){
   free->id = id;
   return free;
 }
-
-void render_stackpanel(stackpanel * stk){
+u64 render_control_method = 0;
+u64 measure_control_method  = 0;
+void render_stackpanel(u64 stk_id){
+  stackpanel * stk = find_stackpanel(stk_id);
   u64 index = 0;
   control_pair * child_control = NULL;
   vec2 soffset = shared_offset;
@@ -443,9 +430,12 @@ void render_stackpanel(stackpanel * stk){
       break;
     vec2 size = vec2_new(0,0);
     vec2 offset = vec2_new(0, 0);
-    measure_control(child_control->child_id, &offset, &size);
-    if(!render_control(child_control->child_id))
-      child_control->active = false;
+    
+    auto measure = get_method(child_control->child_id, measure_control_method);
+    if(measure != NULL)measure(child_control->child_id, &offset, &size);
+    auto render = get_method(child_control->child_id, render_control_method);
+    if(render != NULL)
+      render(child_control->child_id);
     
     if(stk->orientation == ORIENTATION_HORIZONTAL){
       shared_offset.x += size.x;
@@ -457,7 +447,15 @@ void render_stackpanel(stackpanel * stk){
 }
 
 
-void render_window(window * win, bool last){
+void render_window(u64 window_id){
+  window * win = find_window(window_id);
+  {
+    GLFWwindow * win = find_glfw_window(window_id);
+    if(win == NULL)
+      load_window(window_id);
+  }
+  
+  bool last = true;
   thickness margin = get_margin(win->id);
   //margin.left += 0.05f;
   GLFWwindow * glfwWin = find_glfw_window(win->id);
@@ -483,8 +481,7 @@ void render_window(window * win, bool last){
     vec2 offset = vec2_new(margin.left,margin.up);
     shared_offset = vec2_add(shared_offset, offset);
 
-    if(!render_control(child_control->child_id))
-      child_control->active = false;
+    get_method(child_control->child_id, render_control_method)(child_control->child_id);
     
     shared_offset = vec2_sub(shared_offset, offset);
   }
@@ -503,136 +500,14 @@ named_item * get_named_item2(const char * table, const char * name){
   return item;
 }
 
-typedef void (* command_handler)(u64 control, ...);
-command_handler * get_command_handler2(u64 control_id, u64 command_id, bool create){
-  static command_handler handlers[10] = {};
-  static bool inited[10] ={};
-  static u64 control_ids[10] = {};
-  static u64 command_ids[100] = {};
-  for(u64 i = 0; i < array_count(inited); i++){
-    if(inited[i] && control_ids[i] == control_id &&  command_ids[i] == command_id)
-      return handlers + i;
-  }
-  if(create){
-    for(u64 i = 0; i < array_count(inited); i++){
-      if(!inited[i]){
-	inited[i] = true;
-	control_ids[i] = control_id;
-	command_ids[i] = command_id;
-	return handlers + i;
-      }
-    }
-  }
-  return NULL;
-}
-
-void attach_handler(u64 control_id, u64 command_id, void * handler){
-  *get_command_handler2(control_id, command_id, true) = handler;
-}
-
-
-command_handler get_command_handler(u64 control_id, u64 command_id){
-  command_handler * item = get_command_handler2(control_id, command_id, false);
-  return item == NULL ? NULL : *item;
-}
-
-typedef struct{
-  u64 id;
-  bool active;
-}class;
-
-class * new_class(u64 id){
-  bool create = true;
-  class * w = persist_alloc("classes", sizeof(class));
-  u32 cnt = persist_size(w) / sizeof(class);
-  class * free = NULL;
-  for(u32 i = 0; i < cnt; i++){
-    if(w[i].id == id && w[i].active){
-      return w + i;
-    }else if(w[i].active == false){
-      free = w + i;
-    }
-  }
-  if(!create) return NULL;
-  if(free == NULL){
-    w = persist_realloc(w, sizeof(class) * (cnt + 1));
-    free = w + cnt;
-  }
-  free->active = true;
-  free->id = id;
-  return free;
-}
 
 u64 intern_string(const char * name){
   return get_named_item2("interned_strings", name)->id;
 }
 
-typedef struct{
-  bool active;
-  u64 base_class;
-  u64 class;
-}subclass;
-
-subclass * define_subclass(u64 class, u64 base_class){
-  subclass * w = persist_alloc("subclasses", sizeof(subclass));
-  u32 cnt = persist_size(w) / sizeof(subclass);
-  subclass * free = NULL;
-  for(u32 i = 0; i < cnt; i++){
-    if(w[i].base_class == base_class && w[i].class == class && w[i].active){
-      return w + i;
-    }else if(w[i].active == false){
-      free = w + i;
-    }
-  }
-  if(free == NULL){
-    w = persist_realloc(w, sizeof(subclass) * (cnt + 1));
-    free = w + cnt;
-  }
-  free->active = true;
-  free->class = class;
-  free->base_class = base_class;
-  return free;
-}
-
-u64 get_baseclass(u64 class, u64 * index){
-  subclass * w = persist_alloc("subclasses", sizeof(subclass));
-  u64 cnt = persist_size(w) / sizeof(subclass);
-  for(; *index < cnt; *index += 1){
-    u64 i = *index;
-    if(w[i].active && w[i].class == class){
-      u64 result = w[i].base_class;
-      *index += 1;
-      return result;
-    }
-  }
-  return 0;
-}
-
 // idea: Dynamic inheritance. An item can inherit from multiple other items.
 // technically there is no type. Its all just
 // So all buttons inherit from button_class, but button_class is not a type, its just an ID.
-
-void define_method(u64 class_id, u64 method_id, command_handler handler){
-  attach_handler(class_id, method_id, handler);
-}
-
-command_handler get_method(u64 class_id, u64 method_id){
-  command_handler cmd = get_command_handler(class_id, method_id);
-  if(cmd == NULL){
-    u64 idx = 0;
-  next_cls:;
-    u64 baseclass = get_baseclass(class_id, &idx);
-    
-    if(baseclass != 0){
-      logd("Found baseclass: %i\n", baseclass);
-      command_handler handler = get_method(baseclass, method_id);
-      if(handler == NULL)
-	goto next_cls;
-      return handler;
-    }
-  }
-  return cmd;
-}
 
 void on_btn_clicked(u64 control){
   logd("Control: %i\n", control);
@@ -642,31 +517,49 @@ void on_btn_clicked2(u64 control){
   logd("Control 2: %i\n", control);
   u64 index = 0;
   u64 baseclass = get_baseclass(control, &index);
-  logd("Baseclass? %i\n", baseclass);
   get_method(baseclass, intern_string("button_clicked"))(10);
 }
 
 void test_gui(){
-  class * ui_element_class = new_class(intern_string("element"));
-  class * button_class = new_class(intern_string("button"));
-  UNUSED(ui_element_class);UNUSED(button_class);
+
+  class * ui_element_class = new_class(intern_string("ui_element_class"));
+  class * button_class = new_class(intern_string("button_class"));
+  class * window_class = new_class(intern_string("window_class"));
+  class * stack_panel_class = new_class(intern_string("stack_panel_class"));
+  class * rectangle_class = new_class(intern_string("rectangle_class"));
+
+  render_control_method = intern_string("render_control");
+  define_method(window_class->id, render_control_method, (command_handler)render_window);
+  define_method(stack_panel_class->id, render_control_method, (command_handler) render_stackpanel);
+  define_method(rectangle_class->id, render_control_method, (command_handler) render_rectangle);
+
+  measure_control_method = intern_string("measure_control");
+  define_method(ui_element_class->id, measure_control_method, (command_handler) measure_control);
+  define_method(rectangle_class->id, measure_control_method, (command_handler) measure_rectangle);
   
-  control * button_item = get_control2(intern_string("btn1"));
+
+  
+  define_subclass(window_class->id, ui_element_class->id);
+  control * button_item = get_control2(intern_string("myButton"));
+  define_subclass(button_item->id, button_class->id);
+  define_method(button_item->id, intern_string("button_clicked"), (command_handler)on_btn_clicked);
+  
+  
+  control * button_item2 = get_control2(intern_string("btn2"));
+  control * button_item3 = get_control2(intern_string("btn3"));
+  define_subclass(button_item3->id, ui_element_class->id);
   subclass * subcls_ptr = persist_alloc("subclasses", sizeof(subclass));
+  define_subclass(button_class->id, ui_element_class->id);
+  define_subclass(button_item2->id, button_class->id);
   subclass * subcls = define_subclass(button_item->id, button_class->id);
   UNUSED(subcls);UNUSED(subcls_ptr);
   u64 button_clicked = intern_string("button_clicked");
   define_method(button_class->id, button_clicked, (command_handler)on_btn_clicked);
   define_method(button_item->id, button_clicked, (command_handler)on_btn_clicked2);
   get_method(button_item->id, button_clicked)(button_item->id);
-  //logd("method: %i\n", );
-  return;
-  
-  //define_subclass(button_class->id, ui_element_class->id);
-  //define_method(button_class->id, button_clicked, on_button_clicked);
-  
-  
-  
+  get_method(button_item2->id, button_clicked)(button_item2->id);
+  logd("item3 item: %i \n", get_method(button_item3->id, button_clicked));
+
   named_item * item_1 = get_named_item2("test_named_item", "hello");
   named_item * item_2 = get_named_item2("test_named_item", "hello2");
   
@@ -680,7 +573,7 @@ void test_gui(){
   attach_handler(cmd1->id, 0, handle_cmd1);
   get_command_handler(cmd1->id, 0)(cmd1->id);
   
-  return;
+
   
   named_item * item = get_named_item("window_name", "error_window2", true);
   if(item->id == 0)
@@ -694,15 +587,18 @@ void test_gui(){
   logd("Got item: '%s'\n", item->name);
   
   window * win = get_window2("error_window");
+  define_subclass(win->id, window_class->id);
   logd("window opened: %p\n", win);
 
   stackpanel * panel = get_stackpanel("stackpanel1");
+  define_subclass(panel->id, stack_panel_class->id);
   panel->orientation = ORIENTATION_VERTICAL;
   set_margin(panel->id, (thickness){30,30,200,200});
   ASSERT(panel->id != win->id && panel->id != 0);
   add_control(win->id, panel->id);
   
   rectangle * rect = get_rectangle("rect1");
+  define_subclass(rect->id, rectangle_class->id);
   //rect->offset = vec2_new(10, 10);
   rect->size = vec2_new(30, 30);
   rect->color = vec3_new(1, 0, 0);
@@ -713,12 +609,14 @@ void test_gui(){
   logd("%i %i\n", panel->id, rect->id);
   UNUSED(pair);
   rect = get_rectangle("rect2");
+  define_subclass(rect->id, rectangle_class->id);
   rect->size = vec2_new(30, 30);
   rect->color = vec3_new(1, 1, 0);
   rectangle * r1 = rect;
   set_margin(rect->id, (thickness){1,1,3,3});
   pair = add_control(panel->id, rect->id);
   rect = get_rectangle("rect3");
+  define_subclass(rect->id, rectangle_class->id);
   set_margin(rect->id, (thickness){1,1,1,3});
   rect->size = vec2_new(30, 30);
   rect->color = vec3_new(1, 1, 1);
@@ -730,6 +628,7 @@ void test_gui(){
   add_control(panel2->id, r0->id);
   add_control(panel2->id, r1->id);
   add_control(panel2->id, r2->id);
+  define_subclass(panel2->id, stack_panel_class->id);
   
   /*//logd("pair: %i %i %i\n", pair->parent_id, pair->child_id, rect->id);
   rect = get_rectangle("rect2");
@@ -763,23 +662,11 @@ void test_gui(){
   
   for(int i = 0; i < 6000; i++){
     window * w = persist_alloc("win_state", sizeof(window));
-
+    
     int cnt = (int)(persist_size(w)  / sizeof(window));
     
     for(int j = 0; j < cnt; j++){
-      
-      GLFWwindow * win = find_glfw_window(w[j].id);
-      if(win == NULL)
-	load_window(w[j].id);
-
-      if(!w[j].initialized)
-	continue;
-      //u64 ts = timestamp();
-      render_window(w + j, j == cnt - 1);
-      // u64 ts2 = timestamp();
-      // double dt = ((float)(ts2 - ts)) * 1e-6;
-      // UNUSED(dt);
-      // logd("dt: %fs\n", dt);
+      get_method(w[j].id, render_control_method)(w[j].id);
     }
     
 
