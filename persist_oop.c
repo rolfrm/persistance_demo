@@ -38,19 +38,19 @@ u64 get_baseclass(u64 class, u64 * index){
   return 0;
 }
 
-void define_method(u64 class_id, u64 method_id, command_handler handler){
+void define_method(u64 class_id, u64 method_id, method handler){
   attach_handler(class_id, method_id, handler);
 }
 
-command_handler get_method(u64 class_id, u64 method_id){
-  command_handler cmd = get_command_handler(class_id, method_id);
+method get_method(u64 class_id, u64 method_id){
+  method cmd = get_command_handler(class_id, method_id);
   if(cmd == NULL){
     u64 idx = 0;
   next_cls:;
     u64 baseclass = get_baseclass(class_id, &idx);
     
     if(baseclass != 0){
-      command_handler handler = get_method(baseclass, method_id);
+      method handler = get_method(baseclass, method_id);
       if(handler == NULL)
 	goto next_cls;
       return handler;
@@ -82,14 +82,13 @@ class * new_class(u64 id){
 }
 
 
-command_handler get_command_handler(u64 control_id, u64 command_id){
-  command_handler * item = get_command_handler2(control_id, command_id, false);
+method get_command_handler(u64 control_id, u64 command_id){
+  method * item = get_command_handler2(control_id, command_id, false);
   return item == NULL ? NULL : *item;
 }
 
-typedef void (* command_handler)(u64 control, ...);
-command_handler * get_command_handler2(u64 control_id, u64 command_id, bool create){
-  static command_handler handlers[100] = {};
+method * get_command_handler2(u64 control_id, u64 command_id, bool create){
+  static method handlers[100] = {};
   static bool inited[100] ={};
   static u64 control_ids[100] = {};
   static u64 command_ids[1000] = {};

@@ -9,13 +9,69 @@
 #include "persist_oop.h"
 //#include "command.h"
 
+// #Int
+typedef struct{
+  bool active;
+  u64 id;
+  int t;
+}int_item;
+
+void set_int(const char * table, u64 itemid, int t){
+  int_item * w = persist_alloc(table, sizeof(int_item));
+  u32 cnt = persist_size(w) / sizeof(int_item);
+  int_item * free = NULL;
+  for(u32 i = 0; i < cnt; i++){
+    if(w[i].id == itemid && w[i].active){
+      w[i].t = t;
+      if(t == 0)
+	w[i].active = false;
+      return;
+    }else if(w[i].active == false && free == NULL)
+      free = w + i;
+  }
+  if(free == NULL){
+    w = persist_realloc(w, sizeof(int_item) * (cnt + 1));
+    free = w + cnt;
+  }
+  free->t = t;
+  free->id = itemid;
+  free->active = true;
+}
+
+int get_int(const char * table, u64 itemid){
+  int_item * w = persist_alloc(table, sizeof(int_item));
+  u32 cnt = persist_size(w) / sizeof(int_item);
+  for(u32 i = 0; i < cnt; i++){
+    if(w[i].id == itemid && w[i].active)
+      return w[i].t;
+  }
+  return 0;
+}
+
+// is_mouse_over
+void set_is_mouse_over(u64 item_id, bool v){
+  set_int("is_mouse_over", item_id, v);
+}
+
+bool get_is_mouse_over(u64 item_id){
+  return get_int("is_mouse_over", item_id);
+}
+
+void is_mouse_over_clear(){
+  int_item * w = persist_alloc("is_mouse_over", sizeof(int_item));
+  u32 size = persist_size(w);
+  memset(w, 0, size);
+}
+
+
 GLFWwindow * windows[10] = {};
 
 u64 window_close_method = 0;
 u64 mouse_over_method = 0;
 u64 render_control_method = 0;
 u64 measure_control_method  = 0;
-
+u64 mouse_down_method = 0;
+__thread bool mouse_button_action;
 window * get_window(GLFWwindow * glwindow){
   window * w = persist_alloc("win_state", sizeof(window));
   for(u32 i = 0; i < array_count(windows); i++){
@@ -44,17 +100,27 @@ void window_size_callback(GLFWwindow* glwindow, int width, int height)
 void cursor_pos_callback(GLFWwindow * glwindow, double x, double y){
   window * w = get_window(glwindow);
   auto on_mouse_over = get_method(w->id, mouse_over_method);
+  is_mouse_over_clear();
   if(on_mouse_over != NULL)
-    on_mouse_over(w->id, x, w->height - y - 1);
+    on_mouse_over(w->id, x, w->height - y - 1, 0);
 }
 
 void mouse_button_callback(GLFWwindow * glwindow, int button, int action, int mods){
   UNUSED(glwindow); UNUSED(mods);
+  mouse_button_action = action == GLFW_PRESS ? 1 : 0;
+  if(action == GLFW_REPEAT){
+    mouse_button_action = 2;
+  }
+  if(button == 0){
+    window * w = get_window(glwindow);
+    auto on_mouse_over = get_method(w->id, mouse_over_method);
+    if(on_mouse_over != NULL){
+      double x, y;
+      glfwGetCursorPos(glwindow, &x, &y);
+      is_mouse_over_clear();
 
-  if(action == GLFW_PRESS && button == 0){
-    //controller->btn1_clicked = true;
-    //edit_mode * edit = persist_alloc("edit", sizeof(edit_mode));
-    //edit->left_clicked = true;
+      on_mouse_over(w->id, x, w->height - y - 1, mouse_down_method);
+    }
   }
 }
 
@@ -86,7 +152,6 @@ void key_callback(GLFWwindow* win, int key, int scancode, int action, int mods){
 
 void window_close_callback(GLFWwindow * glwindow){
 
-  logd("This happens!\n");
   window * w = get_window(glwindow);
   auto close_method = get_method(w->id, window_close_method);
   if(close_method != NULL)
@@ -214,6 +279,40 @@ thickness get_margin(u64 itemid){
     }
   }
   thickness zero = {};
+  return zero;
+}
+
+// #Color
+typedef struct{
+  bool active;
+  u64 id;
+  vec3 t;
+}color_item;
+
+void set_color(u64 itemid, vec3 t){
+  color_item * w = persist_alloc("item_color", sizeof(color_item));
+  u32 cnt = persist_size(w) / sizeof(color_item);
+  for(u32 i = 0; i < cnt; i++){
+    if(w[i].id == itemid && w[i].active){
+      w[i].t = t;
+      return;
+    }
+  }
+  w = persist_realloc(w, sizeof(color_item) * (cnt + 1));
+  w[cnt].t = t;
+  w[cnt].id = itemid;
+  w[cnt].active = true;
+}
+
+vec3 get_color(u64 itemid){
+  color_item * w = persist_alloc("item_color", sizeof(color_item));
+  u32 cnt = persist_size(w) / sizeof(color_item);
+  for(u32 i = 0; i < cnt; i++){
+    if(w[i].id == itemid && w[i].active){
+      return w[i].t;
+    }
+  }
+  vec3 zero = {};
   return zero;
 }
 
@@ -372,8 +471,27 @@ void render_rectangle(u64 rect_id){
     logd("Shader: %i\n", shader);
     initialized = true;
   }
-  
   glUseProgram(shader);
+  
+  vec3 color = rect->color;
+  if(get_is_mouse_over(rect_id)){
+    int color_loc = glGetUniformLocation(shader, "color");
+
+    int offset_loc = glGetUniformLocation(shader, "offset");
+
+    int size_loc = glGetUniformLocation(shader, "size");
+    
+    int window_size_loc = glGetUniformLocation(shader, "window_size");
+    glUniform4f(color_loc, 1, 1, 1, 1.0);
+    vec2 size = rect->size;
+    vec2 offset = shared_offset;//vec2_add(shared_offset, rect->offset);
+    glUniform2f(offset_loc, offset.x - 2 , offset.y - 2);
+    glUniform2f(size_loc, size.x +4, size.y +4);
+    glUniform2f(window_size_loc, window_size.x, window_size.y);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+  }
+  
+
   int color_loc = glGetUniformLocation(shader, "color");
 
   int offset_loc = glGetUniformLocation(shader, "offset");
@@ -381,7 +499,7 @@ void render_rectangle(u64 rect_id){
   int size_loc = glGetUniformLocation(shader, "size");
 
   int window_size_loc = glGetUniformLocation(shader, "window_size");
-  glUniform4f(color_loc, rect->color.x, rect->color.y, rect->color.z, 1.0);
+  glUniform4f(color_loc, color.x, color.y, color.z, 1.0);
   vec2 size = rect->size;
   vec2 offset = shared_offset;//vec2_add(shared_offset, rect->offset);
   glUniform2f(offset_loc, offset.x, offset.y);
@@ -390,19 +508,174 @@ void render_rectangle(u64 rect_id){
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
 
-void rectangle_mouse_over(u64 control, double x, double y){
+void rectangle_mouse_over(u64 control, double x, double y, u64 method){
   thickness margin = get_margin(control);
   x = x - margin.left;
   y = y - margin.up;
+  
   rectangle * rect = find_rectangle(control, false);
   ASSERT(rect != NULL);
   if(x < 0 || x > rect->size.x || y < 0 || y > rect->size.y)
     return;
-
-  rect->color = vec3_new(rand() % 100, rand() % 100, rand() % 100);
-  rect->color = vec3_scale(rect->color, 0.01);
-
+  auto evt = get_method(control, method);
+  if(evt != NULL)
+    evt(control, x, y);
+  set_color(control, vec3_new(rect->color.x * 0.5, rect->color.y * 0.5, rect->color.z * 0.5));
+  set_is_mouse_over(control, true);
 }
+
+void rectangle_clicked(u64 control, double x, double y){
+  UNUSED(x);UNUSED(y);
+  logd("WUUT!\n");
+  rectangle * rect = find_rectangle(control, false);
+  ASSERT(rect != NULL);
+  if(mouse_button_action == 1)
+    rect->color = vec3_new(0, 0, 0);
+  else{
+    rect->color = vec3_new(rand() % 100, rand() % 100, rand() % 100);
+    rect->color = vec3_scale(rect->color, 0.01);
+  }
+}
+
+// # Text line
+
+textline * find_textline(u64 id, bool create){
+  textline * w = persist_alloc("textlines", sizeof(textline));
+  u32 cnt = persist_size(w) / sizeof(textline);
+  textline * free = NULL;
+  for(u32 i = 0; i < cnt; i++){
+    if(w[i].id == id && w[i].active){
+      return w + i;
+    }else if(w[i].active == false){
+      free = w + i;
+    }
+  }
+  if(!create) return NULL;
+  if(free == NULL){
+    w = persist_realloc(w, sizeof(textline) * (cnt + 1));
+    free = w + cnt;
+  }
+  free->active = true;
+  free->id = id;
+  return free;
+}
+
+textline * get_textline(const char * name){
+  named_item * nw = get_named_item("textline_name", name, true);
+  return find_textline(nw->id, true);
+}
+
+#include "stb_truetype.h"
+static bool font_initialized = false;
+static stbtt_fontinfo font;
+void ensure_font_initialized(){
+  if(font_initialized) return;
+  font_initialized = true;
+  const char * fontfile = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf";
+  u64 buffersize;
+  void * buffer = read_file_to_buffer(fontfile, &buffersize);
+  stbtt_InitFont(&font, buffer, 0);
+}
+
+
+void measure_textline(u64 control, vec2 * offset, vec2 * size){
+  UNUSED(offset);
+  ensure_font_initialized();
+  
+  int ascent;
+  float xpos = 2;
+  float scale = stbtt_ScaleForPixelHeight(&font, 15);
+  stbtt_GetFontVMetrics(&font, &ascent, 0, 0);
+  textline * txt = find_textline(control, false);
+  ASSERT(txt != NULL);
+  float height = 0;
+  for(u64 i = 0; i < array_count(txt->text); i++){
+    if(txt->text[i] == 0)
+      break;
+    int advance,lsb,x0,y0,x1,y1;
+    float x_shift = xpos - (float) floor(xpos);
+    stbtt_GetCodepointHMetrics(&font, txt->text[i], &advance, &lsb);
+    stbtt_GetCodepointBitmapBoxSubpixel(&font, txt->text[i], scale,scale,x_shift,0, &x0,&y0,&x1,&y1);
+    height = MAX(height, y1 - y0);
+    //stbtt_MakeCodepointBitmapSubpixel(&font, &screen[baseline + y0][(int) xpos + x0], x1-x0,y1-y0, 79, scale,scale,x_shift,0, text[ch]);
+    xpos += (advance * scale);
+    if (txt->text[i+1])
+      xpos += scale*stbtt_GetCodepointKernAdvance(&font, txt->text[i],txt->text[i+1]);
+
+  }
+  thickness margin = get_margin(control);
+  size->x = xpos + margin.left + margin.right;
+  size->y = 15 + margin.up + margin.down;
+}
+
+
+void render_textline(u64 control){
+
+  ensure_font_initialized();
+  unsigned char * screen = alloc0(200 * 200);
+  int ascent,baseline;
+  float xpos = 0;
+  float scale = stbtt_ScaleForPixelHeight(&font, 16);
+  stbtt_GetFontVMetrics(&font, &ascent, 0, 0);
+  textline * txt = find_textline(control, false);
+  ASSERT(txt != NULL);
+  baseline = (int) (ascent*scale);
+  float height = 0;
+  for(u64 i = 0; i < array_count(txt->text); i++){
+    if(txt->text[i] == 0)
+      break;
+    int advance,lsb,x0,y0,x1,y1;
+    float x_shift = xpos - (float) floor(xpos);
+    stbtt_GetCodepointHMetrics(&font, txt->text[i], &advance, &lsb);
+    stbtt_GetCodepointBitmapBoxSubpixel(&font, txt->text[i], scale,scale,x_shift,0, &x0,&y0,&x1,&y1);
+    height = MAX(height, y1 - y0);
+    stbtt_MakeCodepointBitmapSubpixel(&font, &screen[(int)((baseline + y0)* 200 +  (xpos + x0))], x1-x0,y1-y0, 200, scale,scale,x_shift,0, txt->text[i]);
+    xpos += (advance * scale);
+    if (txt->text[i+1])
+      xpos += scale*stbtt_GetCodepointKernAdvance(&font, txt->text[i],txt->text[i+1]);
+  }
+  				      
+  static int initialized = false;
+  static int shader = -1;
+  if(!initialized){
+    char * vs = read_file_to_string("text_shader.vs");
+    char * fs = read_file_to_string("text_shader.fs");
+    shader = load_simple_shader(vs, strlen(vs), fs, strlen(fs));
+    logd("Shader: %i\n", shader);
+    initialized = true;
+  }
+  glUseProgram(shader);
+  //memset(screen, 255, sizeof(screen));
+  u32 tex_ref;
+  glGenTextures(1, &tex_ref);
+  glBindTexture(GL_TEXTURE_2D, tex_ref);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glGenerateMipmap(GL_TEXTURE_2D);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 200,200, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, screen);
+
+  
+  vec3 color = vec3_new(1, 1, 1);
+  int color_loc = glGetUniformLocation(shader, "color");
+
+  int offset_loc = glGetUniformLocation(shader, "offset");
+
+  int size_loc = glGetUniformLocation(shader, "size");
+
+  int window_size_loc = glGetUniformLocation(shader, "window_size");
+
+  //int texture_loc = glGetUniformLocation(shader, "
+  
+  glUniform4f(color_loc, color.x, color.y, color.z, 1.0);
+  vec2 size = vec2_new(xpos, 15);
+  vec2 offset = shared_offset;
+  glUniform2f(offset_loc, offset.x, offset.y);
+  glUniform2f(size_loc, size.x, size.y);
+  glUniform2f(window_size_loc, window_size.x, window_size.y);
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+  glDeleteTextures(1, &tex_ref);
+}
+
 
 void measure_control(u64 control, vec2 * offset, vec2 * size){
 
@@ -445,7 +718,7 @@ stackpanel * find_stackpanel(u64 id){
   return free;
 }
 
-void stack_panel_mouse_over(u64 stk_id, double x, double y){
+void stack_panel_mouse_over(u64 stk_id, double x, double y, u64 method){
   stackpanel * stk = find_stackpanel(stk_id);
   u64 index = 0;
   control_pair * child_control = NULL;
@@ -455,7 +728,10 @@ void stack_panel_mouse_over(u64 stk_id, double x, double y){
   y = y - margin.up;
   if(x < 0 || y < 0)
     return;
-
+  auto evt = get_method(stk_id, method);
+  if(evt != NULL)
+    evt(stk_id, x, y);
+  
   while((child_control = get_control_pair_parent(stk->id, &index))){
     if(child_control == NULL)
       break;
@@ -468,7 +744,7 @@ void stack_panel_mouse_over(u64 stk_id, double x, double y){
 
     auto on_mouse_over = get_method(child_control->child_id, mouse_over_method);
     if(on_mouse_over != NULL)
-      on_mouse_over(child_control->child_id, x, y);
+      on_mouse_over(child_control->child_id, x, y, method);
     
     if(stk->orientation == ORIENTATION_HORIZONTAL){
       x -= size.x;
@@ -623,11 +899,13 @@ void window_close(u64 win_id){
   win->active = false;
 }
 
-void ui_element_mouse_over(u64 control, double x, double y){
+void ui_element_mouse_over(u64 control, double x, double y, u64 method){
   thickness margin = get_margin(control);
   x = x - margin.left;
   y = y - margin.up;
-  
+  auto evt = get_method(control, method);
+  if(evt != NULL)
+    evt(control, x, y);
   u64 index = 0;
   control_pair * child_control = NULL;
   while((child_control = get_control_pair_parent(control, &index))){
@@ -639,13 +917,14 @@ void ui_element_mouse_over(u64 control, double x, double y){
     measure(child_control->child_id, &offset, &size);
   
     if(x < size.x && y < size.y){
- 
+      
       auto on_mouse_over = get_method(child_control->child_id, mouse_over_method);
       if(on_mouse_over == NULL) continue;
-      on_mouse_over(child_control->child_id, x, y);
+      on_mouse_over(child_control->child_id, x, y, method);
     }
   }
 }
+
 
 void test_gui(){
 
@@ -654,42 +933,48 @@ void test_gui(){
   class * window_class = new_class(intern_string("window_class"));
   class * stack_panel_class = new_class(intern_string("stack_panel_class"));
   class * rectangle_class = new_class(intern_string("rectangle_class"));
-
+  class * textline_class = new_class(intern_string("textline_class"));
   render_control_method = intern_string("render_control");
-  define_method(window_class->id, render_control_method,
-		(command_handler)render_window);
-  define_method(stack_panel_class->id, render_control_method,
-		(command_handler) render_stackpanel);
-  define_method(rectangle_class->id, render_control_method,
-		(command_handler) render_rectangle);
-
   measure_control_method = intern_string("measure_control");
-  define_method(ui_element_class->id, measure_control_method,
-		(command_handler) measure_control);
-  define_method(rectangle_class->id, measure_control_method,
-		(command_handler) measure_rectangle);
-  define_method(stack_panel_class->id, measure_control_method,
-		(command_handler) measure_stackpanel);
-
-  
   window_close_method = intern_string("window_close");
-  define_method(window_class->id, window_close_method,
-		(command_handler) window_close);
+  mouse_over_method = intern_string("mouse_over");
+  mouse_down_method = intern_string("mouse_down");
   
+  define_method(window_class->id, render_control_method,
+		(method)render_window);
+  define_method(stack_panel_class->id, render_control_method,
+		(method) render_stackpanel);
+  define_method(rectangle_class->id, render_control_method,
+		(method) render_rectangle);
+  define_method(textline_class->id, render_control_method, (method) render_textline);
+
+
+  define_method(ui_element_class->id, measure_control_method,
+		(method) measure_control);
+  define_method(rectangle_class->id, measure_control_method,
+		(method) measure_rectangle);
+  define_method(stack_panel_class->id, measure_control_method,
+		(method) measure_stackpanel);
+  define_method(textline_class->id, measure_control_method, (method)measure_textline);
+
+  define_method(window_class->id, window_close_method,
+		(method) window_close);
+
+  //define_method(rectangle_class->id, mouse_down_method, (method) rectangle_clicked);
 
   define_subclass(stack_panel_class->id, ui_element_class->id);
   define_subclass(window_class->id, ui_element_class->id);
   control * button_item = get_control2(intern_string("myButton"));
   define_subclass(button_item->id, button_class->id);
   define_method(button_item->id, intern_string("button_clicked"),
-		(command_handler)on_btn_clicked);
+		(method)on_btn_clicked);
 
-  mouse_over_method = intern_string("mouse_over");
+
   define_method(ui_element_class->id, mouse_over_method,
-		(command_handler) ui_element_mouse_over);
+		(method) ui_element_mouse_over);
   define_method(stack_panel_class->id, mouse_over_method,
-		(command_handler) stack_panel_mouse_over);
-  define_method(rectangle_class->id, mouse_over_method, (command_handler) rectangle_mouse_over);
+		(method) stack_panel_mouse_over);
+  define_method(rectangle_class->id, mouse_over_method, (method) rectangle_mouse_over);
   
   control * button_item2 = get_control2(intern_string("btn2"));
   control * button_item3 = get_control2(intern_string("btn3"));
@@ -700,8 +985,8 @@ void test_gui(){
   subclass * subcls = define_subclass(button_item->id, button_class->id);
   UNUSED(subcls);UNUSED(subcls_ptr);
   u64 button_clicked = intern_string("button_clicked");
-  define_method(button_class->id, button_clicked, (command_handler)on_btn_clicked);
-  define_method(button_item->id, button_clicked, (command_handler)on_btn_clicked2);
+  define_method(button_class->id, button_clicked, (method)on_btn_clicked);
+  define_method(button_item->id, button_clicked, (method)on_btn_clicked2);
   get_method(button_item->id, button_clicked)(button_item->id);
   get_method(button_item2->id, button_clicked)(button_item2->id);
   logd("item3 item: %i \n", get_method(button_item3->id, button_clicked));
@@ -710,23 +995,11 @@ void test_gui(){
   named_item * item_2 = get_named_item2("test_named_item", "hello2");
   
   ASSERT(item_1->id != item_2->id);
-  //named_item * cmd1 = get_named_item2("cmd2", "hello");
 
-  //void handle_cmd1(u64 control){
-  //  logd("Control: %i\n", control);
-  //}
-  
-  //attach_handler(cmd1->id, 0, handle_cmd1);
-  //get_command_handler(cmd1->id, 0)(cmd1->id);
-  
-
-  
   named_item * item = get_named_item("window_name", "error_window2", true);
-  if(item->id == 0)
-    item->id = get_unique_number();
+
   named_item * item2 = get_named_item("window_name", "error_window", true);
-  if(item2->id == 0)
-    item2->id = get_unique_number();
+
   logd("%i %i\n", item->id, item2->id);
   ASSERT(item->id != item2->id);
   
@@ -744,10 +1017,11 @@ void test_gui(){
   add_control(win->id, panel->id);
   
   rectangle * rect = get_rectangle("rect1");
+  define_method(rect->id, mouse_down_method, (method) rectangle_clicked);
   define_subclass(rect->id, rectangle_class->id);
   //rect->offset = vec2_new(10, 10);
   rect->size = vec2_new(30, 30);
-  //rect->color = vec3_new(1, 0, 0);
+  rect->color = vec3_new(1, 0, 0);
   set_margin(rect->id, (thickness){1,1,3,3});
   rectangle * r0 = rect;
   control_pair * pair = add_control(panel->id, rect->id);
@@ -757,7 +1031,7 @@ void test_gui(){
   rect = get_rectangle("rect2");
   define_subclass(rect->id, rectangle_class->id);
   rect->size = vec2_new(30, 30);
-  //rect->color = vec3_new(1, 1, 0);
+  rect->color = vec3_new(1, 1, 0);
   rectangle * r1 = rect;
   set_margin(rect->id, (thickness){1,1,3,3});
   pair = add_control(panel->id, rect->id);
@@ -765,14 +1039,21 @@ void test_gui(){
   define_subclass(rect->id, rectangle_class->id);
   set_margin(rect->id, (thickness){1,1,1,3});
   rect->size = vec2_new(30, 30);
-  //rect->color = vec3_new(1, 1, 1);
+  rect->color = vec3_new(1, 1, 1);
   rectangle * r2 = rect;
   pair = add_control(panel->id, rect->id);
 
+  textline * txt = get_textline("txt1");
+  sprintf(txt->text, "HELLO!");
+  set_margin(txt->id, (thickness){3,1,3,1});
+  define_subclass(txt->id, textline_class->id);
+  
+  
   stackpanel * panel2 = get_stackpanel("stackpanel_nested");
   add_control(panel->id, panel2->id);
   add_control(panel2->id, r0->id);
   add_control(panel2->id, r1->id);
+  add_control(panel2->id, txt->id);
   add_control(panel2->id, r2->id);
   define_subclass(panel2->id, stack_panel_class->id);
 
@@ -780,27 +1061,30 @@ void test_gui(){
   define_subclass(rect->id, rectangle_class->id);
   set_margin(rect->id, (thickness){1,1,1,3});
   rect->size = vec2_new(40, 40);
-  //rect->color = vec3_new(1, 1, 1);
+  rect->color = vec3_new(1, 1, 1);
   pair = add_control(panel2->id, rect->id);
 
+
+
+  
   rect = get_rectangle("rect5");
   define_subclass(rect->id, rectangle_class->id);
   set_margin(rect->id, (thickness){1,1,1,3});
   rect->size = vec2_new(10, 30);
-  //rect->color = vec3_new(1, 1, 1);
+  rect->color = vec3_new(1, 1, 1);
   pair = add_control(panel->id, rect->id);
 
   rect = get_rectangle("rect6");
   define_subclass(rect->id, rectangle_class->id);
   set_margin(rect->id, (thickness){1,1,1,3});
   rect->size = vec2_new(30, 50);
-  //rect->color = vec3_new(1, 1, 1);
+  rect->color = vec3_new(1, 1, 1);
   pair = add_control(panel->id, rect->id);
   rect = get_rectangle("rect7");
   define_subclass(rect->id, rectangle_class->id);
   set_margin(rect->id, (thickness){1,1,1,3});
   rect->size = vec2_new(20, 30);
-  //rect->color = vec3_new(1, 1, 1);
+  rect->color = vec3_new(1, 1, 1);
   pair = add_control(panel2->id, rect->id);
   /*//logd("pair: %i %i %i\n", pair->parent_id, pair->child_id, rect->id);
   rect = get_rectangle("rect2");
@@ -856,8 +1140,8 @@ void test_gui(){
   }
   
   /*textline * text = get_text_line(win->id, "error_text");
-  button * ok_btn = get_button(win->id, "ok_btn");
-  button * cancel_btn = get_button(win->id, "cancel_btn");
+    button * ok_btn = get_button(win->id, "ok_btn");
+    button * cancel_btn = get_button(win->id, "cancel_btn");
   stackpanel * stackpanel = get_stack_panel(win->id, "buttons_panel");
   set_margin(ok_btn->id, 2, 2, 2, 2);
   set_margin(cancel_btn->id, 2, 2, 2, 2);
