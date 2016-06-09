@@ -568,6 +568,9 @@ textline * get_textline(const char * name){
 #include "stb_truetype.h"
 static bool font_initialized = false;
 static stbtt_fontinfo font;
+static unsigned char temp_bitmap[1024*1024];
+static stbtt_bakedchar cdata[96];
+static u32 ftex;
 void ensure_font_initialized(){
   if(font_initialized) return;
   font_initialized = true;
@@ -575,65 +578,44 @@ void ensure_font_initialized(){
   u64 buffersize;
   void * buffer = read_file_to_buffer(fontfile, &buffersize);
   stbtt_InitFont(&font, buffer, 0);
+
+  stbtt_BakeFontBitmap(buffer,0, 16.0, temp_bitmap, 1024,1024, 32,96, cdata);
+  glGenTextures(1, &ftex);
+  glBindTexture(GL_TEXTURE_2D, ftex);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 1024,1024, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, temp_bitmap);
+  // can free temp_bitmap at this point
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 }
 
 
 void measure_textline(u64 control, vec2 * offset, vec2 * size){
   UNUSED(offset);
   ensure_font_initialized();
-  
-  int ascent;
-  float xpos = 2;
-  float scale = stbtt_ScaleForPixelHeight(&font, 15);
-  stbtt_GetFontVMetrics(&font, &ascent, 0, 0);
+
   textline * txt = find_textline(control, false);
   ASSERT(txt != NULL);
-  float height = 0;
+
+  float x = 0;
+  float y = 0;
   for(u64 i = 0; i < array_count(txt->text); i++){
-    if(txt->text[i] == 0)
-      break;
-    int advance,lsb,x0,y0,x1,y1;
-    float x_shift = xpos - (float) floor(xpos);
-    stbtt_GetCodepointHMetrics(&font, txt->text[i], &advance, &lsb);
-    stbtt_GetCodepointBitmapBoxSubpixel(&font, txt->text[i], scale,scale,x_shift,0, &x0,&y0,&x1,&y1);
-    height = MAX(height, y1 - y0);
-    //stbtt_MakeCodepointBitmapSubpixel(&font, &screen[baseline + y0][(int) xpos + x0], x1-x0,y1-y0, 79, scale,scale,x_shift,0, text[ch]);
-    xpos += (advance * scale);
-    if (txt->text[i+1])
-      xpos += scale*stbtt_GetCodepointKernAdvance(&font, txt->text[i],txt->text[i+1]);
+    if(txt->text[i] == 0)break;
+    stbtt_aligned_quad q;
+    stbtt_GetBakedQuad(cdata, 1024, 1024, txt->text[i]-32, &x,&y,&q,1);
+     
 
   }
   thickness margin = get_margin(control);
-  size->x = xpos + margin.left + margin.right;
-  size->y = 15 + margin.up + margin.down;
+  size->x = x + margin.left + margin.right;
+  size->y = y + margin.up + margin.down;
 }
 
 
 void render_textline(u64 control){
 
   ensure_font_initialized();
-  unsigned char * screen = alloc0(200 * 200);
-  int ascent,baseline;
-  float xpos = 0;
-  float scale = stbtt_ScaleForPixelHeight(&font, 16);
-  stbtt_GetFontVMetrics(&font, &ascent, 0, 0);
+
   textline * txt = find_textline(control, false);
   ASSERT(txt != NULL);
-  baseline = (int) (ascent*scale);
-  float height = 0;
-  for(u64 i = 0; i < array_count(txt->text); i++){
-    if(txt->text[i] == 0)
-      break;
-    int advance,lsb,x0,y0,x1,y1;
-    float x_shift = xpos - (float) floor(xpos);
-    stbtt_GetCodepointHMetrics(&font, txt->text[i], &advance, &lsb);
-    stbtt_GetCodepointBitmapBoxSubpixel(&font, txt->text[i], scale,scale,x_shift,0, &x0,&y0,&x1,&y1);
-    height = MAX(height, y1 - y0);
-    stbtt_MakeCodepointBitmapSubpixel(&font, &screen[(int)((baseline + y0)* 200 +  (xpos + x0))], x1-x0,y1-y0, 200, scale,scale,x_shift,0, txt->text[i]);
-    xpos += (advance * scale);
-    if (txt->text[i+1])
-      xpos += scale*stbtt_GetCodepointKernAdvance(&font, txt->text[i],txt->text[i+1]);
-  }
   				      
   static int initialized = false;
   static int shader = -1;
@@ -641,39 +623,38 @@ void render_textline(u64 control){
     char * vs = read_file_to_string("text_shader.vs");
     char * fs = read_file_to_string("text_shader.fs");
     shader = load_simple_shader(vs, strlen(vs), fs, strlen(fs));
-    logd("Shader: %i\n", shader);
     initialized = true;
   }
   glUseProgram(shader);
-  //memset(screen, 255, sizeof(screen));
-  u32 tex_ref;
-  glGenTextures(1, &tex_ref);
-  glBindTexture(GL_TEXTURE_2D, tex_ref);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glGenerateMipmap(GL_TEXTURE_2D);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 200,200, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, screen);
 
-  
+  glBindTexture(GL_TEXTURE_2D, ftex);
   vec3 color = vec3_new(1, 1, 1);
   int color_loc = glGetUniformLocation(shader, "color");
-
   int offset_loc = glGetUniformLocation(shader, "offset");
-
   int size_loc = glGetUniformLocation(shader, "size");
-
   int window_size_loc = glGetUniformLocation(shader, "window_size");
-
-  //int texture_loc = glGetUniformLocation(shader, "
+  int uv_offset_loc = glGetUniformLocation(shader, "uv_offset");
+  int uv_size_loc = glGetUniformLocation(shader, "uv_size");
   
   glUniform4f(color_loc, color.x, color.y, color.z, 1.0);
-  vec2 size = vec2_new(xpos, 15);
-  vec2 offset = shared_offset;
-  glUniform2f(offset_loc, offset.x, offset.y);
-  glUniform2f(size_loc, size.x, size.y);
+
   glUniform2f(window_size_loc, window_size.x, window_size.y);
-  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-  glDeleteTextures(1, &tex_ref);
+  float x = 0;
+  float y = 0;
+  for(u64 i = 0; i < array_count(txt->text); i++){
+    if(txt->text[i] == 0)break;
+    stbtt_aligned_quad q;
+    stbtt_GetBakedQuad(cdata, 1024, 1024, txt->text[i]-32, &x,&y,&q,1);
+    
+    vec2 size = vec2_new(q.x1 - q.x0, q.y1 - q.y0);
+    vec2 offset = vec2_new(q.x0 + shared_offset.x, shared_offset.y - q.y1);
+    glUniform2f(offset_loc, offset.x, offset.y);
+    glUniform2f(size_loc, size.x, size.y);
+    glUniform2f(uv_offset_loc, q.s0, q.t0);
+    glUniform2f(uv_size_loc, q.s1 - q.s0, q.t1 - q.t0);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+  }
+
 }
 
 
@@ -1044,7 +1025,7 @@ void test_gui(){
   pair = add_control(panel->id, rect->id);
 
   textline * txt = get_textline("txt1");
-  sprintf(txt->text, "HELLO!");
+  sprintf(txt->text, "Hello! My name is Davey!!!!");
   set_margin(txt->id, (thickness){3,1,3,1});
   define_subclass(txt->id, textline_class->id);
   
