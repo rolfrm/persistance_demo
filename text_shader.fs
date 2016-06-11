@@ -5,5 +5,7 @@ in vec2 uv;
 out vec4 fragcolor;
 uniform sampler2D tex;
 void main(){
-     fragcolor = texture(tex, uv) * color;
+     vec4 col = color;
+     col.a *= texture(tex, uv).x;
+     fragcolor = col;
 }

@@ -10,6 +10,12 @@
 //#include "command.h"
 
 // #Int
+
+vec3 vec3_rand(){
+  float rnd(){ return 0.001 * (rand() % 1000); }
+  return vec3_new(rnd(), rnd(), rnd());
+}
+
 typedef struct{
   bool active;
   u64 id;
@@ -183,7 +189,7 @@ void load_window(u64 id){
     w->height = 640;
     w->initialized = true;
     w->id = id;
-    sprintf(w->title, "%s", "Win!");
+    sprintf(w->title, "%s", "Test Window");
   }
   //glfwWindowHint(GLFW_DECORATED, GL_FALSE);
   static GLFWwindow * ctx = NULL;
@@ -538,7 +544,6 @@ void rectangle_clicked(u64 control, double x, double y){
 }
 
 // # Text line
-
 textline * find_textline(u64 id, bool create){
   textline * w = persist_alloc("textlines", sizeof(textline));
   u32 cnt = persist_size(w) / sizeof(textline);
@@ -579,14 +584,13 @@ void ensure_font_initialized(){
   void * buffer = read_file_to_buffer(fontfile, &buffersize);
   stbtt_InitFont(&font, buffer, 0);
 
-  stbtt_BakeFontBitmap(buffer,0, 16.0, temp_bitmap, 1024,1024, 32,96, cdata);
+  stbtt_BakeFontBitmap(buffer,0, 18.0, temp_bitmap, 1024,1024, 32,96, cdata);
   glGenTextures(1, &ftex);
   glBindTexture(GL_TEXTURE_2D, ftex);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 1024,1024, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, temp_bitmap);
   // can free temp_bitmap at this point
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 }
-
 
 void measure_textline(u64 control, vec2 * offset, vec2 * size){
   UNUSED(offset);
@@ -598,15 +602,13 @@ void measure_textline(u64 control, vec2 * offset, vec2 * size){
   float x = 0;
   float y = 0;
   for(u64 i = 0; i < array_count(txt->text); i++){
-    if(txt->text[i] == 0)break;
+    if(txt->text[i] == 0) break;
     stbtt_aligned_quad q;
     stbtt_GetBakedQuad(cdata, 1024, 1024, txt->text[i]-32, &x,&y,&q,1);
-     
-
   }
   thickness margin = get_margin(control);
   size->x = x + margin.left + margin.right;
-  size->y = y + margin.up + margin.down;
+  size->y = 15 + margin.up + margin.down;
 }
 
 
@@ -628,7 +630,6 @@ void render_textline(u64 control){
   glUseProgram(shader);
 
   glBindTexture(GL_TEXTURE_2D, ftex);
-  vec3 color = vec3_new(1, 1, 1);
   int color_loc = glGetUniformLocation(shader, "color");
   int offset_loc = glGetUniformLocation(shader, "offset");
   int size_loc = glGetUniformLocation(shader, "size");
@@ -636,40 +637,69 @@ void render_textline(u64 control){
   int uv_offset_loc = glGetUniformLocation(shader, "uv_offset");
   int uv_size_loc = glGetUniformLocation(shader, "uv_size");
   
-  glUniform4f(color_loc, color.x, color.y, color.z, 1.0);
+  glUniform4f(color_loc, 0, 0, 0, 1.0);
 
   glUniform2f(window_size_loc, window_size.x, window_size.y);
   float x = 0;
   float y = 0;
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  glBlendEquation(GL_FUNC_ADD);
+  thickness margin = get_margin(control);
+  shared_offset.x += margin.left;
+  shared_offset.y -= margin.up;
   for(u64 i = 0; i < array_count(txt->text); i++){
     if(txt->text[i] == 0)break;
     stbtt_aligned_quad q;
     stbtt_GetBakedQuad(cdata, 1024, 1024, txt->text[i]-32, &x,&y,&q,1);
     
     vec2 size = vec2_new(q.x1 - q.x0, q.y1 - q.y0);
-    vec2 offset = vec2_new(q.x0 + shared_offset.x, shared_offset.y - q.y1);
+    vec2 offset = vec2_new(q.x0 + shared_offset.x, shared_offset.y - q.y1 + 15);
     glUniform2f(offset_loc, offset.x, offset.y);
     glUniform2f(size_loc, size.x, size.y);
     glUniform2f(uv_offset_loc, q.s0, q.t0);
     glUniform2f(uv_size_loc, q.s1 - q.s0, q.t1 - q.t0);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   }
-
+  glDisable(GL_BLEND);
 }
+// # Button
+
+u64 get_button(u64 id){
+  return id;
+}
+
 
 
 void measure_control(u64 control, vec2 * offset, vec2 * size){
 
   UNUSED(offset);
-  vec2 soffset = shared_offset;
+  vec2 _size = vec2_zero; 
+  measure_child_controls(control, &_size);
   thickness margin = get_margin(control);
-  shared_offset = vec2_add(soffset, vec2_new(margin.left, margin.up));
-  vec2 ssize = shared_size;
-  shared_size = vec2_sub(shared_size, soffset);
-  *size = vec2_add(*size, vec2_new(margin.right, margin.up));
-  shared_offset = soffset;
-  shared_size = ssize;
+  *size = vec2_add(_size, vec2_new(margin.right + margin.left, margin.up + margin.down));
 }
+
+void render_control(u64 stk_id){
+  control * stk = find_control(stk_id, false);
+  u64 index = 0;
+  control_pair * child_control = NULL;
+  vec2 soffset = shared_offset;
+  while((child_control = get_control_pair_parent(stk->id, &index))){
+    if(child_control == NULL)
+      break;
+    vec2 size = vec2_new(0,0);
+    vec2 offset = vec2_new(0, 0);
+    
+    auto measure = get_method(child_control->child_id, measure_control_method);
+    if(measure != NULL)measure(child_control->child_id, &offset, &size);
+    auto render = get_method(child_control->child_id, render_control_method);
+    if(render != NULL)
+      render(child_control->child_id);
+  }
+  shared_offset = soffset;
+}
+
 
 // #Stackpanel
 stackpanel * get_stackpanel(const char * name){
@@ -812,14 +842,14 @@ void render_window(u64 window_id){
   thickness margin = get_margin(win->id);
   //margin.left += 0.05f;
   GLFWwindow * glfwWin = find_glfw_window(win->id);
-
+  glfwSetWindowTitle(glfwWin, win->title);
   glfwGetWindowSize(glfwWin, &win->width, &win->height);
   glfwMakeContextCurrent(glfwWin);
   glViewport(0, 0, win->width, win->height);
   window_size = vec2_new(win->width, win->height);
   
   
-  glClearColor(0, 0, 0, 1);
+  glClearColor(0.8, 0.8, 1, 1);
   glClear(GL_COLOR_BUFFER_BIT);
   shared_offset = vec2_new(margin.left, margin.up);
   shared_size = vec2_new(win->width - margin.left - margin.right, win->height - margin.up - margin.down);
@@ -880,6 +910,20 @@ void window_close(u64 win_id){
   win->active = false;
 }
 
+void measure_child_controls(u64 control, vec2 * size){
+  u64 index = 0;
+  control_pair * child_control = NULL;
+  while((child_control = get_control_pair_parent(control, &index))){
+    auto measure = get_method(child_control->child_id, measure_control_method);
+    if(measure == NULL)
+      continue;
+    vec2 offset, _size = vec2_zero;
+    measure(child_control->child_id, &offset, &_size);
+    size->x = MAX(size->x, _size.x);
+    size->y = MAX(size->y, _size.y);
+  }
+}
+
 void ui_element_mouse_over(u64 control, double x, double y, u64 method){
   thickness margin = get_margin(control);
   x = x - margin.left;
@@ -921,6 +965,8 @@ void test_gui(){
   mouse_over_method = intern_string("mouse_over");
   mouse_down_method = intern_string("mouse_down");
   
+  define_method(ui_element_class->id, render_control_method,
+		(method)render_control);
   define_method(window_class->id, render_control_method,
 		(method)render_window);
   define_method(stack_panel_class->id, render_control_method,
@@ -928,7 +974,7 @@ void test_gui(){
   define_method(rectangle_class->id, render_control_method,
 		(method) render_rectangle);
   define_method(textline_class->id, render_control_method, (method) render_textline);
-
+  
 
   define_method(ui_element_class->id, measure_control_method,
 		(method) measure_control);
@@ -941,8 +987,6 @@ void test_gui(){
   define_method(window_class->id, window_close_method,
 		(method) window_close);
 
-  //define_method(rectangle_class->id, mouse_down_method, (method) rectangle_clicked);
-
   define_subclass(stack_panel_class->id, ui_element_class->id);
   define_subclass(window_class->id, ui_element_class->id);
   control * button_item = get_control2(intern_string("myButton"));
@@ -950,43 +994,14 @@ void test_gui(){
   define_method(button_item->id, intern_string("button_clicked"),
 		(method)on_btn_clicked);
 
-
   define_method(ui_element_class->id, mouse_over_method,
 		(method) ui_element_mouse_over);
   define_method(stack_panel_class->id, mouse_over_method,
 		(method) stack_panel_mouse_over);
   define_method(rectangle_class->id, mouse_over_method, (method) rectangle_mouse_over);
   
-  control * button_item2 = get_control2(intern_string("btn2"));
-  control * button_item3 = get_control2(intern_string("btn3"));
-  define_subclass(button_item3->id, ui_element_class->id);
-  subclass * subcls_ptr = persist_alloc("subclasses", sizeof(subclass));
-  define_subclass(button_class->id, ui_element_class->id);
-  define_subclass(button_item2->id, button_class->id);
-  subclass * subcls = define_subclass(button_item->id, button_class->id);
-  UNUSED(subcls);UNUSED(subcls_ptr);
-  u64 button_clicked = intern_string("button_clicked");
-  define_method(button_class->id, button_clicked, (method)on_btn_clicked);
-  define_method(button_item->id, button_clicked, (method)on_btn_clicked2);
-  get_method(button_item->id, button_clicked)(button_item->id);
-  get_method(button_item2->id, button_clicked)(button_item2->id);
-  logd("item3 item: %i \n", get_method(button_item3->id, button_clicked));
-
-  named_item * item_1 = get_named_item2("test_named_item", "hello");
-  named_item * item_2 = get_named_item2("test_named_item", "hello2");
-  
-  ASSERT(item_1->id != item_2->id);
-
-  named_item * item = get_named_item("window_name", "error_window2", true);
-
-  named_item * item2 = get_named_item("window_name", "error_window", true);
-
-  logd("%i %i\n", item->id, item2->id);
-  ASSERT(item->id != item2->id);
-  
-  logd("Got item: '%s'\n", item->name);
-  
   window * win = get_window2("error_window");
+  sprintf(win->title, "%s", "Test Window");
   define_subclass(win->id, window_class->id);
   logd("window opened: %p\n", win);
 
@@ -1004,96 +1019,129 @@ void test_gui(){
   rect->size = vec2_new(30, 30);
   rect->color = vec3_new(1, 0, 0);
   set_margin(rect->id, (thickness){1,1,3,3});
-  rectangle * r0 = rect;
-  control_pair * pair = add_control(panel->id, rect->id);
+  add_control(panel->id, rect->id);
   ASSERT(rect->id != panel->id);
   logd("%i %i\n", panel->id, rect->id);
-  UNUSED(pair);
+
   rect = get_rectangle("rect2");
   define_subclass(rect->id, rectangle_class->id);
-  rect->size = vec2_new(30, 30);
-  rect->color = vec3_new(1, 1, 0);
-  rectangle * r1 = rect;
+  //rect->size = vec2_new(30, 30);
+  //rect->color = vec3_new(1, 1, 0);
   set_margin(rect->id, (thickness){1,1,3,3});
-  pair = add_control(panel->id, rect->id);
+  add_control(panel->id, rect->id);
+  
   rect = get_rectangle("rect3");
   define_subclass(rect->id, rectangle_class->id);
   set_margin(rect->id, (thickness){1,1,1,3});
-  rect->size = vec2_new(30, 30);
-  rect->color = vec3_new(1, 1, 1);
-  rectangle * r2 = rect;
-  pair = add_control(panel->id, rect->id);
+  //rect->size = vec2_new(30, 30);
+  //rect->color = vec3_new(1, 1, 1);
+  add_control(panel->id, rect->id);
 
   textline * txt = get_textline("txt1");
-  sprintf(txt->text, "Hello! My name is Davey!!!!");
-  set_margin(txt->id, (thickness){3,1,3,1});
+  sprintf(txt->text, "Click me!");
+  set_margin(txt->id, (thickness){40,3,40,3});
   define_subclass(txt->id, textline_class->id);
   
   
   stackpanel * panel2 = get_stackpanel("stackpanel_nested");
   add_control(panel->id, panel2->id);
-  add_control(panel2->id, r0->id);
-  add_control(panel2->id, r1->id);
-  add_control(panel2->id, txt->id);
-  add_control(panel2->id, r2->id);
+  //add_control(panel2->id, r0->id);
+  //add_control(panel2->id, r1->id);
+  //add_control(panel2->id, txt->id);
+  //add_control(panel2->id, r2->id);
   define_subclass(panel2->id, stack_panel_class->id);
 
+  control * btn_test = get_control2(intern_string("button_test"));
+  set_margin(btn_test->id, (thickness) {1, 1, 1, 1});
+  define_subclass(btn_test->id, ui_element_class->id);
+
+  void rectangle_clicked(u64 control, double x, double y){
+    rectangle * r = find_rectangle(control, false);
+    vec2 size = r->size;
+    if(x > size.x || y > size.y || x < 0 || y < 0) return;
+    
+    r->color = vec3_rand();
+  }
+  define_method(rectangle_class->id, mouse_down_method, (method) rectangle_clicked);
+  
+  int color_idx = 0;
+  vec3 colors[] = {vec3_new(1,0,0), vec3_new(0,1,0), vec3_new(0, 0, 1)};
+  
+  void button_clicked2(u64 control, double x, double y){
+    vec2 size;
+    measure_child_controls(control, &size);
+    if(x > size.x || y > size.y || x < 0 || y < 0) return;
+    rectangle * r = get_rectangle("rect4");
+    r->color = colors[color_idx];
+    color_idx = (color_idx + 1) % array_count(colors);
+  }
+
+  void button_render(u64 control){
+    u64 index = 0;
+    control_pair * child_control = NULL;
+    vec2 _size;
+    while((child_control = get_control_pair_parent(control, &index))){
+       if(child_control == NULL)
+	break;
+      
+      auto measure = get_method(child_control->child_id, measure_control_method);
+      if(measure == NULL) continue;
+      vec2 size = vec2_new(0,0);
+      vec2 offset = vec2_new(0, 0);
+      measure(child_control->child_id, &offset, &size);
+      _size.x = MAX(_size.x, size.x);
+      _size.y = MAX(_size.y, size.y);
+    }
+    index = 0;
+    while((child_control = get_control_pair_parent(control, &index))){
+      if(child_control == NULL)
+	break;
+      rectangle * rect = find_rectangle(child_control->child_id, false);
+      if(rect == NULL) continue;
+      rect->size = _size;
+    }
+    index = 0;
+    u64 base = get_baseclass(control, &index);
+    method base_method = get_method(base, render_control_method);
+    ASSERT(base_method != NULL);
+    base_method(control);
+      
+  }
+  
+  define_method(btn_test->id, mouse_down_method, (method) button_clicked2);
+  define_method(btn_test->id, render_control_method, (method) button_render);
+  
   rect = get_rectangle("rect4");
   define_subclass(rect->id, rectangle_class->id);
-  set_margin(rect->id, (thickness){1,1,1,3});
+  set_margin(rect->id, (thickness){0,0,0,0});
   rect->size = vec2_new(40, 40);
-  rect->color = vec3_new(1, 1, 1);
-  pair = add_control(panel2->id, rect->id);
+  rect->color = vec3_new(0.5, 0.5, 0.5);
+  add_control(btn_test->id, rect->id);
+  add_control(btn_test->id, txt->id);
+  add_control(panel2->id, btn_test->id);
 
 
 
-  
   rect = get_rectangle("rect5");
   define_subclass(rect->id, rectangle_class->id);
-  set_margin(rect->id, (thickness){1,1,1,3});
+  set_margin(rect->id, (thickness){3,3,3,3});
   rect->size = vec2_new(10, 30);
   rect->color = vec3_new(1, 1, 1);
-  pair = add_control(panel->id, rect->id);
+  add_control(panel->id, rect->id);
 
   rect = get_rectangle("rect6");
   define_subclass(rect->id, rectangle_class->id);
   set_margin(rect->id, (thickness){1,1,1,3});
   rect->size = vec2_new(30, 50);
   rect->color = vec3_new(1, 1, 1);
-  pair = add_control(panel->id, rect->id);
+  add_control(panel->id, rect->id);
+  
   rect = get_rectangle("rect7");
   define_subclass(rect->id, rectangle_class->id);
-  set_margin(rect->id, (thickness){1,1,1,3});
-  rect->size = vec2_new(20, 30);
-  rect->color = vec3_new(1, 1, 1);
-  pair = add_control(panel2->id, rect->id);
-  /*//logd("pair: %i %i %i\n", pair->parent_id, pair->child_id, rect->id);
-  rect = get_rectangle("rect2");
-  //rect->offset = vec2_new(40, 40);
-  rect->size = vec2_new(30, 30);
-  rect->color = vec3_new(0.6, 0.9, 1);
-  set_margin(rect->id, (thickness){36,40,30,30});
-  pair = add_control(panel->id, rect->id);  
-  logd("pair: %i %i %i\n", pair->parent_id, pair->child_id, rect->id);
-  rect = get_rectangle("rect3");
-  //  rect->offset = vec2_new(70, 40);
-  rect->size = vec2_new(30, 30);
-  rect->color = vec3_new(0.6, 0.6, 1);
-  set_margin(rect->id, (thickness){30,30,30,30});
-  pair = add_control(win->id, rect->id);
-  rect = get_rectangle("rect4");
-  //  rect->offset = vec2_new(70, 70);
-  rect->size = vec2_new(30, 30);
-  rect->color = vec3_new(0.3, 0.3, 1);
-  pair = add_control(win->id, rect->id);
-  
-  rect = get_rectangle("rect5");
-  //  rect->offset = vec2_new(70, 100);
-  rect->size = vec2_new(30, 30);
-  rect->color = vec3_new(0.7, 0.3, 0);
-  pair = add_control(win->id, rect->id);
-  */
-  //return;
+  set_margin(rect->id, (thickness){6,6,6,6});
+  rect->size = vec2_new(50, 30);
+  rect->color = vec3_new(1, 0, 1);
+  add_control(panel2->id, rect->id);
 
   char buffer[100];
   
@@ -1119,18 +1167,4 @@ void test_gui(){
       get_window2(buffer);
     }
   }
-  
-  /*textline * text = get_text_line(win->id, "error_text");
-    button * ok_btn = get_button(win->id, "ok_btn");
-    button * cancel_btn = get_button(win->id, "cancel_btn");
-  stackpanel * stackpanel = get_stack_panel(win->id, "buttons_panel");
-  set_margin(ok_btn->id, 2, 2, 2, 2);
-  set_margin(cancel_btn->id, 2, 2, 2, 2);
-  set_margin(text->id, 2, 10, 0, 0);
-  add_control(stackpanel->id, ok_btn->id);
-  add_control(stackpanel->id, cancel_btn->id);
-  add_control(win->id, ok_btn->id);
-  add_control(win->id, cancel_btn->id);
-  add_control(win->id, text->id);
-  render_window(win);*/
 }

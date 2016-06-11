@@ -6,7 +6,7 @@ LIB_OBJECTS =$(LIB_SOURCES:.c=.o)
 LDFLAGS= -L. $(OPT) -Wextra -fopenmp #-Wl,-stack_size,0x100000000 -lmcheck #-ftlo #setrlimit on linux 
 LIBS= -ldl -lm -lGL -lpthread -lglfw -lGLEW -lpng
 ALL= $(TARGET)
-CFLAGS = -I. -std=c11 -c $(OPT) -Wall -Wextra -Werror=implicit-function-declaration -Wformat=0 -D_GNU_SOURCE -fdiagnostics-color -Wextra  -Wwrite-strings -fbounds-check -Werror -msse4.2 -mtune=corei7 -DSTB_IMAGE_IMPLEMENTATION   -fopenmp -ffast-math -Werror=maybe-uninitialized #-DDEBUG  
+CFLAGS = -I. -std=c11 -c $(OPT) -Wall -Wextra -Werror=implicit-function-declaration -Wformat=0 -D_GNU_SOURCE -fdiagnostics-color -Wextra  -Wwrite-strings -fbounds-check -Werror -msse4.2 -mtune=corei7 -DSTB_IMAGE_IMPLEMENTATION   -fopenmp -ffast-math -Werror=maybe-uninitialized -Wsuggest-attribute=const #-DDEBUG  
 
 $(TARGET): $(LIB_OBJECTS)
 	$(CC) $(LDFLAGS) $(LIB_OBJECTS) $(LIBS) -o $@

@@ -67,3 +67,5 @@ stackpanel * find_stackpanel(u64 id);
 void render_stackpanel(u64 id);
 
 void test_gui();
+
+void measure_child_controls(u64 control, vec2 * size);
