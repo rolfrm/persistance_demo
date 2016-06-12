@@ -54,6 +54,15 @@ int get_int(const char * table, u64 itemid){
   return 0;
 }
 
+bool once(u64 itemid){
+  int v = get_int("loaded", itemid);
+  if(v == 0){
+    set_int("loaded", itemid, 1);
+    return true;
+  }
+  return false;
+}
+
 // is_mouse_over
 void set_is_mouse_over(u64 item_id, bool v){
   set_int("is_mouse_over", item_id, v);
@@ -77,6 +86,14 @@ u64 mouse_over_method = 0;
 u64 render_control_method = 0;
 u64 measure_control_method  = 0;
 u64 mouse_down_method = 0;
+
+u64 ui_element_class;
+u64 button_class;
+u64 window_class;
+u64 stack_panel_class;
+u64 rectangle_class;
+u64 textline_class;
+
 __thread bool mouse_button_action;
 window * get_window(GLFWwindow * glwindow){
   window * w = persist_alloc("win_state", sizeof(window));
@@ -99,6 +116,7 @@ void window_pos_callback(GLFWwindow* glwindow, int xpos, int ypos)
 void window_size_callback(GLFWwindow* glwindow, int width, int height)
 {
   window * w = get_window(glwindow);
+  logd("Setting size: %i %i\n", width, height);
   w->width = width;
   w->height = height;
 }
@@ -195,6 +213,7 @@ void load_window(u64 id){
   static GLFWwindow * ctx = NULL;
   
   GLFWwindow * window = glfwCreateWindow(w->width, w->height, w->title, NULL, ctx);
+  ASSERT(window != NULL);
   if(ctx == NULL){
     ctx = window;
     glfwMakeContextCurrent(window);
@@ -251,6 +270,7 @@ window * get_window2(const char * name){
   ASSERT(find_glfw_window(nw->id) != NULL);
   window * _win = find_window(nw->id);
   _win->active = true;
+  define_subclass(_win->id, window_class);
   return _win;
 }
 
@@ -461,10 +481,13 @@ rectangle * find_rectangle(u64 id, bool create){
     w = persist_realloc(w, sizeof(rectangle) * (cnt + 1));
     free = w + cnt;
   }
+  if(!free->active)
+    define_subclass(id, rectangle_class);
   free->active = true;
   free->id = id;
   return free;
 }
+ 
 
 rectangle * get_rectangle(const char * name){
   named_item * nw = get_named_item("rectangle_name", name, true);
@@ -575,6 +598,8 @@ textline * find_textline(u64 id, bool create){
     w = persist_realloc(w, sizeof(textline) * (cnt + 1));
     free = w + cnt;
   }
+  if(!free->active)
+    define_subclass(id, textline_class);
   free->active = true;
   free->id = id;
   return free;
@@ -584,6 +609,8 @@ textline * get_textline(const char * name){
   named_item * nw = get_named_item("textline_name", name, true);
   return find_textline(nw->id, true);
 }
+
+
 
 #include "stb_truetype.h"
 static bool font_initialized = false;
@@ -716,7 +743,9 @@ void render_control(u64 stk_id){
 // #Stackpanel
 stackpanel * get_stackpanel(const char * name){
   named_item * nw = get_named_item("stackpanel_name", name, true);
-  return find_stackpanel(nw->id);
+  stackpanel * panel = find_stackpanel(nw->id);
+  
+  return panel;
 }
 
 stackpanel * find_stackpanel(u64 id){
@@ -736,7 +765,11 @@ stackpanel * find_stackpanel(u64 id){
     w = persist_realloc(w, sizeof(stackpanel) * (cnt + 1));
     free = w + cnt;
   }
-  free->active = true;
+
+  if(!free->active){
+    define_subclass(id, stack_panel_class);  
+    free->active = true;
+  }
   free->id = id;
   return free;
 }
@@ -943,61 +976,13 @@ void ui_element_mouse_over(u64 control, double x, double y, u64 method){
 }
 
 void test_gui(){
+  init_gui();
 
-  class * ui_element_class = new_class(intern_string("ui_element_class"));
-  class * button_class = new_class(intern_string("button_class"));
-  class * window_class = new_class(intern_string("window_class"));
-  class * stack_panel_class = new_class(intern_string("stack_panel_class"));
-  class * rectangle_class = new_class(intern_string("rectangle_class"));
-  class * textline_class = new_class(intern_string("textline_class"));
-  render_control_method = intern_string("render_control");
-  measure_control_method = intern_string("measure_control");
-  window_close_method = intern_string("window_close");
-  mouse_over_method = intern_string("mouse_over");
-  mouse_down_method = intern_string("mouse_down");
-  
-  define_method(ui_element_class->id, render_control_method,
-		(method)render_control);
-  define_method(window_class->id, render_control_method,
-		(method)render_window);
-  define_method(stack_panel_class->id, render_control_method,
-		(method) render_stackpanel);
-  define_method(rectangle_class->id, render_control_method,
-		(method) render_rectangle);
-  define_method(textline_class->id, render_control_method, (method) render_textline);
-  
-
-  define_method(ui_element_class->id, measure_control_method,
-		(method) measure_control);
-  define_method(rectangle_class->id, measure_control_method,
-		(method) measure_rectangle);
-  define_method(stack_panel_class->id, measure_control_method,
-		(method) measure_stackpanel);
-  define_method(textline_class->id, measure_control_method, (method)measure_textline);
-
-  define_method(window_class->id, window_close_method,
-		(method) window_close);
-
-  define_subclass(stack_panel_class->id, ui_element_class->id);
-  define_subclass(window_class->id, ui_element_class->id);
-  control * button_item = get_control2(intern_string("myButton"));
-  define_subclass(button_item->id, button_class->id);
-  define_method(button_item->id, intern_string("button_clicked"),
-		(method)on_btn_clicked);
-
-  define_method(ui_element_class->id, mouse_over_method,
-		(method) ui_element_mouse_over);
-  define_method(stack_panel_class->id, mouse_over_method,
-		(method) stack_panel_mouse_over);
-  define_method(rectangle_class->id, mouse_over_method, (method) rectangle_mouse_over);
-  
   window * win = get_window2("error_window");
   sprintf(win->title, "%s", "Test Window");
-  define_subclass(win->id, window_class->id);
   logd("window opened: %p\n", win);
 
   stackpanel * panel = get_stackpanel("stackpanel1");
-  define_subclass(panel->id, stack_panel_class->id);
   panel->orientation = ORIENTATION_VERTICAL;
   set_margin(panel->id, (thickness){30,30,200,200});
   ASSERT(panel->id != win->id && panel->id != 0);
@@ -1005,46 +990,45 @@ void test_gui(){
   
   rectangle * rect = get_rectangle("rect1");
   define_method(rect->id, mouse_down_method, (method) rectangle_clicked);
-  define_subclass(rect->id, rectangle_class->id);
-  //rect->offset = vec2_new(10, 10);
-  rect->size = vec2_new(30, 30);
-  rect->color = vec3_new(1, 0, 0);
-  set_margin(rect->id, (thickness){1,1,3,3});
+  if(once(rect->id)){
+    rect->size = vec2_new(30, 30);
+    rect->color = vec3_new(1, 0, 0);
+    set_margin(rect->id, (thickness){1,1,3,3});
+  }
   add_control(panel->id, rect->id);
   ASSERT(rect->id != panel->id);
-  logd("%i %i\n", panel->id, rect->id);
 
   rect = get_rectangle("rect2");
-  define_subclass(rect->id, rectangle_class->id);
-  //rect->size = vec2_new(30, 30);
-  //rect->color = vec3_new(1, 1, 0);
-  set_margin(rect->id, (thickness){1,1,3,3});
-  add_control(panel->id, rect->id);
+  if(once(rect->id)){
+    rect->size = vec2_new(30, 30);
+    rect->color = vec3_new(1, 1, 0);
+    set_margin(rect->id, (thickness){1,1,3,3});
+    add_control(panel->id, rect->id);
+  }
   
   rect = get_rectangle("rect3");
-  define_subclass(rect->id, rectangle_class->id);
-  set_margin(rect->id, (thickness){1,1,1,3});
-  //rect->size = vec2_new(30, 30);
-  //rect->color = vec3_new(1, 1, 1);
-  add_control(panel->id, rect->id);
-
-  textline * txt = get_textline("txt1");
-  sprintf(txt->text, "Click me!");
-  set_margin(txt->id, (thickness){40,3,40,3});
-  define_subclass(txt->id, textline_class->id);
+  if(once(rect->id)){
+    set_margin(rect->id, (thickness){1,1,1,3});
+    rect->size = vec2_new(30, 30);
+    rect->color = vec3_new(1, 1, 1);
+    add_control(panel->id, rect->id);
+  }
   
+  textline * txt = get_textline("txt1");
+  if(once(txt->id)){
+    sprintf(txt->text, "Click me!");
+    set_margin(txt->id, (thickness){40,3,40,3});
+  }
   
   stackpanel * panel2 = get_stackpanel("stackpanel_nested");
   add_control(panel->id, panel2->id);
-  //add_control(panel2->id, r0->id);
-  //add_control(panel2->id, r1->id);
-  //add_control(panel2->id, txt->id);
-  //add_control(panel2->id, r2->id);
-  define_subclass(panel2->id, stack_panel_class->id);
+  add_control(panel2->id, rect->id);
 
   control * btn_test = get_control2(intern_string("button_test"));
-  set_margin(btn_test->id, (thickness) {1, 1, 1, 1});
-  define_subclass(btn_test->id, ui_element_class->id);
+  if(once(btn_test->id)){
+    set_margin(btn_test->id, (thickness) {1, 1, 1, 1});
+    define_subclass(btn_test->id, ui_element_class);
+  }
 
   void rectangle_clicked(u64 control, double x, double y){
     rectangle * r = find_rectangle(control, false);
@@ -1053,7 +1037,7 @@ void test_gui(){
     
     r->color = vec3_rand();
   }
-  define_method(rectangle_class->id, mouse_down_method, (method) rectangle_clicked);
+  define_method(rectangle_class, mouse_down_method, (method) rectangle_clicked);
   
   int color_idx = 0;
   vec3 colors[] = {vec3_new(1,0,0), vec3_new(0,1,0), vec3_new(0, 0, 1)};
@@ -1099,10 +1083,11 @@ void test_gui(){
   define_method(btn_test->id, render_control_method, (method) button_render);
   
   rect = get_rectangle("rect4");
-  define_subclass(rect->id, rectangle_class->id);
-  set_margin(rect->id, (thickness){0,0,0,0});
-  rect->size = vec2_new(40, 40);
-  rect->color = vec3_new(0.5, 0.5, 0.5);
+  if(once(rect->id)){
+    set_margin(rect->id, (thickness){0,0,0,0});
+    rect->size = vec2_new(40, 40);
+    rect->color = vec3_new(0.5, 0.5, 0.5);
+  }
   add_control(btn_test->id, rect->id);
   add_control(btn_test->id, txt->id);
   add_control(panel2->id, btn_test->id);
@@ -1124,25 +1109,28 @@ void test_gui(){
   }
 
   rect = get_rectangle("rect5");
-  define_subclass(rect->id, rectangle_class->id);
-  set_margin(rect->id, (thickness){3,3,3,3});
-  rect->size = vec2_new(100, 30);
-  rect->color = vec3_new(1, 1, 1);
+  if(once(rect->id)){
+    set_margin(rect->id, (thickness){3,3,3,3});
+    rect->size = vec2_new(100, 30);
+    rect->color = vec3_new(1, 1, 1);
+  }
   add_control(panel->id, rect->id);
   define_method(rect->id, render_control_method, (method) color_render_shifter);
 
   rect = get_rectangle("rect6");
-  define_subclass(rect->id, rectangle_class->id);
-  set_margin(rect->id, (thickness){1,1,1,3});
-  rect->size = vec2_new(30, 50);
-  rect->color = vec3_new(1, 1, 1);
+  if(once(rect->id)){
+    set_margin(rect->id, (thickness){1,1,1,3});
+    rect->size = vec2_new(30, 50);
+    rect->color = vec3_new(1, 1, 1);
+  }
   add_control(panel->id, rect->id);
   
   rect = get_rectangle("rect7");
-  define_subclass(rect->id, rectangle_class->id);
-  set_margin(rect->id, (thickness){6,6,6,6});
-  rect->size = vec2_new(50, 30);
-  rect->color = vec3_new(1, 0, 1);
+  if(once(rect->id)){
+    set_margin(rect->id, (thickness){6,6,6,6});
+    rect->size = vec2_new(50, 30);
+    rect->color = vec3_new(1, 0, 1);
+  }
   add_control(panel2->id, rect->id);
 
   char buffer[100];
@@ -1169,4 +1157,39 @@ void test_gui(){
       get_window2(buffer);
     }
   }
+}
+
+
+void init_gui(){
+  ui_element_class = new_class(intern_string("ui_element_class"))->id;
+  button_class = new_class(intern_string("button_class"))->id;
+  window_class = new_class(intern_string("window_class"))->id;
+  stack_panel_class = new_class(intern_string("stack_panel_class"))->id;
+  rectangle_class = new_class(intern_string("rectangle_class"))->id;
+  textline_class = new_class(intern_string("textline_class"))->id;  
+
+  render_control_method = intern_string("render_control");
+  measure_control_method = intern_string("measure_control");
+  window_close_method = intern_string("window_close");
+  mouse_over_method = intern_string("mouse_over");
+  mouse_down_method = intern_string("mouse_down");
+
+  define_method(ui_element_class, render_control_method, (method)render_control);
+  define_method(window_class, render_control_method, (method)render_window);
+  define_method(stack_panel_class, render_control_method, (method) render_stackpanel);
+  define_method(rectangle_class, render_control_method, (method) render_rectangle);
+  define_method(textline_class, render_control_method, (method) render_textline);
+
+  define_method(ui_element_class, measure_control_method, (method) measure_control);
+  define_method(rectangle_class, measure_control_method, (method) measure_rectangle);
+  define_method(stack_panel_class, measure_control_method, (method) measure_stackpanel);
+  define_method(textline_class, measure_control_method, (method)measure_textline);
+  define_method(window_class, window_close_method, (method) window_close);
+
+  define_subclass(stack_panel_class, ui_element_class);
+  define_subclass(window_class, ui_element_class);
+
+  define_method(ui_element_class, mouse_over_method, (method) ui_element_mouse_over);
+  define_method(stack_panel_class, mouse_over_method, (method) stack_panel_mouse_over);
+  define_method(rectangle_class, mouse_over_method, (method) rectangle_mouse_over);
 }
