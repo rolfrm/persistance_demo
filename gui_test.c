@@ -104,11 +104,12 @@ void window_size_callback(GLFWwindow* glwindow, int width, int height)
 }
 
 void cursor_pos_callback(GLFWwindow * glwindow, double x, double y){
+  logd("Corsor pos: %f %f\n", x, y);
   window * w = get_window(glwindow);
   auto on_mouse_over = get_method(w->id, mouse_over_method);
   is_mouse_over_clear();
   if(on_mouse_over != NULL)
-    on_mouse_over(w->id, x, w->height - y - 1, 0);
+    on_mouse_over(w->id, x, y, 0);
 }
 
 void mouse_button_callback(GLFWwindow * glwindow, int button, int action, int mods){
@@ -125,7 +126,7 @@ void mouse_button_callback(GLFWwindow * glwindow, int button, int action, int mo
       glfwGetCursorPos(glwindow, &x, &y);
       is_mouse_over_clear();
 
-      on_mouse_over(w->id, x, w->height - y - 1, mouse_down_method);
+      on_mouse_over(w->id, x, y, mouse_down_method);
     }
   }
 }
@@ -455,10 +456,9 @@ rectangle * get_rectangle(const char * name){
   return find_rectangle(nw->id, true);
 }
 
-void measure_rectangle(u64 rect_id, vec2 * offset, vec2 * size){
+void measure_rectangle(u64 rect_id, vec2 * size){
   rectangle * rect = find_rectangle(rect_id, false);
   thickness margin = get_margin(rect_id);
-  *offset = vec2_zero;
   vec2 rsize = rect->size;
   *size = vec2_add(rsize, vec2_new(margin.left + margin.right, margin.up + margin.down));
 }
@@ -592,8 +592,7 @@ void ensure_font_initialized(){
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 }
 
-void measure_textline(u64 control, vec2 * offset, vec2 * size){
-  UNUSED(offset);
+void measure_textline(u64 control, vec2 * size){
   ensure_font_initialized();
 
   textline * txt = find_textline(control, false);
@@ -647,14 +646,14 @@ void render_textline(u64 control){
   glBlendEquation(GL_FUNC_ADD);
   thickness margin = get_margin(control);
   shared_offset.x += margin.left;
-  shared_offset.y -= margin.up;
+  shared_offset.y += margin.up;
   for(u64 i = 0; i < array_count(txt->text); i++){
     if(txt->text[i] == 0)break;
     stbtt_aligned_quad q;
     stbtt_GetBakedQuad(cdata, 1024, 1024, txt->text[i]-32, &x,&y,&q,1);
     
     vec2 size = vec2_new(q.x1 - q.x0, q.y1 - q.y0);
-    vec2 offset = vec2_new(q.x0 + shared_offset.x, shared_offset.y - q.y1 + 15);
+    vec2 offset = vec2_new(q.x0 + shared_offset.x, shared_offset.y + q.y0 + 15);
     glUniform2f(offset_loc, offset.x, offset.y);
     glUniform2f(size_loc, size.x, size.y);
     glUniform2f(uv_offset_loc, q.s0, q.t0);
@@ -671,9 +670,8 @@ u64 get_button(u64 id){
 
 
 
-void measure_control(u64 control, vec2 * offset, vec2 * size){
+void measure_control(u64 control, vec2 * size){
 
-  UNUSED(offset);
   vec2 _size = vec2_zero; 
   measure_child_controls(control, &_size);
   thickness margin = get_margin(control);
@@ -689,10 +687,9 @@ void render_control(u64 stk_id){
     if(child_control == NULL)
       break;
     vec2 size = vec2_new(0,0);
-    vec2 offset = vec2_new(0, 0);
     
     auto measure = get_method(child_control->child_id, measure_control_method);
-    if(measure != NULL)measure(child_control->child_id, &offset, &size);
+    if(measure != NULL)measure(child_control->child_id, &size);
     auto render = get_method(child_control->child_id, render_control_method);
     if(render != NULL)
       render(child_control->child_id);
@@ -747,11 +744,10 @@ void stack_panel_mouse_over(u64 stk_id, double x, double y, u64 method){
     if(child_control == NULL)
       break;
     vec2 size = vec2_new(0,0);
-    vec2 offset = vec2_new(0, 0);
 
     auto measure = get_method(child_control->child_id, measure_control_method);
     if(measure != NULL)
-      measure(child_control->child_id, &offset, &size);
+      measure(child_control->child_id, &size);
 
     auto on_mouse_over = get_method(child_control->child_id, mouse_over_method);
     if(on_mouse_over != NULL)
@@ -775,10 +771,9 @@ void render_stackpanel(u64 stk_id){
     if(child_control == NULL)
       break;
     vec2 size = vec2_new(0,0);
-    vec2 offset = vec2_new(0, 0);
     
     auto measure = get_method(child_control->child_id, measure_control_method);
-    if(measure != NULL)measure(child_control->child_id, &offset, &size);
+    if(measure != NULL)measure(child_control->child_id, &size);
     auto render = get_method(child_control->child_id, render_control_method);
     if(render != NULL)
       render(child_control->child_id);
@@ -792,8 +787,7 @@ void render_stackpanel(u64 stk_id){
   shared_offset = soffset;
 }
 
-void measure_stackpanel(u64 stk_id, vec2 * offset, vec2 * s){
-  UNUSED(offset);
+void measure_stackpanel(u64 stk_id, vec2 * s){
   thickness margin = get_margin(stk_id);
   vec2 _size = vec2_new(margin.left + margin.right, margin.up + margin.down);
   
@@ -805,11 +799,10 @@ void measure_stackpanel(u64 stk_id, vec2 * offset, vec2 * s){
     if(child_control == NULL)
       break;
     vec2 size = vec2_new(0,0);
-    vec2 offset = vec2_new(0, 0);
     
     auto measure = get_method(child_control->child_id, measure_control_method);
     if(measure != NULL)
-      measure(child_control->child_id, &offset, &size);
+      measure(child_control->child_id, &size);
     
     
     if(stk->orientation == ORIENTATION_HORIZONTAL){
@@ -917,8 +910,8 @@ void measure_child_controls(u64 control, vec2 * size){
     auto measure = get_method(child_control->child_id, measure_control_method);
     if(measure == NULL)
       continue;
-    vec2 offset, _size = vec2_zero;
-    measure(child_control->child_id, &offset, &_size);
+    vec2 _size = vec2_zero;
+    measure(child_control->child_id, &_size);
     size->x = MAX(size->x, _size.x);
     size->y = MAX(size->y, _size.y);
   }
@@ -938,8 +931,8 @@ void ui_element_mouse_over(u64 control, double x, double y, u64 method){
       break;
     auto measure = get_method(child_control->child_id, measure_control_method);
     if(measure == NULL) continue;
-    vec2 offset, size = vec2_zero;
-    measure(child_control->child_id, &offset, &size);
+    vec2 size = vec2_zero;
+    measure(child_control->child_id, &size);
   
     if(x < size.x && y < size.y){
       
@@ -1071,6 +1064,7 @@ void test_gui(){
     vec2 size;
     measure_child_controls(control, &size);
     if(x > size.x || y > size.y || x < 0 || y < 0) return;
+    logd("Clicked!\n");
     rectangle * r = get_rectangle("rect4");
     r->color = colors[color_idx];
     color_idx = (color_idx + 1) % array_count(colors);
@@ -1087,10 +1081,8 @@ void test_gui(){
       auto measure = get_method(child_control->child_id, measure_control_method);
       if(measure == NULL) continue;
       vec2 size = vec2_new(0,0);
-      vec2 offset = vec2_new(0, 0);
-      measure(child_control->child_id, &offset, &size);
-      _size.x = MAX(_size.x, size.x);
-      _size.y = MAX(_size.y, size.y);
+      measure(child_control->child_id, &size);
+      _size = vec2_max(_size, size);
     }
     index = 0;
     while((child_control = get_control_pair_parent(control, &index))){
@@ -1104,8 +1096,7 @@ void test_gui(){
     u64 base = get_baseclass(control, &index);
     method base_method = get_method(base, render_control_method);
     ASSERT(base_method != NULL);
-    base_method(control);
-      
+    base_method(control);      
   }
   
   define_method(btn_test->id, mouse_down_method, (method) button_clicked2);
@@ -1120,14 +1111,29 @@ void test_gui(){
   add_control(btn_test->id, txt->id);
   add_control(panel2->id, btn_test->id);
 
+  void color_render_shifter(u64 control){
 
+    rectangle * r = find_rectangle(control, false);
+    if(r == NULL) return;
+    int _phase = get_int("phase", control);
+    set_int("phase", control, _phase + 1);
+    float phase = _phase * 0.1;
+    float cal(float phase){ return sin(phase) * 0.5 + 1.0;}
+    r->color = vec3_new(cal(phase), cal(phase * 1.5), cal(phase * 2.0));
+    u64 index = 0;
+    u64 base = get_baseclass(control, &index);
+    method base_method = get_method(base, render_control_method);
+    ASSERT(base_method != NULL);
+    base_method(control);   
+  }
 
   rect = get_rectangle("rect5");
   define_subclass(rect->id, rectangle_class->id);
   set_margin(rect->id, (thickness){3,3,3,3});
-  rect->size = vec2_new(10, 30);
+  rect->size = vec2_new(100, 30);
   rect->color = vec3_new(1, 1, 1);
   add_control(panel->id, rect->id);
+  define_method(rect->id, render_control_method, (method) color_render_shifter);
 
   rect = get_rectangle("rect6");
   define_subclass(rect->id, rectangle_class->id);
