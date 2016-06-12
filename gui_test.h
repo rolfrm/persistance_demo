@@ -69,3 +69,5 @@ void render_stackpanel(u64 id);
 void test_gui();
 
 void measure_child_controls(u64 control, vec2 * size);
+
+void handle_mouse_over(u64 control, double x, double y, u64 method, vec2 * out_size);

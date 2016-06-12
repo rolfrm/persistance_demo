@@ -104,7 +104,6 @@ void window_size_callback(GLFWwindow* glwindow, int width, int height)
 }
 
 void cursor_pos_callback(GLFWwindow * glwindow, double x, double y){
-  logd("Corsor pos: %f %f\n", x, y);
   window * w = get_window(glwindow);
   auto on_mouse_over = get_method(w->id, mouse_over_method);
   is_mouse_over_clear();
@@ -253,6 +252,22 @@ window * get_window2(const char * name){
   window * _win = find_window(nw->id);
   _win->active = true;
   return _win;
+}
+
+
+void handle_mouse_over(u64 control, double x, double y, u64 method, vec2 * out_size){
+  vec2 size = vec2_new(0,0);
+
+  auto measure = get_method(control, measure_control_method);
+  if(measure != NULL)
+    measure(control, &size);
+  if(out_size != NULL)
+    *out_size = size;
+  if(x < 0 || y < 0 || x > size.x || y > size.y)
+    return;
+  auto on_mouse_over = get_method(control, mouse_over_method);
+  if(on_mouse_over != NULL)
+    on_mouse_over(control, x, y, method);
 }
 
 // #Margin
@@ -726,6 +741,7 @@ stackpanel * find_stackpanel(u64 id){
   return free;
 }
 
+
 void stack_panel_mouse_over(u64 stk_id, double x, double y, u64 method){
   stackpanel * stk = find_stackpanel(stk_id);
   u64 index = 0;
@@ -743,15 +759,8 @@ void stack_panel_mouse_over(u64 stk_id, double x, double y, u64 method){
   while((child_control = get_control_pair_parent(stk->id, &index))){
     if(child_control == NULL)
       break;
-    vec2 size = vec2_new(0,0);
-
-    auto measure = get_method(child_control->child_id, measure_control_method);
-    if(measure != NULL)
-      measure(child_control->child_id, &size);
-
-    auto on_mouse_over = get_method(child_control->child_id, mouse_over_method);
-    if(on_mouse_over != NULL)
-      on_mouse_over(child_control->child_id, x, y, method);
+    vec2 size;
+    handle_mouse_over(child_control->child_id, x, y, method, &size);
     
     if(stk->orientation == ORIENTATION_HORIZONTAL){
       x -= size.x;
@@ -929,20 +938,9 @@ void ui_element_mouse_over(u64 control, double x, double y, u64 method){
   while((child_control = get_control_pair_parent(control, &index))){
     if(child_control == NULL)
       break;
-    auto measure = get_method(child_control->child_id, measure_control_method);
-    if(measure == NULL) continue;
-    vec2 size = vec2_zero;
-    measure(child_control->child_id, &size);
-  
-    if(x < size.x && y < size.y){
-      
-      auto on_mouse_over = get_method(child_control->child_id, mouse_over_method);
-      if(on_mouse_over == NULL) continue;
-      on_mouse_over(child_control->child_id, x, y, method);
-    }
+    handle_mouse_over(child_control->child_id, x, y, method, NULL);
   }
 }
-
 
 void test_gui(){
 
@@ -1061,9 +1059,7 @@ void test_gui(){
   vec3 colors[] = {vec3_new(1,0,0), vec3_new(0,1,0), vec3_new(0, 0, 1)};
   
   void button_clicked2(u64 control, double x, double y){
-    vec2 size;
-    measure_child_controls(control, &size);
-    if(x > size.x || y > size.y || x < 0 || y < 0) return;
+    UNUSED(x);UNUSED(y);UNUSED(control);
     logd("Clicked!\n");
     rectangle * r = get_rectangle("rect4");
     r->color = colors[color_idx];
