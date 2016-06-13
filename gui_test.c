@@ -297,8 +297,8 @@ typedef struct{
   thickness t;
 }thickness_item;
 
-void set_margin(u64 itemid, thickness t){
-  thickness_item * w = persist_alloc("item_thickness", sizeof(thickness_item));
+void set_thickness(const char * table, u64 itemid, thickness t){
+  thickness_item * w = persist_alloc(table, sizeof(thickness_item));
   u32 cnt = persist_size(w) / sizeof(thickness_item);
   for(u32 i = 0; i < cnt; i++){
     if(w[i].id == itemid && w[i].active){
@@ -312,8 +312,8 @@ void set_margin(u64 itemid, thickness t){
   w[cnt].active = true;
 }
 
-thickness get_margin(u64 itemid){
-  thickness_item * w = persist_alloc("item_thickness", sizeof(thickness_item));
+thickness get_thickness(const char * table,u64 itemid){
+  thickness_item * w = persist_alloc(table, sizeof(thickness_item));
   u32 cnt = persist_size(w) / sizeof(thickness_item);
   for(u32 i = 0; i < cnt; i++){
     if(w[i].id == itemid && w[i].active){
@@ -323,6 +323,23 @@ thickness get_margin(u64 itemid){
   thickness zero = {};
   return zero;
 }
+
+void set_margin(u64 itemid, thickness t){
+  set_thickness("item_thickness", itemid, t);
+}
+
+thickness get_margin(u64 itemid){
+  return get_thickness("item_thickness", itemid);
+}
+
+void set_corner_roundness(u64 itemid, thickness t){
+  set_thickness("corner_roundness", itemid, t);
+}
+
+thickness get_corner_roundness(u64 itemid){
+  return get_thickness("corner_roundness", itemid);
+}
+
 
 // #Color
 typedef struct{
@@ -534,15 +551,17 @@ void render_rectangle(u64 rect_id){
     glUniform2f(window_size_loc, window_size.x, window_size.y);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   }
+
+  thickness corner = get_corner_roundness(rect->id);
   
-
   int color_loc = glGetUniformLocation(shader, "color");
-
   int offset_loc = glGetUniformLocation(shader, "offset");
-
   int size_loc = glGetUniformLocation(shader, "size");
-
   int window_size_loc = glGetUniformLocation(shader, "window_size");
+  int roundness_loc = glGetUniformLocation(shader, "roundness");
+
+  glUniform4f(roundness_loc, corner.left, corner.up, corner.right, corner.down);
+  
   glUniform4f(color_loc, color.x, color.y, color.z, 1.0);
   vec2 size = rect->size;
   vec2 offset = shared_offset;//vec2_add(shared_offset, rect->offset);
@@ -994,6 +1013,7 @@ void test_gui(){
     rect->size = vec2_new(30, 30);
     rect->color = vec3_new(1, 0, 0);
     set_margin(rect->id, (thickness){1,1,3,3});
+    set_corner_roundness(rect->id, (thickness) {1, 1, 1, 1});
   }
   add_control(panel->id, rect->id);
   ASSERT(rect->id != panel->id);
