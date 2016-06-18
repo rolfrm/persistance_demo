@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <iron/types.h>
+#include <iron/linmath.h>
 #include <string.h>
 #include <unistd.h>
 #include <GL/glew.h>
@@ -107,4 +108,12 @@ i32 load_simple_shader2(char * geomsrc, i32 gslen, char * vertsrc, i32 vslen, ch
     return -1;
   }
   return (i32)program;
+}
+
+void uniform_vec3(int loc, vec3 value){
+  glUniform3f(loc, value.x, value.y, value.z);
+}
+
+void uniform_mat4(int loc, mat4 mat){
+  glUniformMatrix4fv(loc, 1, false, (float *)&mat);
 }

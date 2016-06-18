@@ -27,7 +27,6 @@ typedef struct{
 }main_state;
 
 typedef struct{
-  bool active;
   u64 id;
   int width, height;
   int x, y;
@@ -92,6 +91,10 @@ typedef struct{
   float length;
   int laser;
 }laser;
+
+typedef struct{
+  u64 ids[64 * 64];
+}chunk;
 
 
 worm * get_new_worm(worm ** worms, u64 * cnt);

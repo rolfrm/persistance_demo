@@ -2,6 +2,7 @@
 #include <GL/glew.h>
 #include <iron/full.h>
 #include "persist.h"
+#include "persist_oop.h"
 #include "shader_utils.h"
 #include "game.h"
 
@@ -211,8 +212,71 @@ void insert_value(persist_hash_table ** _table, u64 hash, u64 value){
   }
 }
 
+CREATE_MULTI_TABLE(inventory, u64, u64);
+CREATE_STRING_TABLE(name, u64);
+CREATE_TABLE(price, u64, i64);
+CREATE_STRING_TABLE(description, u64);
+typedef struct {
+  float from, to;
+}t_damage;
 
+CREATE_TABLE(damage, u64, t_damage);
 int main(){
+  u64 player = 3;
+  u64 item1 = 1;
+  u64 item2 = 2;
+  u64 ball = 4;
+  u64 sling = 5;
+  u64 hotdog = 6;
+  set_name(item1, "A bear");
+  set_description(item1, "This bear is fierce! Try to give it food to calm it down.");
+  set_price(item1, 452);
+
+  set_name(hotdog, "Hotdog");
+  set_price(hotdog, 1);
+  set_description(hotdog, "This hotdog is perfect for bears. Be careful not to poke someone with it though!");
+  set_damage(hotdog, (t_damage){.from = 0, .to = 1});
+  
+  set_name(item2, "Funky Town Magazine");
+  set_name(ball, "My Ball");
+  set_name(sling, "Trusty");
+  set_price(item2, 25);
+  set_damage(sling, (t_damage){.from = 5, .to = 9});
+  
+  clear_inventory();
+  add_inventory(player, item1);
+  add_inventory(player, item2);
+  add_inventory(player, ball);
+  add_inventory(player, hotdog);
+  add_inventory(player, sling);
+  u64 items[100];
+  u64 c = get_inventory(player, items , array_count(items));
+  logd("count: %i\n", c);
+  for(u64 i = 0 ; i < c; i++){
+    char name_buffer[200];
+    name_buffer[0] = 0;
+    get_name(items[i], name_buffer, sizeof(name_buffer));
+    if(name_buffer[0] == 0){
+      logd("Inventory Slot %i: %i\n", i, items[i]);
+    }
+    else
+      logd("Inventory Slot %i: %i (\"%s\")\n", i, items[i], name_buffer);
+    i64 price = get_price(items[i]);
+    if(price != 0)
+      logd("      Price: $%i\n", price);
+    t_damage dmg = get_damage(items[i]);
+    if(dmg.from > 0.0 || dmg.to > 0.0)
+      logd("      Damage: %.1f - %.1f\n", dmg.from, dmg.to);
+    name_buffer[0] = 0;
+    get_description(items[i], name_buffer, sizeof(name_buffer));
+    if(name_buffer[0] != 0){
+      logd("     Description: %s\n", name_buffer);
+    }
+    logd("\n");
+    
+    
+  }
+  
   if (!glfwInit())
     return -1;
   test_gui();
