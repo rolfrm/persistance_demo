@@ -19,14 +19,6 @@ vec3 vec3_rand(){
 }
 
 
-typedef struct{
-  u64 id;
-}player;
-
-player * get_player(u64 id){
-  return find_item("players", id, sizeof(player), true);
-}
-
 
 void rectangle_clicked(u64 control, double x, double y){
   UNUSED(x);UNUSED(y);
@@ -42,142 +34,10 @@ void rectangle_clicked(u64 control, double x, double y){
 }
 
 
-u64 render_entity_method;
-
-void render_chunk(chunk * c){
-  static int initialized = false;
-  static int shader = -1;
-  if(!initialized){
-    char * vs = read_file_to_string("rect_shader.vs");
-    char * fs = read_file_to_string("rect_shader.fs");
-    shader = load_simple_shader(vs, strlen(vs), fs, strlen(fs));
-    logd("Shader: %i\n", shader);
-    initialized = true;
-  }
-  glUseProgram(shader);
-  int color_loc = glGetUniformLocation(shader, "color");
-    
-  int offset_loc = glGetUniformLocation(shader, "offset");
-
-  int size_loc = glGetUniformLocation(shader, "size");
-    
-  int window_size_loc = glGetUniformLocation(shader, "window_size");
-   glUniform4f(color_loc, 0, 1, 1, 1.0);
-  vec2 size = vec2_new(10, 10);
-  vec2 offset = vec2_new(0, 0);
-  glUniform2f(offset_loc, offset.x, offset.y);
-  glUniform2f(size_loc, size.x, size.y);
-  glUniform2f(window_size_loc, window_size.x, window_size.y);
-  for(int i = 0; i < 64; i++){
-    for(int j = 0; j < 64; j++){
-      int idx = j + i * 64;
-      u64 id = c->ids[idx];
-      if(id == 0) continue; 
-      vec2 offset = vec2_mul(vec2_new(i, j), size);
-      method render = get_method(id, render_entity_method);
-      if(render != NULL)
-	render(id, offset);
-    }
-  }
-}
-
-void measure_chunk(u64 control, vec2 * size){
-  thickness margin = get_margin(control);
-  *size = vec2_new(640 + margin.left + margin.right, 640 + margin.up + margin.down);
-}
-
-
-void render_entity(u64 entity, vec2 offset){
-  UNUSED(entity);
-  static int initialized = false;
-  static int shader = -1;
-  if(!initialized){
-    char * vs = read_file_to_string("rect_shader.vs");
-    char * fs = read_file_to_string("rect_shader.fs");
-    shader = load_simple_shader(vs, strlen(vs), fs, strlen(fs));
-    logd("Shader: %i\n", shader);
-    initialized = true;
-  }
-  glUseProgram(shader);
-  int color_loc = glGetUniformLocation(shader, "color");
-    
-  int offset_loc = glGetUniformLocation(shader, "offset");
-
-  int size_loc = glGetUniformLocation(shader, "size");
-    
-  int window_size_loc = glGetUniformLocation(shader, "window_size");
-  vec2 size = vec2_new(10, 10);
-  glUniform2f(offset_loc, offset.x, offset.y);
-  glUniform2f(size_loc, size.x, size.y);
-  glUniform2f(window_size_loc, window_size.x, window_size.y);
-
-  glUniform4f(color_loc, 1, 1, 1, 1);
-  glUniform2f(offset_loc, offset.x, offset.y);
-  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);      
-   
-}
-
-
-chunk * test_chunk = NULL;
-void render_canvas(u64 canvas_id){
-  UNUSED(canvas_id);
-  player * pl = get_player(intern_string("player_1"));
-  if(once(pl->id)){
-    render_entity_method = intern_string("render_entity_method");
-    define_method(pl->id, render_entity_method, (method) render_entity);
-  }
-  
-  test_chunk = alloc0(sizeof(chunk));
-  test_chunk->ids[64 * 32 + 10] = pl->id;
-  render_chunk(test_chunk);
-}
-
-void render_canvas2(u64 canvas_id){
-  UNUSED(canvas_id);
-  float rx = 0.0, ry = 0.0, rz = 0.0;
-  mat4 rm = mat4_rotate_X(mat4_rotate_Y(mat4_rotate_Z(mat4_identity(), rz), ry), rx);
-  mat4 perspective = mat4_perspective(1.0, 1.0, 0.1, 100.0);
-  mat4 cam = mat4_mul(perspective, rm);
-
-  static bool initialized = false;
-  static int shader = 0;
-  if(!initialized){
-    char * vs = read_file_to_string("line_shader.vs");
-    char * fs = read_file_to_string("line_shader.fs");
-    shader = load_simple_shader(vs, strlen(vs), fs, strlen(fs));
-    logd("Shader: %i\n", shader);
-    dealloc(vs);dealloc(fs);
-    initialized = true;
-  }
-  glViewport(0,0,300,300);
-  
-  vec3 pts[] = {vec3_new(0,0,0), vec3_new(1,1,1)};
-  vec3 endpts[array_count(pts) * 2];
-  for(u64 i = 0; i < array_count(pts); i++){
-    pts[i * 2] = mat4_mul_vec3(rm, pts[i]);
-    pts[i * 2 + 1] = pts[i * 2];
-    pts[i * 2] = vec3_scale(pts[i * 2], 1000);
-    pts[i * 2 + 1] = vec3_scale(pts[i * 2 + 1], -1000);
-  }
-  endpts[0] = vec3_new(0,0,0);
-  endpts[1] = vec3_new(1,1,1);
-  int cam_loc = glGetUniformLocation(shader, "camera");
-  uniform_mat4(cam_loc, cam);
-  glVertexPointer(3, GL_FLOAT, sizeof(endpts[0]), (float *) endpts);
-  glDrawArrays(GL_POINTS, 0, 4);      
-  glViewport(0,0, window_size.x, window_size.y);
-  
-}
-
-CREATE_TABLE(phase, u64, float);
-
-u64 get_unique_number2(){
-  static u64 x = 0xFFFF;
-  return x++;
-}
-
-void create_console(u64 id);
 #define UID ({u64 get_number(){static u64 number = 0; if(number == 0) number = get_unique_number2(); return number;}; get_number;})
+
+
+
 
 void test_gui(){
   init_gui();
@@ -186,11 +46,7 @@ void test_gui(){
   logd("window opened: %p\n", win);
 
   ASSERT(intern_string("game_canvas") != 0);
-  
-  u64 game_canvas = intern_string("game_canvas");
 
-  define_method(game_canvas, render_control_method, (method) render_canvas);
-  define_method(game_canvas, measure_control_method, (method) measure_chunk);
   stackpanel * panel = get_stackpanel(intern_string("stackpanel1"));
   set_horizontal_alignment(panel->id, HALIGN_CENTER);
   panel->orientation = ORIENTATION_VERTICAL;
@@ -306,22 +162,6 @@ void test_gui(){
   add_control(btn_test, txtid);
   add_control(panel2->id, btn_test);
 
-  void color_render_shifter(u64 control){
-
-    rectangle * r = find_rectangle(control, false);
-    if(r == NULL) return;
-    int _phase = get_phase(control);
-    set_phase(control, _phase + 1);
-    float phase = _phase * 0.1;
-    float cal(float phase){ return sin(phase) * 0.5 + 1.0;}
-    r->color = vec3_new(cal(phase), cal(phase * 1.5), cal(phase * 2.0));
-    u64 index = 0;
-    u64 base = get_baseclass(control, &index);
-    method base_method = get_method(base, render_control_method);
-    ASSERT(base_method != NULL);
-    base_method(control);   
-  }
-
   rect = get_rectangle(intern_string("rect5"));
   if(once(rect->id)){
     set_margin(rect->id, (thickness){3,3,3,3});
@@ -329,7 +169,6 @@ void test_gui(){
     rect->color = vec3_new(1, 1, 1);
   }
   add_control(panel->id, rect->id);
-  define_method(rect->id, render_control_method, (method) color_render_shifter);
 
   rect = get_rectangle(intern_string("rect6"));
   if(once(rect->id)){
@@ -347,27 +186,29 @@ void test_gui(){
   }
   add_control(panel2->id, rect->id);
 
-
   u64 console = intern_string("console");
   set_focused_element(win->id, console);
-  set_console_height(console, 100);
+  set_console_height(console, 300);
   create_console(console);
   add_control(win->id, console);
   set_margin(console, (thickness){5,5,5,5});
-
+  set_vertical_alignment(console, VALIGN_BOTTOM);
+  set_console_history_cnt(console, 100);
   void command_entered(u64 id, char * cmd){
-    logd("%i (%s)\n", id, cmd);
+    UNUSED(id);
+    logd("COMMAND ENTERED: %s", cmd);
   }
   
   define_method(console, console_command_entered_method, (method)command_entered);
 
   void print_console(const char * fmt, va_list lst){
+    int l = strlen(fmt);
+    if(l == 0) return;
     char buf[200];
     vsprintf(buf, fmt, lst);
     push_console_history(console, buf);
   }
   iron_log_printer = print_console;
-  //char buffer[100];
   
   while(true){
     window * w = persist_alloc("win_state", sizeof(window));

@@ -481,7 +481,7 @@ void ensure_font_initialized(){
   u64 buffersize;
   void * buffer = read_file_to_buffer(fontfile, &buffersize);
 
-  stbtt_BakeFontBitmap(buffer,0, 18.0, temp_bitmap, 1024,1024, 32,CHAR_DATA_SIZE, cdata);
+  stbtt_BakeFontBitmap(buffer,0, 12.0, temp_bitmap, 1024,1024, 32,CHAR_DATA_SIZE, cdata);
   glGenTextures(1, &ftex);
   glBindTexture(GL_TEXTURE_2D, ftex);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 1024,1024, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, temp_bitmap);

@@ -177,8 +177,8 @@ typedef struct{
     }									\
   }									\
   									\
-  u64 get_ ## Name(KeyType item, char * out, u64 buffer_size){	\
-    ASSERT(buffer_size > 0);						\
+  u64 get_ ## Name(KeyType item, char * out, u64 buffer_size){		\
+    if(buffer_size == 0) return 0;					\
     u64 l = get_##Name##_chunk(item, (void *)out, buffer_size / sizeof(string_chunk)); \
     return l * sizeof(string_chunk);					\
   }									\
