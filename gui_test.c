@@ -33,6 +33,28 @@ void rectangle_clicked(u64 control, double x, double y){
   }
 }
 
+void render_game_board(u64 id){
+  UNUSED(id);
+  rect_render(vec3_new(0.3,0.3,0.6), shared_offset, shared_size);
+}
+
+void measure_game_board(u64 id, vec2 * size){
+  UNUSED(id);
+  *size = vec2_new(0, 0);
+}
+
+void load_game_board(u64 id){
+  static bool initialized = false;
+  static u64 game_board_class;
+  if(!initialized){
+    initialized = true;
+    game_board_class = intern_string("game_board_class");
+    define_method(game_board_class, render_control_method, (method)render_game_board);
+    define_method(game_board_class, measure_control_method, (method)measure_game_board);
+  }
+  define_subclass(id, game_board_class);
+  
+}
 
 #define UID ({u64 get_number(){static u64 number = 0; if(number == 0) number = get_unique_number2(); return number;}; get_number;})
 
@@ -45,8 +67,10 @@ void test_gui(){
   sprintf(win->title, "%s", "Test Window");
   logd("window opened: %p\n", win);
 
-  ASSERT(intern_string("game_canvas") != 0);
-
+  u64 game_board = intern_string("game board");
+  load_game_board(game_board);
+  add_control(win->id, game_board);
+  
   stackpanel * panel = get_stackpanel(intern_string("stackpanel1"));
   set_horizontal_alignment(panel->id, HALIGN_CENTER);
   panel->orientation = ORIENTATION_VERTICAL;
@@ -209,6 +233,8 @@ void test_gui(){
     push_console_history(console, buf);
   }
   iron_log_printer = print_console;
+
+
   
   while(true){
     window * w = persist_alloc("win_state", sizeof(window));
