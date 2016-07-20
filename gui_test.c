@@ -33,9 +33,31 @@ void rectangle_clicked(u64 control, double x, double y){
   }
 }
 
+typedef struct{
+  vec2 position;
+  vec2 size;
+} body;
+
+CREATE_TABLE(body, u64, body);
+CREATE_MULTI_TABLE(board_elements, u64, u64);
+
 void render_game_board(u64 id){
   UNUSED(id);
   rect_render(vec3_new(0.3,0.3,0.6), shared_offset, shared_size);
+  u64 board_element_cnt = 0;
+  u64 bodies[10];
+  size_t iter = 0;
+  do{
+    board_element_cnt = iter_board_elements(id, bodies, array_count(bodies), &iter);
+    for(u64 i = 0; i < board_element_cnt; i++){
+      body b = get_body(bodies[i]);
+      rect_render(vec3_new(1,0,0), vec2_scale(b.position, 10), vec2_scale(b.size, 10));
+      b.position = vec2_add(b.position, vec2_new(0.1,0.1));
+      set_body(bodies[i], b);
+    }
+    
+  }while(board_element_cnt == array_count(bodies));
+  
 }
 
 void measure_game_board(u64 id, vec2 * size){
@@ -70,6 +92,10 @@ void test_gui(){
   u64 game_board = intern_string("game board");
   load_game_board(game_board);
   add_control(win->id, game_board);
+  u64 player = intern_string("Player");
+  set_body(player, (body){vec2_new(1,1), vec2_new(2,2)});
+  add_board_elements(game_board, player);
+  
   
   stackpanel * panel = get_stackpanel(intern_string("stackpanel1"));
   set_horizontal_alignment(panel->id, HALIGN_CENTER);
@@ -233,8 +259,6 @@ void test_gui(){
     push_console_history(console, buf);
   }
   iron_log_printer = print_console;
-
-
   
   while(true){
     window * w = persist_alloc("win_state", sizeof(window));

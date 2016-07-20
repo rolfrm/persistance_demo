@@ -143,6 +143,28 @@ void clear_ ## Name(){						\
     return index;							\
 									\
   }									\
+  size_t iter_ ## Name (KeyType key, ValueType * values, size_t values_cnt, size_t * i){ \
+    size_t item_size = sizeof(key) + sizeof(ValueType);			\
+    persisted_mem_area * mem = Name ## Initialize();			\
+									\
+    u64 cnt = mem->size / item_size;					\
+    struct {								\
+      KeyType key;							\
+      ValueType value;							\
+    } * data = mem->ptr;						\
+    size_t index = 0;							\
+    for(; *i < cnt; (*i)++){						\
+      if(index >= values_cnt) return values_cnt;			\
+      if(data[*i].key == key){						\
+	if(values != NULL)						\
+	  values[index] = data[*i].value;	    		        \
+	index++;							\
+      }									\
+    }									\
+  									\
+    return index;							\
+									\
+  }									\
   void clear_item_ ## Name(KeyType key){				\
     size_t item_size = sizeof(key) + sizeof(ValueType);			\
     persisted_mem_area * mem = Name ## Initialize();			\
