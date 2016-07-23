@@ -177,6 +177,17 @@ void clear_ ## Name(){						\
       if(data[i].key == key) data[i].key = 0;				\
     }									\
   }									\
+  void clear_at_ ## Name(u64 idx){				\
+    size_t item_size = sizeof(KeyType) + sizeof(ValueType);			\
+    persisted_mem_area * mem = Name ## Initialize();			\
+    u64 cnt = mem->size / item_size;					\
+    ASSERT(idx < cnt);							\
+    struct {								\
+      KeyType key;							\
+      ValueType value;							\
+    } * data = mem->ptr;						\
+    data[idx].key = 0;							\
+  }									\
   void clear_ ## Name(){						\
     persisted_mem_area * mem = Name ## Initialize();			\
     mem_area_realloc(mem, 1);						\

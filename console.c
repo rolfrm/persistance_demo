@@ -138,8 +138,10 @@ void push_console_history(u64 id, const char * buffer){
   u64 history_cnt = get_console_history(id, history, array_count(history));
   if(history_cnt > histcnt){
     clear_console_history(id);
+    remove_strings(history[0]);
     for(u64 i = 1; i < histcnt + 1; i++){
       add_console_history(id, history[i]);
+
     }
   }
 }
