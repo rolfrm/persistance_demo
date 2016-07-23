@@ -78,12 +78,131 @@ void load_game_board(u64 id){
   
 }
 
+bool starts_with(const char *pre, const char *str)
+{
+  size_t lenpre = strlen(pre);
+  size_t lenstr = strlen(str);
+  return lenstr < lenpre ? false : strncmp(pre, str, lenpre) == 0;
+}
+
 #define UID ({u64 get_number(){static u64 number = 0; if(number == 0) number = get_unique_number2(); return number;}; get_number;})
 
+typedef enum{
+  COMMAND_ARG_POSITION,
+  COMMAND_ARG_ENTITY,
+  COMMAND_ARG_ITEM,
 
+} command_arg_type;
+
+typedef struct{
+  command_arg_type type;
+  union{
+    struct{
+      int x;
+      int y;
+    };
+    u64 id;
+  };
+
+}command_arg;
+
+CREATE_MULTI_TABLE(faction_visible_items, u64, u64);
+u64 get_visible_items(u64 id, u64 * items, u64 items_cnt){
+  UNUSED(id);
+  if(items == NULL){
+    return get_faction_visible_items(1, NULL, 10000);
+  }
+  return get_faction_visible_items(1, items, items_cnt);
+}
+
+
+CREATE_MULTI_TABLE(available_commands, u64, u64);
+CREATE_STRING_TABLE(command_name, u64);
+u64 parse_command(u64 id, const char * str, command_arg * out_args, u64 * in_out_cnt){
+  u64 visible_item_cnt = get_visible_items(id, NULL, 0);
+  logd("VISIBLE ITEM CNT: %i\n", visible_item_cnt);
+  u64 visible_items[visible_item_cnt];
+  get_visible_items(id, visible_items, visible_item_cnt);
+  *in_out_cnt = 0;
+  u64 avail_commands[32];
+  u64 idx = 0;
+  u64 cnt = 0;
+  while(0 < (cnt = iter_available_commands(id, avail_commands, array_count(avail_commands), &idx))){
+    for(u64 i = 0; i < cnt; i++){
+      named_item nm = unintern_string(avail_commands[i]);
+      logd("CMD: %s\n", nm.name);
+      if(starts_with(str, nm.name)){
+
+      }else if(strcmp(str, nm.name) == 0){
+	
+      }else{
+	char buf[33];
+	int offset = sprintf(buf, "%s ", nm.name);
+	if(starts_with(buf, str)){
+	  char * args_start = ((char *)str) + offset;
+	  while(*args_start != 0){
+	    while(*args_start == ' ')
+	      args_start += 1;
+	    if(*args_start == 0) break;
+	    int x, y;
+	    int c = sscanf(args_start, "%i ", &x);
+
+	    if(c == 1){
+	      while(*args_start != ' ' && *args_start != 0)
+		args_start += 1;
+	      
+	      while(*args_start == ' ')
+		args_start += 1;
+	      c += sscanf(args_start, "%i", &y);
+	      while(*args_start != ' ' && *args_start != 0)
+		args_start += 1;
+	    }
+	    if(c == 2){
+	      logd("2d args! %i %i\n", x, y);
+	      out_args->type = COMMAND_ARG_POSITION;
+	      out_args->x = x;
+	      out_args->y = y;
+	      *in_out_cnt += 1;
+	      out_args += 1;
+	      continue;
+	    }else if(c == 1)
+	      return 0;
+	    
+	    c = sscanf(args_start, "%s ", buf );
+	    
+	    if(c == 1 && strlen(buf) > 0){
+	      u64 prevcnt = *in_out_cnt;
+	      for(u64 i = 0; i < visible_item_cnt; i++){
+		char buf2[33];
+		u64 c2 = get_name(visible_items[i], buf2, 33);
+		logd("%i %s == %s",i, buf2, buf);
+	        if(c2 > 0 && strcmp(buf2, buf) == 0){
+		  
+		  args_start += strlen(buf2);
+		  out_args->type = COMMAND_ARG_ENTITY;
+		  out_args->id = visible_items[i];
+		  *in_out_cnt += 1;
+		  break;
+		}
+	      }
+	      if(prevcnt == *in_out_cnt){
+		return 0;
+	      }
+	    }else return 0;
+	    
+	  }
+	  
+	  return avail_commands[i];
+	}
+      }
+    }
+  }
+  return 0;
+}
 
 
 void test_gui(){
+
   init_gui();
   window * win = make_window(4);
   sprintf(win->title, "%s", "Test Window");
@@ -92,10 +211,23 @@ void test_gui(){
   u64 game_board = intern_string("game board");
   load_game_board(game_board);
   add_control(win->id, game_board);
+
+  u64 ball = intern_string("Ball");
+  set_name(ball, "Ball");
+  add_faction_visible_items(1, ball);
   u64 player = intern_string("Player");
+  set_name(player, "Player");
+  add_faction_visible_items(1, player);
   set_body(player, (body){vec2_new(1,1), vec2_new(2,2)});
   add_board_elements(game_board, player);
-  
+  clear_available_commands();
+  u64 move_cmd = intern_string("move");
+  add_available_commands(player, move_cmd);
+
+  u64 stop_cmd = intern_string("stop");
+  add_available_commands(player, stop_cmd);
+
+  //return;
   
   stackpanel * panel = get_stackpanel(intern_string("stackpanel1"));
   set_horizontal_alignment(panel->id, HALIGN_CENTER);
@@ -247,6 +379,10 @@ void test_gui(){
   void command_entered(u64 id, char * cmd){
     UNUSED(id);
     logd("COMMAND ENTERED: %s", cmd);
+      command_arg args[10];
+      u64 arg_cnt = 10;
+      u64 found_cmd = parse_command(player, cmd, args, &arg_cnt);
+      logd("CMD: %i %i\n", found_cmd, arg_cnt);
   }
   
   define_method(console, console_command_entered_method, (method)command_entered);
