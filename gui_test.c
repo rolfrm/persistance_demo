@@ -115,6 +115,8 @@ CREATE_MULTI_TABLE(available_commands, u64, u64);
 CREATE_STRING_TABLE(command_name, u64);
 CREATE_TABLE(target, u64, vec2);
 CREATE_TABLE(is_paused, u64, bool);
+CREATE_TABLE(should_exit, u64, bool);
+CREATE_TABLE(is_instant, u64, bool);
 typedef enum{
   CMD_DONE,
   CMD_NOT_DONE
@@ -164,7 +166,7 @@ void update_game_board(u64 id){
       if(dl > 0){
 	if(dl > 1.0)
 	  d = vec2_scale(d, 1.0 / dl);
-	b.position = vec2_add(vec2_scale(d, 0.1), b.position);
+	b.position = vec2_add(vec2_scale(d, 0.01), b.position);
 	set_body(bodies[i], b);
 	
       }
@@ -256,7 +258,8 @@ u64 parse_command(u64 id, const char * str, command_arg * out_args, u64 * in_out
 }
 
 void test_gui(){
-
+  //logd("Test pt: %x\n", -883767);
+  //ASSERT(codepoint_to_utf8((u32)-883767, NULL, 100));
   init_gui();
   window * win = make_window(4);
   sprintf(win->title, "%s", "Test Window");
@@ -267,16 +270,19 @@ void test_gui(){
   add_control(win->id, game_board);
 
   u64 ball = intern_string("Ball");
-  set_name(ball, "Ball");
-  add_faction_visible_items(1, ball); 
-  set_body(ball, (body){vec2_new(20,10), vec2_new(1,1)});
-  add_board_elements(game_board, ball);
-  
+  if(once(ball)){
+    add_faction_visible_items(1, ball);
+    set_name(ball, "Ball");
+    set_body(ball, (body){vec2_new(20,10), vec2_new(1,1)});
+    add_board_elements(game_board, ball);
+  }
   u64 player = intern_string("Player");
-  set_name(player, "Player");
-  add_faction_visible_items(1, player);
-  set_body(player, (body){ vec2_new(1,1), vec2_new(2,2) });
-  add_board_elements(game_board, player);
+  if(once(player)){
+    set_name(player, "Player");
+    add_faction_visible_items(1, player);
+    set_body(player, (body){ vec2_new(1,1), vec2_new(2,2) });
+    add_board_elements(game_board, player);
+  }
 
   clear_available_commands();
   command_class = intern_string("command class");
@@ -292,7 +298,7 @@ void test_gui(){
   u64 move_cmd = intern_string("move");
   define_subclass(move_cmd, command_class);
   add_available_commands(player, move_cmd);
-
+  
   command_state do_move(u64 cmd, u64 id){
     command_arg arg;
     if(get_command_args(cmd, &arg, 1) == 0) return CMD_DONE;
@@ -308,29 +314,55 @@ void test_gui(){
     body b = get_body(id);
     float d = vec2_len(vec2_sub(b.position, vec2_new(x, y)));
     set_target(id, vec2_new(x, y));
-    logd("Distance: %f\n", d);
     if(d > 0.1)
       return CMD_NOT_DONE;
     return CMD_DONE;
   }
   define_method(move_cmd, invoke_command_method, (method) do_move);
+
+  command_state do_stop(u64 cmd, u64 id){
+    UNUSED(cmd);
+    clear_item_command_queue(id);
+    body b = get_body(id);
+    set_target(id, b.position);
+    set_body(id, b);
+    return CMD_DONE;
+  }
   
   u64 stop_cmd = intern_string("stop");
   define_subclass(stop_cmd, command_class);
   add_available_commands(player, stop_cmd);
+  define_method(stop_cmd, invoke_command_method, (method) do_stop);
+  set_is_instant(stop_cmd, true);
 
   u64 pause_cmd = intern_string("pause");
   command_state _pause_board(u64 cmd, u64 id){
     UNUSED(cmd);
-    logd("Pause! %i\n", id);
-    set_is_paused(id, !get_is_paused(id));
+    bool newstate = !get_is_paused(id);
+    if(newstate){
+      logd("Pause!\n");
+    }else{
+      logd("Unpause!\n");
+    }
+    set_is_paused(id, newstate );
     return CMD_DONE;
   }
   define_method(pause_cmd, invoke_command_method, (method)_pause_board);
   define_subclass(pause_cmd, command_class);
   add_available_commands(game_board, pause_cmd);
-  
-  //return;
+
+  command_state exit_board(u64 cmd, u64 id){
+    UNUSED(cmd);
+    logd("Exiting\n");
+    set_should_exit(id, true);
+    return CMD_DONE;
+  }
+  u64 exit_cmd = intern_string("exit");
+  define_subclass(exit_cmd, command_class);
+  add_available_commands(game_board, exit_cmd);
+  define_method(exit_cmd, invoke_command_method, (method) exit_board);
+  set_should_exit(game_board, false);
+
   
   stackpanel * panel = get_stackpanel(intern_string("stackpanel1"));
   set_horizontal_alignment(panel->id, HALIGN_CENTER);
@@ -491,7 +523,14 @@ void test_gui(){
 	for(u64 i = 0; i < arg_cnt; i++){
 	  add_command_args(cmd_inv, args[i]);
 	}
-	add_command_queue(id, cmd_inv);
+	if(get_is_instant(found_cmd)){
+	  command_state (* cmd2)(u64 id, u64 id2) =(void *) get_method(found_cmd, invoke_command_method);
+	  if(cmd2 != NULL){
+	    cmd2(cmd_inv, id);
+	  }
+	}else
+	  add_command_queue(id, cmd_inv);
+	
 	return true;
       }
       return false;
@@ -519,7 +558,7 @@ void test_gui(){
   }
   iron_log_printer = print_console;
   
-  while(true){
+  while(!get_should_exit(game_board)){
 
     update_game_board(game_board);
     window * w = persist_alloc("win_state", sizeof(window));

@@ -70,6 +70,7 @@ CREATE_MULTI_TABLE(console_history, u64, u64);
 CREATE_STRING_TABLE(strings, u64);
 
 void render_console(u64 id){
+
   u64 histcnt = get_console_history_cnt(id);
   float h = get_console_height(id);
   vec2 rect_offset = shared_offset;
@@ -117,6 +118,9 @@ void measure_console(u64 id, vec2 * size){
 void char_handler_console(u64 id, int codepoint, int mods){
   UNUSED(mods);
   int utf8len = codepoint_to_utf8(codepoint, NULL, 100);
+  if(!utf8len){
+    logd("Error parsing codepoint: %i \n", codepoint);
+  }
   ASSERT(utf8len);
   int len = get_text(id, NULL, 1000);
   char buffer[len + utf8len];

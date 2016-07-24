@@ -113,9 +113,12 @@ void key_callback(GLFWwindow* glwindow, int key, int scancode, int action, int m
 }
 
 void char_callback(GLFWwindow * glwindow, u32 codepoint){
+  if(0 == codepoint_to_utf8(codepoint,NULL, 10))
+    return; // WTF! Invalid codepoint!
   window * w = get_window(glwindow);
   u64 focused = get_focused_element(w->id);
   if(focused == 0) return;
+  
   method m = get_method(focused, char_handler_method);
   m(focused, codepoint, 0);
     
@@ -497,8 +500,10 @@ vec2 measure_text(const char * text, size_t len){
     if(text[i] == 0) break;
     size_t l = 0;
     int codepoint = utf8_to_codepoint(text + i, &l);
-    stbtt_aligned_quad q;
-    stbtt_GetBakedQuad(cdata, 1024, 1024, codepoint-32, &x,&y,&q,1);
+    if(codepoint >= 32 && codepoint < (32 + CHAR_DATA_SIZE)){
+      stbtt_aligned_quad q;
+      stbtt_GetBakedQuad(cdata, 1024, 1024, codepoint-32, &x,&y,&q,1);
+    }
   }
   return vec2_new(x, 15);
 }
@@ -536,7 +541,7 @@ void render_text(const char * text, size_t len){
     if(text[i] == 0) break;
     size_t l = 0;
     int codepoint = utf8_to_codepoint(text + i, &l);
-    if(codepoint >= 32 && codepoint < 32 + CHAR_DATA_SIZE){
+    if(codepoint >= 32 && codepoint < (32 + CHAR_DATA_SIZE)){
       
       stbtt_aligned_quad q;
       stbtt_GetBakedQuad(cdata, 1024, 1024, codepoint-32, &x,&y,&q,1);
