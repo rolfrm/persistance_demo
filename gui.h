@@ -30,6 +30,7 @@ CREATE_TABLE_DECL(corner_roundness, u64, thickness);
 CREATE_TABLE_DECL(color, u64, vec3);
 CREATE_STRING_TABLE_DECL(text, u64);
 CREATE_STRING_TABLE_DECL(name, u64);
+CREATE_MULTI_TABLE_DECL(inventory, u64, u64);
 u64 get_unique_number();
 u64 intern_string(const char * name);
 control_pair * add_control(u64 id, u64 other_id);

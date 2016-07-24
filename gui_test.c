@@ -160,15 +160,16 @@ void update_game_board(u64 id){
       handle_commands(bodies[i]);
 
       body b = get_body(bodies[i]);
-      vec2 target = get_target(bodies[i]);
-      vec2 d = vec2_sub(target, b.position);
-      float dl = vec2_len(d);
-      if(dl > 0){
-	if(dl > 1.0)
-	  d = vec2_scale(d, 1.0 / dl);
-	b.position = vec2_add(vec2_scale(d, 0.01), b.position);
-	set_body(bodies[i], b);
-	
+      vec2 target;
+      if(try_get_target(bodies[i], &target)){
+	vec2 d = vec2_sub(target, b.position);
+	float dl = vec2_len(d);
+	if(dl > 0){
+	  if(dl > 1.0)
+	    d = vec2_scale(d, 1.0 / dl);
+	  b.position = vec2_add(vec2_scale(d, 0.1), b.position);
+	  set_body(bodies[i], b);
+	}
       }
     }    
   }while(board_element_cnt == array_count(bodies));
@@ -176,9 +177,13 @@ void update_game_board(u64 id){
 
 u64 parse_command(u64 id, const char * str, command_arg * out_args, u64 * in_out_cnt){
   u64 visible_item_cnt = get_visible_items(id, NULL, 0);
-  logd("VISIBLE ITEM CNT: %i\n", visible_item_cnt);
   u64 visible_items[visible_item_cnt];
   get_visible_items(id, visible_items, visible_item_cnt);
+
+  u64 inventory_cnt = get_inventory(id, NULL, 10000);
+  u64 inventory[inventory_cnt];
+  get_inventory(id, inventory, inventory_cnt);
+  logd("Inventory cnt: %i\n", inventory_cnt);
   *in_out_cnt = 0;
   u64 avail_commands[32];
   u64 idx = 0;
@@ -242,6 +247,19 @@ u64 parse_command(u64 id, const char * str, command_arg * out_args, u64 * in_out
 		  break;
 		}
 	      }
+	      for(u64 i = 0; i < inventory_cnt; i++){
+		char buf2[33];
+		u64 c2 = get_name(inventory[i], buf2, 33);
+	        if(c2 > 0 && strcmp(buf2, buf) == 0){
+		  logd("Inventory: %s\n", buf2);
+		  
+		  args_start += strlen(buf2);
+		  out_args->type = COMMAND_ARG_ITEM;
+		  out_args->id = visible_items[i];
+		  *in_out_cnt += 1;
+		  break;
+		}
+	      }
 	      if(prevcnt == *in_out_cnt){
 		return 0;
 	      }
@@ -276,6 +294,16 @@ void test_gui(){
     set_body(ball, (body){vec2_new(20,10), vec2_new(1,1)});
     add_board_elements(game_board, ball);
   }
+
+  u64 target = intern_string("Target");
+  if(once(target)){
+    add_faction_visible_items(1, target);
+    set_name(target, "Target");
+    set_body(target, (body){vec2_new(10, 30), vec2_new(2, 1)});
+    add_board_elements(game_board, target);
+    
+  }
+  
   u64 player = intern_string("Player");
   if(once(player)){
     set_name(player, "Player");
@@ -335,6 +363,54 @@ void test_gui(){
   define_method(stop_cmd, invoke_command_method, (method) do_stop);
   set_is_instant(stop_cmd, true);
 
+  command_state do_take(u64 cmd, u64 id){
+    while(do_move(cmd, id) == CMD_NOT_DONE)
+      return CMD_NOT_DONE;
+    command_arg arg;
+    if(get_command_args(cmd, &arg, 1) == 0) return CMD_DONE;
+    if(arg.type == COMMAND_ARG_ENTITY){
+      add_inventory(id, arg.id);
+      logd("ADDED to inventory\n");
+      u64 item, it = 0;
+      int c = 0;
+      while((c = iter_board_elements(game_board, &item, 1,  &it)) > 0){
+	if(item == arg.id){
+	  clear_at_board_elements(it - 1);
+	  break;
+	  
+	}
+      }     
+    }
+    return CMD_DONE;
+  }
+  
+  u64 take_cmd = intern_string("take");
+  define_subclass(take_cmd, command_class);
+  add_available_commands(player, take_cmd);
+  define_method(take_cmd, invoke_command_method, (method) do_take);
+
+  command_state do_drop(u64 cmd, u64 id){
+    UNUSED(cmd);UNUSED(id);
+    command_arg arg;
+    if(get_command_args(cmd, &arg, 1) == 0) return CMD_DONE;
+    if(arg.type == COMMAND_ARG_ITEM){
+      logd("SUCCESS!\n");
+      add_board_elements(game_board, arg.id);
+      u64 item, it = 0;
+      int c = 0;
+      while((c = iter_inventory(id, &item, 1,  &it)) > 0){
+	if(item == arg.id)
+	  clear_at_inventory(it - 1);
+      }
+    }
+    return CMD_DONE;
+  }
+  
+  u64 drop_cmd = intern_string("drop");
+  define_subclass(drop_cmd, command_class);
+  add_available_commands(player, drop_cmd);
+  define_method(drop_cmd, invoke_command_method, (method) do_drop);
+  
   u64 pause_cmd = intern_string("pause");
   command_state _pause_board(u64 cmd, u64 id){
     UNUSED(cmd);
@@ -525,9 +601,9 @@ void test_gui(){
 	}
 	if(get_is_instant(found_cmd)){
 	  command_state (* cmd2)(u64 id, u64 id2) =(void *) get_method(found_cmd, invoke_command_method);
-	  if(cmd2 != NULL){
+	  if(cmd2 != NULL)
 	    cmd2(cmd_inv, id);
-	  }
+	  
 	}else
 	  add_command_queue(id, cmd_inv);
 	

@@ -80,15 +80,40 @@ void * find_item(const char * table, u64 itemid, u64 size, bool create);
 								\
     struct {ValueType _default;} _default = {};				\
     return _default._default;						\
-    								\
-  }								\
+									\
+  }									\
+  bool try_get_ ## Name (KeyType key, ValueType * value){		\
+    size_t item_size = sizeof(key) + sizeof(ValueType);			\
+    persisted_mem_area * mem = Name ## Initialize();			\
+									\
+    u64 cnt = mem->size / item_size;					\
+    struct {								\
+      KeyType key;							\
+      ValueType value;							\
+    } * data = mem->ptr;						\
+									\
+    for(size_t i = 0; i < cnt; i++){					\
+      if(data[i].key == key)						\
+	return *value = data[i].value, true;				\
+									\
+    }									\
+    return false;							\
+									\
+  }									\
 								\
 void clear_ ## Name(){						\
   persisted_mem_area * mem = Name ## Initialize();		\
   mem_area_realloc(mem, 1);					\
 }
 
-
+#define CREATE_MULTI_TABLE_DECL(Name, KeyType, ValueType)		\
+  void add_ ## Name(KeyType key, ValueType value);			\
+  size_t get_ ## Name (KeyType key, ValueType * values, size_t values_cnt); \
+  size_t iter_ ## Name (KeyType key, ValueType * values, size_t values_cnt, size_t * i); \
+  void clear_item_ ## Name(KeyType key);				\
+  void clear_at_ ## Name(u64 idx);					\
+  void clear_ ## Name();						
+       
 #define CREATE_MULTI_TABLE(Name, KeyType, ValueType)\
   persisted_mem_area * Name ## Initialize(){   \
     static persisted_mem_area * mem = NULL;   \
