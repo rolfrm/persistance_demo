@@ -222,7 +222,7 @@ typedef struct {
 
 CREATE_TABLE(damage, u64, t_damage);
 int main(){
-  u64 player = 3;
+  /*u64 player = 7;
   u64 item1 = 1;
   u64 item2 = 2;
   u64 ball = 4;
@@ -275,7 +275,7 @@ int main(){
     logd("\n");
     
     
-  }
+    }*/
   
   if (!glfwInit())
     return -1;

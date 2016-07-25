@@ -117,6 +117,8 @@ CREATE_TABLE(target, u64, vec2);
 CREATE_TABLE(is_paused, u64, bool);
 CREATE_TABLE(should_exit, u64, bool);
 CREATE_TABLE(is_instant, u64, bool);
+CREATE_TABLE(wielded_item, u64, u64);
+CREATE_TABLE(item_command_item, u64, u64);
 typedef enum{
   CMD_DONE,
   CMD_NOT_DONE
@@ -134,13 +136,22 @@ void update_game_board(u64 id){
       if(c == 0) break;
       if(command != 0){
 	u64 cmd = get_command_invocation(command);
-	command_state (* cmd2)(u64 id, u64 id2) =(void *) get_method(cmd, invoke_command_method);
+	command_state (* cmd2)(u64 cmd, ...) =(void *) get_method(cmd, invoke_command_method);
 	bool pop = false;
 	if(cmd2 == NULL){
 	  pop = true;
 	}else{
-	  if(cmd2(command, entity) == CMD_DONE)
-	    pop = true;
+	  u64 item = get_item_command_item(command);
+	  
+	  if(item != 0){
+	    logd("Exec item command!\n");
+	    if(cmd2(command, entity, item) == CMD_DONE)
+	      pop = true;
+	  }else{
+	    if(cmd2(command, entity) == CMD_DONE)
+	      pop = true;
+	  }
+	    
 	}
 	if(pop)
 	  clear_at_command_queue(it - 1);
@@ -183,6 +194,7 @@ u64 parse_command(u64 id, const char * str, command_arg * out_args, u64 * in_out
   u64 inventory_cnt = get_inventory(id, NULL, 10000);
   u64 inventory[inventory_cnt];
   get_inventory(id, inventory, inventory_cnt);
+  
   logd("Inventory cnt: %i\n", inventory_cnt);
   *in_out_cnt = 0;
   u64 avail_commands[32];
@@ -191,6 +203,7 @@ u64 parse_command(u64 id, const char * str, command_arg * out_args, u64 * in_out
   while(0 < (cnt = iter_available_commands(id, avail_commands, array_count(avail_commands), &idx))){
     for(u64 i = 0; i < cnt; i++){
       named_item nm = unintern_string(avail_commands[i]);
+      logd("Named: %s\n", nm.name);
       if(false && starts_with(str, nm.name)){
 
       }else{
@@ -286,6 +299,7 @@ void test_gui(){
   u64 game_board = intern_string("game board");
   load_game_board(game_board);
   add_control(win->id, game_board);
+
 
   u64 ball = intern_string("Ball");
   if(once(ball)){
@@ -427,6 +441,22 @@ void test_gui(){
   define_subclass(pause_cmd, command_class);
   add_available_commands(game_board, pause_cmd);
 
+  u64 wield_cmd = intern_string("wield");
+  command_state wield(u64 cmd, u64 id){
+    command_arg arg;
+    if(get_command_args(cmd, &arg, 1) == 0) return CMD_DONE;
+    if(arg.type == COMMAND_ARG_ITEM){
+      set_wielded_item(id, arg.id);
+      char namebuf[100];
+      get_name(get_wielded_item(id), namebuf, sizeof(namebuf));
+      logd("Wielding: %s %i %i \n", namebuf, arg.id, get_wielded_item(id));
+    }
+    return CMD_DONE;
+  }
+  define_subclass(wield_cmd, command_class);
+  define_method(wield_cmd, invoke_command_method, (method) wield);
+  add_available_commands(player, wield_cmd);
+  
   command_state exit_board(u64 cmd, u64 id){
     UNUSED(cmd);
     logd("Exiting\n");
@@ -439,6 +469,33 @@ void test_gui(){
   define_method(exit_cmd, invoke_command_method, (method) exit_board);
   set_should_exit(game_board, false);
 
+  command_state do_throw(u64 cmd, u64 id, u64 itemid){
+    command_arg arg;
+    logd("Executing throw!\n");
+    if(get_command_args(cmd, &arg, 1) == 0) return CMD_DONE;
+    if(arg.type == COMMAND_ARG_ENTITY){
+      logd("Throwing %i from %i to hit %i\n", id, itemid, arg.id);
+      add_board_elements(game_board, itemid);
+      u64 item, it = 0;
+      int c = 0;
+      while((c = iter_inventory(id, &item, 1,  &it)) > 0){
+	if(item == itemid)
+	  clear_at_inventory(it - 1);
+      }
+      body b1 = get_body(itemid);
+      b1.position = get_body(id).position;
+      set_body(itemid, b1);
+      body b = get_body(arg.id);
+      set_target(itemid, b.position);
+    }
+    return CMD_DONE;
+  }
+  
+  u64 throw_cmd = intern_string("throw");
+  define_subclass(throw_cmd, command_class);
+  define_method(throw_cmd, invoke_command_method, (method) do_throw);
+  
+  add_available_commands(ball, throw_cmd);
   
   stackpanel * panel = get_stackpanel(intern_string("stackpanel1"));
   set_horizontal_alignment(panel->id, HALIGN_CENTER);
@@ -589,37 +646,57 @@ void test_gui(){
   set_console_history_cnt(console, 100);
   void command_entered(u64 id, char * cmd){
     UNUSED(id);
-    bool parse_cmd(u64 id){
+    bool parse_cmd(u64 id, u64 wielder){
       command_arg args[10];
       u64 arg_cnt = 10;
       u64 found_cmd = parse_command(id, cmd, args, &arg_cnt);
+      logd("Found cmd: %i %i\n",id, found_cmd);
       if(found_cmd != 0){
 	u64 cmd_inv = get_unique_number();
 	set_command_invocation(cmd_inv, found_cmd);
 	for(u64 i = 0; i < arg_cnt; i++){
 	  add_command_args(cmd_inv, args[i]);
 	}
-	if(get_is_instant(found_cmd)){
-	  command_state (* cmd2)(u64 id, u64 id2) =(void *) get_method(found_cmd, invoke_command_method);
-	  if(cmd2 != NULL)
-	    cmd2(cmd_inv, id);
-	  
-	}else
-	  add_command_queue(id, cmd_inv);
+	if(wielder != 0){
+	  if(get_is_instant(found_cmd)){
+	    command_state (* cmd2)(u64 id, u64 id2, u64 id3) =(void *) get_method(found_cmd, invoke_command_method);
+	    if(cmd2 != NULL)
+	      cmd2(cmd_inv, wielder, id);
+	    
+	  }else{
+	    logd("Wielder command!\n");
+	    set_item_command_item(cmd_inv, id);
+	    add_command_queue(wielder, cmd_inv);
+	  }
+	}else{
 	
+	  if(get_is_instant(found_cmd)){
+	    command_state (* cmd2)(u64 id, u64 id2) =(void *) get_method(found_cmd, invoke_command_method);
+	    if(cmd2 != NULL)
+	      cmd2(cmd_inv, id);
+	    
+	  }else
+	    add_command_queue(id, cmd_inv);
+	}
 	return true;
       }
       return false;
     }
-    if(parse_cmd(player)){
+    if(parse_cmd(player, 0)){
       u64 queue_length = get_command_queue(player, NULL, 1000);
       logd("Player Queue length: %i\n", queue_length);
     }else{
       logd("Test game board\n");
-      if( parse_cmd(game_board)){
-      u64 queue_length = get_command_queue(game_board, NULL, 1000);
-      logd("Board Queue length: %i\n", queue_length);
+      if( parse_cmd(game_board, 0)){
+	u64 queue_length = get_command_queue(game_board, NULL, 1000);
+	logd("Board Queue length: %i\n", queue_length);
       }
+      u64 wielded_item = get_wielded_item(player);
+      if(wielded_item != 0 && parse_cmd(wielded_item, player)){
+	u64 queue_length = get_command_queue(player, NULL, 1000);
+	logd("Item command! Player Queue length: %i\n", queue_length);
+      }
+  
     }
   }
   
