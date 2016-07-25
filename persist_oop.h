@@ -100,11 +100,28 @@ void * find_item(const char * table, u64 itemid, u64 size, bool create);
     return false;							\
 									\
   }									\
-								\
-void clear_ ## Name(){						\
-  persisted_mem_area * mem = Name ## Initialize();		\
-  mem_area_realloc(mem, 1);					\
-}
+									\
+  void clear_ ## Name(){						\
+    persisted_mem_area * mem = Name ## Initialize();			\
+    mem_area_realloc(mem, 1);						\
+  }									\
+  void unset_## Name(KeyType key){						\
+    size_t item_size = sizeof(key) + sizeof(ValueType);			\
+    persisted_mem_area * mem = Name ## Initialize();			\
+									\
+    u64 cnt = mem->size / item_size;					\
+    struct {								\
+      KeyType key;							\
+      ValueType value;							\
+    } * data = mem->ptr;						\
+									\
+    for(size_t i = 0; i < cnt; i++){					\
+      if(data[i].key == key){						\
+	data[i].key = 0;break;						\
+      }									\
+									\
+    }									\
+  }									
 
 #define CREATE_MULTI_TABLE_DECL(Name, KeyType, ValueType)		\
   void add_ ## Name(KeyType key, ValueType value);			\

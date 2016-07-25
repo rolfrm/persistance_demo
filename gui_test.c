@@ -144,7 +144,6 @@ void update_game_board(u64 id){
 	  u64 item = get_item_command_item(command);
 	  
 	  if(item != 0){
-	    logd("Exec item command!\n");
 	    if(cmd2(command, entity, item) == CMD_DONE)
 	      pop = true;
 	  }else{
@@ -178,6 +177,9 @@ void update_game_board(u64 id){
 	if(dl > 0){
 	  if(dl > 1.0)
 	    d = vec2_scale(d, 1.0 / dl);
+	  else{
+	    unset_target(bodies[i]);
+	  }
 	  b.position = vec2_add(vec2_scale(d, 0.1), b.position);
 	  set_body(bodies[i], b);
 	}
@@ -195,7 +197,6 @@ u64 parse_command(u64 id, const char * str, command_arg * out_args, u64 * in_out
   u64 inventory[inventory_cnt];
   get_inventory(id, inventory, inventory_cnt);
   
-  logd("Inventory cnt: %i\n", inventory_cnt);
   *in_out_cnt = 0;
   u64 avail_commands[32];
   u64 idx = 0;
@@ -203,7 +204,6 @@ u64 parse_command(u64 id, const char * str, command_arg * out_args, u64 * in_out
   while(0 < (cnt = iter_available_commands(id, avail_commands, array_count(avail_commands), &idx))){
     for(u64 i = 0; i < cnt; i++){
       named_item nm = unintern_string(avail_commands[i]);
-      logd("Named: %s\n", nm.name);
       if(false && starts_with(str, nm.name)){
 
       }else{
@@ -264,11 +264,10 @@ u64 parse_command(u64 id, const char * str, command_arg * out_args, u64 * in_out
 		char buf2[33];
 		u64 c2 = get_name(inventory[i], buf2, 33);
 	        if(c2 > 0 && strcmp(buf2, buf) == 0){
-		  logd("Inventory: %s\n", buf2);
 		  
 		  args_start += strlen(buf2);
 		  out_args->type = COMMAND_ARG_ITEM;
-		  out_args->id = visible_items[i];
+		  out_args->id = inventory[i];
 		  *in_out_cnt += 1;
 		  break;
 		}
@@ -408,14 +407,19 @@ void test_gui(){
     command_arg arg;
     if(get_command_args(cmd, &arg, 1) == 0) return CMD_DONE;
     if(arg.type == COMMAND_ARG_ITEM){
-      logd("SUCCESS!\n");
+      body b = get_body(arg.id);
+      b.position = get_body(id).position;
+      set_body(arg.id, b);
       add_board_elements(game_board, arg.id);
+
       u64 item, it = 0;
       int c = 0;
       while((c = iter_inventory(id, &item, 1,  &it)) > 0){
 	if(item == arg.id)
 	  clear_at_inventory(it - 1);
+
       }
+
     }
     return CMD_DONE;
   }
@@ -496,6 +500,25 @@ void test_gui(){
   define_method(throw_cmd, invoke_command_method, (method) do_throw);
   
   add_available_commands(ball, throw_cmd);
+
+  command_state do_ls(u64 cmd, u64 id){
+    UNUSED(cmd);
+    u64 item[1], it = 0;
+    u64 i = 0;
+    u64 c;
+    while((c = iter_inventory(id, item, array_count(item),  &it)) > 0){
+      char name[100];
+      get_name(item[0], name, sizeof(name));
+      logd("%i : %s", i++, name);
+    }
+    return CMD_DONE;
+  }
+  
+  u64 ls_cmd = intern_string("ls");
+  define_subclass(ls_cmd, command_class);
+  define_method(ls_cmd, invoke_command_method, (method) do_ls);
+  add_available_commands(player, ls_cmd);
+  
   
   stackpanel * panel = get_stackpanel(intern_string("stackpanel1"));
   set_horizontal_alignment(panel->id, HALIGN_CENTER);
