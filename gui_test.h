@@ -54,7 +54,7 @@ void test_gui();
 
 void measure_child_controls(u64 control, vec2 * size);
 
-void handle_mouse_over(u64 control, double x, double y, u64 method, vec2 * out_size);
+void handle_mouse_over(u64 control, double x, double y, u64 method);
 
 u64 intern_string(const char * name);
 void init_gui();

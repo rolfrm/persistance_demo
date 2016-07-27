@@ -45,6 +45,7 @@ void init_gui();
 typedef enum _horizontal_alignment{
   HALIGN_LEFT = 0,
   HALIGN_CENTER,
+  HALIGN_STRETCH,
   HALIGN_RIGHT
   
 } horizontal_alignment;
@@ -52,6 +53,7 @@ typedef enum _horizontal_alignment{
 typedef enum _vertical_alignment{
   VALIGN_TOP = 0,  
   VALIGN_BOTTOM,
+  VALIGN_STRETCH,
   VALIGN_CENTER
 } vertical_alignment;
   

@@ -67,8 +67,16 @@ void window_size_callback(GLFWwindow* glwindow, int width, int height)
 
 void cursor_pos_callback(GLFWwindow * glwindow, double x, double y){
   window * w = get_window(glwindow);
+  window * win = w;
   auto on_mouse_over = get_method(w->id, mouse_over_method);
   clear_is_mouse_over();
+  
+  GLFWwindow * glfwWin = find_glfw_window(win->id);
+  glfwGetWindowSize(glfwWin, &win->width, &win->height);
+  thickness margin = get_margin(win->id);
+  window_size = vec2_new(win->width, win->height);
+  shared_offset = vec2_new(margin.left, margin.up);
+  shared_size = vec2_new(win->width - margin.left - margin.right, win->height - margin.up - margin.down);
   if(on_mouse_over != NULL)
     on_mouse_over(w->id, x, y, 0);
 }
@@ -81,12 +89,19 @@ void mouse_button_callback(GLFWwindow * glwindow, int button, int action, int mo
   }
   if(button == 0){
     window * w = get_window(glwindow);
+    window * win = w;
     auto on_mouse_over = get_method(w->id, mouse_over_method);
     if(on_mouse_over != NULL){
       double x, y;
       glfwGetCursorPos(glwindow, &x, &y);
       clear_is_mouse_over();
-
+      thickness margin = get_margin(win->id);
+      //margin.left += 0.05f;
+      GLFWwindow * glfwWin = find_glfw_window(win->id);
+      glfwGetWindowSize(glfwWin, &win->width, &win->height);
+      window_size = vec2_new(win->width, win->height);
+      shared_offset = vec2_new(margin.left, margin.up);
+      shared_size = vec2_new(win->width - margin.left - margin.right, win->height - margin.up - margin.down);
       on_mouse_over(w->id, x, y, mouse_down_method);
     }
   }
@@ -205,27 +220,48 @@ window * make_window(u64 id){
   define_subclass(_win->id, window_class);
   return _win;
 }
-
-void handle_mouse_over(u64 control, double x, double y, u64 method, vec2 * out_size){
-  vec2 size = vec2_new(0,0);
-
-  auto measure = get_method(control, measure_control_method);
-  if(measure != NULL)
-    measure(control, &size);
-  if(out_size != NULL)
-    *out_size = size;
-  if(x < 0 || y < 0 || x > size.x || y > size.y)
-    return;
-  auto on_mouse_over = get_method(control, mouse_over_method);
-  if(on_mouse_over != NULL)
-    on_mouse_over(control, x, y, method);
-}
-
 CREATE_TABLE(margin, u64, thickness);
 CREATE_TABLE(corner_roundness, u64, thickness);
 CREATE_TABLE(color, u64, vec3);
 CREATE_TABLE(vertical_alignment, u64, vertical_alignment);
 CREATE_TABLE(horizontal_alignment, u64, horizontal_alignment);
+__thread vec2 shared_offset, shared_size, window_size;
+vec2 measure_sub(u64 item);
+
+int debug_depth = 0;
+
+void handle_mouse_over(u64 id, double x, double y, u64 method){
+  auto on_mouse_over = get_method(id, mouse_over_method);
+  vertical_alignment va = get_vertical_alignment(id);
+  horizontal_alignment ha = get_horizontal_alignment(id);
+  
+  vec2 cs = measure_sub(id);
+  auto margin = get_margin(id);
+  vec2 s = vec2_new(MAX(0, shared_size.x - cs.x - margin.left - margin.right),
+		    MAX(0, shared_size.y - cs.y - margin.up - margin.down));
+  float x2 = 0.;
+  if(ha == HALIGN_CENTER)
+    x2 = s.x * 0.5;
+  else if(ha == HALIGN_RIGHT)
+    x2 = s.x;
+  float y2 = 0.;
+  if(va == VALIGN_CENTER)
+    y2 = s.y * 0.5;
+  if(va == VALIGN_BOTTOM)
+    y2 = s.y;
+  vec2 saved_offset = shared_offset;
+  vec2 saved_size = shared_size;
+  shared_offset.x += x2 + margin.left;
+  shared_offset.y += y2 + margin.up;
+  shared_size.x = shared_size.x - x2 - margin.right;
+  shared_size.y = shared_size.y - y2 - margin.down;
+  if(x > shared_offset.x  && y > shared_offset.y && x < shared_offset.x + cs.x && y < shared_offset.y + cs.y && on_mouse_over != NULL)
+    on_mouse_over(id, x, y, method);  
+  shared_offset = saved_offset;
+  shared_size = saved_size;
+}
+
+
 
 u64 get_unique_number(){
   static u64 * w = NULL;
@@ -283,7 +319,7 @@ named_item unintern_string(u64 id){
 }
 
 
-__thread vec2 shared_offset, shared_size, window_size;
+
 
 vec2 measure_sub(u64 item){
   auto measure = get_method(item, measure_control_method);
@@ -442,14 +478,8 @@ void render_rectangle(u64 rect_id){
 }
 
 void rectangle_mouse_over(u64 control, double x, double y, u64 method){
-  thickness margin = get_margin(control);
-  x = x - margin.left;
-  y = y - margin.up;
-  
   rectangle * rect = find_rectangle(control, false);
   ASSERT(rect != NULL);
-  if(x < 0 || x > rect->size.x || y < 0 || y > rect->size.y)
-    return;
   auto evt = get_method(control, method);
   if(evt != NULL)
     evt(control, x, y);
@@ -614,29 +644,26 @@ stackpanel * find_stackpanel(u64 id){
 
 
 void stack_panel_mouse_over(u64 stk_id, double x, double y, u64 method){
-  stackpanel * stk = find_stackpanel(stk_id);
+    stackpanel * stk = find_stackpanel(stk_id);
   u64 index = 0;
   control_pair * child_control = NULL;
-
-  thickness margin = get_margin(stk->id);
-  x = x - margin.left;
-  y = y - margin.up;
-  if(x < 0 || y < 0)
-    return;
-  auto evt = get_method(stk_id, method);
-  if(evt != NULL)
-    evt(stk_id, x, y);
-  
   while((child_control = get_control_pair_parent(stk->id, &index))){
     if(child_control == NULL)
       break;
-    vec2 size;
-    handle_mouse_over(child_control->child_id, x, y, method, &size);
-    
+    vec2 size = measure_sub(child_control->child_id);
+    vec2 saved_size = shared_size;
+    if(stk->orientation == ORIENTATION_HORIZONTAL)
+      shared_size.x = MAX(shared_size.x, size.x);
+    else
+      shared_size.y = MAX(shared_size.y, size.y);
+    handle_mouse_over(child_control->child_id, x, y, method);
+    shared_size = saved_size;
     if(stk->orientation == ORIENTATION_HORIZONTAL){
-      x -= size.x;
+      shared_offset.x += size.x;
+      shared_size.x -= size.x;
     }else{
-      y -= size.y;
+      shared_offset.y += size.y;
+      shared_size.y -= size.y;
     }
   }
 }
@@ -766,9 +793,7 @@ void measure_child_controls(u64 control, vec2 * size){
 }
 
 void ui_element_mouse_over(u64 control, double x, double y, u64 method){
-  thickness margin = get_margin(control);
-  x = x - margin.left;
-  y = y - margin.up;
+
   auto evt = get_method(control, method);
   if(evt != NULL)
     evt(control, x, y);
@@ -777,7 +802,7 @@ void ui_element_mouse_over(u64 control, double x, double y, u64 method){
   while((child_control = get_control_pair_parent(control, &index))){
     if(child_control == NULL)
       break;
-    handle_mouse_over(child_control->child_id, x, y, method, NULL);
+    handle_mouse_over(child_control->child_id, x, y, method);
   }
 }
 

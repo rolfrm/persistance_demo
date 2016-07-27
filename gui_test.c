@@ -157,7 +157,7 @@ void update_game_board(u64 id){
 	else break;
       }
     }
-  }
+   }
   handle_commands(id);
   if(get_is_paused(id))
     return;
@@ -575,10 +575,8 @@ void test_gui(){
   }
 
   void rectangle_clicked(u64 control, double x, double y){
+    UNUSED(x);UNUSED(y);
     rectangle * r = get_rectangle(control);
-    vec2 size = r->size;
-    if(x > size.x || y > size.y || x < 0 || y < 0) return;
-    
     r->color = vec3_rand();
   }
   define_method(rectangle_class, mouse_down_method, (method) rectangle_clicked);
@@ -732,10 +730,9 @@ void test_gui(){
     vsprintf(buf, fmt, lst);
     push_console_history(console, buf);
   }
-  iron_log_printer = print_console;
+  //iron_log_printer = print_console;
   
   while(!get_should_exit(game_board)){
-
     update_game_board(game_board);
     window * w = persist_alloc("win_state", sizeof(window));
     int cnt = (int)(persist_size(w)  / sizeof(window));
