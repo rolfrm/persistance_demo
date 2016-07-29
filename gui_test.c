@@ -503,9 +503,12 @@ void test_gui(){
 
   command_state do_ls(u64 cmd, u64 id){
     UNUSED(cmd);
+    logd("List cmd..\n");
     u64 item[1], it = 0;
     u64 i = 0;
     u64 c;
+    u64 inventory_size = get_inventory(id, NULL, 10000);
+    logd("Listing inventory of %i items", inventory_size);
     while((c = iter_inventory(id, item, array_count(item),  &it)) > 0){
       char name[100];
       get_name(item[0], name, sizeof(name));
@@ -671,7 +674,6 @@ void test_gui(){
       command_arg args[10];
       u64 arg_cnt = 10;
       u64 found_cmd = parse_command(id, cmd, args, &arg_cnt);
-      logd("Found cmd: %i %i\n",id, found_cmd);
       if(found_cmd != 0){
 	u64 cmd_inv = get_unique_number();
 	set_command_invocation(cmd_inv, found_cmd);
@@ -704,18 +706,20 @@ void test_gui(){
       return false;
     }
     if(parse_cmd(player, 0)){
-      u64 queue_length = get_command_queue(player, NULL, 1000);
-      logd("Player Queue length: %i\n", queue_length);
+      //u64 queue_length = get_command_queue(player, NULL, 1000);
+      //logd("Player Queue length: %i\n", queue_length);
     }else{
-      logd("Test game board\n");
+      //logd("Test game board\n");
       if( parse_cmd(game_board, 0)){
-	u64 queue_length = get_command_queue(game_board, NULL, 1000);
-	logd("Board Queue length: %i\n", queue_length);
+	//u64 queue_length = get_command_queue(game_board, NULL, 1000);
+	//logd("Board Queue length: %i\n", queue_length);
       }
       u64 wielded_item = get_wielded_item(player);
       if(wielded_item != 0 && parse_cmd(wielded_item, player)){
-	u64 queue_length = get_command_queue(player, NULL, 1000);
-	logd("Item command! Player Queue length: %i\n", queue_length);
+	//u64 queue_length = get_command_queue(player, NULL, 1000);
+	//logd("Item command! Player Queue length: %i\n", queue_length);
+      }else{
+	logd("Error: Unknown command '%s'\n", cmd);
       }
   
     }
@@ -730,7 +734,7 @@ void test_gui(){
     vsprintf(buf, fmt, lst);
     push_console_history(console, buf);
   }
-  //iron_log_printer = print_console;
+  iron_log_printer = print_console;
   
   while(!get_should_exit(game_board)){
     update_game_board(game_board);
