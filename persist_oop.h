@@ -22,12 +22,22 @@ void attach_handler(u64 control_id, u64 command_id, void * handler);
 
 void * find_item(const char * table, u64 itemid, u64 size, bool create);
 
+#define CALL_BASE_METHOD(Item, Method, ...)\
+  ({\
+    u64 index = 0, base = 0;\
+    while(0 != (base = get_baseclass(Item, &index))){	\
+      method m = get_method(base, Method);		\
+      if(m != NULL) m(Item, __VA_ARGS__);		\
+    }							\
+  })
+
 //persisted_mem_area * create_mem_area(const char * name);
 //void mem_area_realloc(persisted_mem_area * area, u64 size)
 
 #define CREATE_TABLE_DECL(Name, KeyType, ValueType) \
   void set_ ## Name(KeyType key, ValueType value);  \
-  ValueType get_ ## Name (KeyType key);	 
+  ValueType get_ ## Name (KeyType key);	 \
+  bool try_get_ ## Name (KeyType key, ValueType * value);
 
 #define CREATE_TABLE(Name, KeyType, ValueType)\
   persisted_mem_area * Name ## Initialize(){   \

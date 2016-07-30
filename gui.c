@@ -159,6 +159,8 @@ void load_window(u64 id){
     w->id = id;
     sprintf(w->title, "%s", "Test Window");
   }
+  if(w->height <= 0) w->height = 200;
+  if(w->width <= 0) w->width = 200;
   //glfwWindowHint(GLFW_DECORATED, GL_FALSE);
   static GLFWwindow * ctx = NULL;
   logd("Window size: %i %i %s %i %i\n", index,w->initialized, w->title, w->width, w->height);
@@ -225,6 +227,7 @@ CREATE_TABLE(corner_roundness, u64, thickness);
 CREATE_TABLE(color, u64, vec3);
 CREATE_TABLE(vertical_alignment, u64, vertical_alignment);
 CREATE_TABLE(horizontal_alignment, u64, horizontal_alignment);
+
 __thread vec2 shared_offset, shared_size, window_size;
 vec2 measure_sub(u64 item);
 
@@ -845,6 +848,8 @@ void init_gui(){
 
 int key_backspace = 259;
 int key_enter = 257;
+int key_space = 32;
 int key_release = 0;
 int key_press = 1;
 int key_repeat = 2;
+int mod_ctrl= 2;

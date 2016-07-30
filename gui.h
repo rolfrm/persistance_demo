@@ -72,6 +72,9 @@ size_t codepoint_to_utf8(u32 codepoint, char * out, size_t maxlen);
 
 extern int key_backspace;
 extern int key_enter;
+extern int key_space;
 extern int key_release;
 extern int key_press;
 extern int key_repeat;
+extern int mod_ctrl;
+

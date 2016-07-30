@@ -17,13 +17,13 @@ vec3 vec3_rand(){
 
 void rectangle_clicked(u64 control, double x, double y){
   UNUSED(x);UNUSED(y);
-  logd("WUUT!\n");
+  logd("Rectangle clicked!\n");
   rectangle * rect = get_rectangle(control);
   ASSERT(rect != NULL);
   if(mouse_button_action == 1)
     rect->color = vec3_new(0, 0, 0);
   else{
-    rect->color = vec3_scale(vec3_rand(), 0.01);
+    rect->color = vec3_rand();
   }
 }
 
@@ -40,7 +40,6 @@ void measure_game_board(u64 id, vec2 * size){
   *size = vec2_new(0, 0);
 }
 
-
 void render_game_board(u64 id){
   UNUSED(id);
   rect_render(vec3_new(0.3,0.3,0.6), shared_offset, shared_size);
@@ -51,7 +50,25 @@ void render_game_board(u64 id){
     board_element_cnt = iter_board_elements(id, bodies, array_count(bodies), &iter);
     for(u64 i = 0; i < board_element_cnt; i++){
       body b = get_body(bodies[i]);
-      rect_render(vec3_new(1,0,0), vec2_scale(b.position, 10), vec2_scale(b.size, 10));
+      vec3 color;
+      if(!try_get_color(bodies[i], &color)){
+	color = vec3_new(1,0,0);
+      }
+      vec2 size = vec2_scale(b.size, 10);
+      vec2 position = vec2_scale(b.position, 10);
+      if(size.x == 0){
+	size.x = 2;
+	position.x -= 1;
+	position.y -= 1;
+	size.y += 2;
+      }
+      if(size.y == 0){
+	size.y = 2;
+	position.y -= 1;
+	position.x -= 1;
+	size.x += 2;
+      }
+      rect_render(color,position , size);
       set_body(bodies[i], b);
     }
     
@@ -119,6 +136,7 @@ CREATE_TABLE(should_exit, u64, bool);
 CREATE_TABLE(is_instant, u64, bool);
 CREATE_TABLE(wielded_item, u64, u64);
 CREATE_TABLE(item_command_item, u64, u64);
+CREATE_TABLE(is_wall, u64, bool);
 typedef enum{
   CMD_DONE,
   CMD_NOT_DONE
@@ -126,6 +144,49 @@ typedef enum{
 
 u64 invoke_command_method = 0;
 u64 command_class = 0;
+
+typedef enum{
+  WALL_NONE = 0,
+  WALL_UP = 1,
+  WALL_LEFT = 2,
+  WALL_FULL = 1 | 2,
+  WALL_HALF = 4
+}wall_kind;
+
+typedef struct{
+  wall_kind wall_chunks[16]; //4 by 4 wall chunks
+}mapchunk;
+
+CREATE_TABLE(map_chunks, u64, mapchunk);
+
+wall_kind get_wall_at(int x, int y){
+  union{
+    struct{
+      int x;
+      int y;
+    };
+    u64 index;
+  }data;
+  data.x = x / 4;
+  data.y = y / 4;
+  mapchunk c = get_map_chunks(data.index);
+  return c.wall_chunks[x % 4 + (y % 4) * 4];
+}
+
+void set_wall_at(int x, int y, wall_kind k){
+  union{
+    struct{
+      int x;
+      int y;
+    };
+    u64 index;
+  }data;
+  data.x = x / 4;
+  data.y = y / 4;
+  mapchunk c = get_map_chunks(data.index);
+  c.wall_chunks[x % 4 + (y % 4) * 4] = k;
+  set_map_chunks(data.index, c);
+}
 
 void update_game_board(u64 id){
 
@@ -167,6 +228,35 @@ void update_game_board(u64 id){
   do{
     board_element_cnt = iter_board_elements(id, bodies, array_count(bodies), &iter);
     for(u64 i = 0; i < board_element_cnt; i++){
+      body body;
+      if(try_get_body(bodies[i], &body)){
+	bool is_wall = get_is_wall(bodies[i]);
+	if(body.size.x < 0.1 && is_wall){
+	  wall_kind kind = WALL_LEFT;
+	  for(int y = 0; y < body.size.y; y++)
+	    set_wall_at(body.position.x, y + body.position.y, kind);
+	  
+	}else if(body.size.y < 0.1 && is_wall){
+	  wall_kind kind = WALL_UP;
+	  for(int x = 0; x < body.size.x; x++)
+	    set_wall_at(x + body.position.x, body.position.y, kind);
+	  
+	}else{
+	  wall_kind kind = is_wall ? WALL_FULL : WALL_HALF;
+	  for(int x = 0; x < body.size.x; x++){
+	    for(int y = 0; y < body.size.y; y++)
+	      set_wall_at(x + body.position.x, y + body.position.y, kind);
+	    
+	  }
+	}
+      }
+    }
+  }while(board_element_cnt == array_count(bodies));
+  iter = 0;
+    
+  do{
+    board_element_cnt = iter_board_elements(id, bodies, array_count(bodies), &iter);
+    for(u64 i = 0; i < board_element_cnt; i++){
       handle_commands(bodies[i]);
 
       body b = get_body(bodies[i]);
@@ -181,7 +271,33 @@ void update_game_board(u64 id){
 	    unset_target(bodies[i]);
 	  }
 	  b.position = vec2_add(vec2_scale(d, 0.1), b.position);
-	  set_body(bodies[i], b);
+	  if(bodies[i] == 28)logd("\n");
+	  bool did_collide = false;
+	  for(int y = 0; y < b.size.y; y++){
+	    for(int x = 0; x < b.size.x; x++){
+	      wall_kind wall = get_wall_at(x + b.position.x, y + b.position.y);
+	      if(bodies[i] == 28)
+		logd("%i %i %i\n", x, y, wall);
+	      if(wall == WALL_NONE) continue;
+	      if(wall == WALL_FULL) {
+		did_collide = true;
+		goto end_col;
+	      }
+	      if(wall == WALL_UP && y > 0){
+		did_collide = true;
+		goto end_col;
+	      }
+	      if(wall == WALL_LEFT && x > 0){
+		did_collide = true;
+		goto end_col;
+	      }
+	    }
+	  }
+	end_col:
+	  if(bodies[i] == 28)
+	    logd(" Collision? %i\n", did_collide);
+	  if(!did_collide)
+	    set_body(bodies[i], b);
 	}
       }
     }    
@@ -288,8 +404,7 @@ u64 parse_command(u64 id, const char * str, command_arg * out_args, u64 * in_out
 }
 
 void test_gui(){
-  //logd("Test pt: %x\n", -883767);
-  //ASSERT(codepoint_to_utf8((u32)-883767, NULL, 100));
+
   init_gui();
   window * win = make_window(4);
   sprintf(win->title, "%s", "Test Window");
@@ -313,18 +428,71 @@ void test_gui(){
     add_faction_visible_items(1, target);
     set_name(target, "Target");
     set_body(target, (body){vec2_new(10, 30), vec2_new(2, 1)});
-    add_board_elements(game_board, target);
-    
+    add_board_elements(game_board, target); 
   }
   
   u64 player = intern_string("Player");
+  logd("Player: %i\n", player);
+  set_color(player, vec3_new(0,0,1));
   if(once(player)){
     set_name(player, "Player");
+
     add_faction_visible_items(1, player);
     set_body(player, (body){ vec2_new(1,1), vec2_new(2,2) });
     add_board_elements(game_board, player);
   }
+  {
+    u64 wall = intern_string("Pillar");
+    set_body(wall, (body){vec2_new(14,14), vec2_new(2,2)});
+    if(once(wall)){    
+      add_board_elements(game_board, wall);
+    }
+  }
+  {
+    u64 wall = intern_string("Pillar2");
+    set_body(wall, (body){vec2_new(14,4), vec2_new(4,4)});
+    if(once(wall)){    
+      add_board_elements(game_board, wall);
+    }
+  }
+  {
+    u64 wall = intern_string("Wall1");
+    set_is_wall(wall, true);
+    set_color(wall, vec3_new(0.2, 0.2, 0.2));
+    set_body(wall, (body){vec2_new(4,4), vec2_new(10,0)});
+    if(once(wall)){    
+      add_board_elements(game_board, wall);
+    }
+  }
+  {
+    u64 wall = intern_string("Wall2");
+    set_color(wall, vec3_new(0.2, 0.2, 0.2));
+    set_is_wall(wall, true);
+    set_body(wall, (body){vec2_new(4,14), vec2_new(10,0)});
+    if(once(wall)){    
+      add_board_elements(game_board, wall);
+    }
+  }
+  {
+    u64 wall = intern_string("Wall3");
+    set_color(wall, vec3_new(0.2, 0.2, 0.2));
+    set_is_wall(wall, true);
+    set_body(wall, (body){vec2_new(4,4), vec2_new(0,10)});
+    if(once(wall)){    
+      add_board_elements(game_board, wall);
+    }
+  }
+  {
+    u64 wall = intern_string("Wall4");
+    set_color(wall, vec3_new(0.2, 0.2, 0.2));
+    set_is_wall(wall, true);
+    set_body(wall, (body){vec2_new(14,4), vec2_new(0,10)});
+    if(once(wall)){    
+      add_board_elements(game_board, wall);
+    }
+  }
 
+  
   clear_available_commands();
   command_class = intern_string("command class");
   invoke_command_method = intern_string("invoke");
@@ -706,27 +874,30 @@ void test_gui(){
       return false;
     }
     if(parse_cmd(player, 0)){
-      //u64 queue_length = get_command_queue(player, NULL, 1000);
-      //logd("Player Queue length: %i\n", queue_length);
     }else{
-      //logd("Test game board\n");
       if( parse_cmd(game_board, 0)){
-	//u64 queue_length = get_command_queue(game_board, NULL, 1000);
-	//logd("Board Queue length: %i\n", queue_length);
       }
       u64 wielded_item = get_wielded_item(player);
       if(wielded_item != 0 && parse_cmd(wielded_item, player)){
-	//u64 queue_length = get_command_queue(player, NULL, 1000);
-	//logd("Item command! Player Queue length: %i\n", queue_length);
       }else{
 	logd("Error: Unknown command '%s'\n", cmd);
       }
   
     }
   }
-  
+
   define_method(console, console_command_entered_method, (method)command_entered);
 
+  void check_pause(u64 console, int key, int mods, int action){
+    if(key == key_space && mods == mod_ctrl && action == key_press){
+      _pause_board(0, game_board);
+    }else{
+      CALL_BASE_METHOD(console, key_handler_method, key, mods, action);
+    }
+  }
+  
+  define_method(console, key_handler_method, (method)check_pause);
+  
   void print_console(const char * fmt, va_list lst){
     int l = strlen(fmt);
     if(l == 0) return;
@@ -751,13 +922,6 @@ void test_gui(){
       logd("Ending program\n");
       break;
     }
-
-    controller_state * controller = persist_alloc("controller", sizeof(controller_state));
-    controller->btn1_clicked = false;
     glfwPollEvents();
-    if(controller->btn1_clicked){
-      //sprintf(buffer, "window%i", get_unique_number());
-      //get_window2(buffer);
-    }
   }
 }
