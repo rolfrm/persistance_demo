@@ -271,10 +271,9 @@ void update_game_board(u64 id){
 	    unset_target(bodies[i]);
 	  }
 	  b.position = vec2_add(vec2_scale(d, 0.1), b.position);
-	  if(bodies[i] == 28)logd("\n");
 	  bool did_collide = false;
-	  for(int y = 0; y < b.size.y; y++){
-	    for(int x = 0; x < b.size.x; x++){
+	  for(int y = 0; y <= b.size.y; y++){
+	    for(int x = 0; x <= b.size.x; x++){
 	      wall_kind wall = get_wall_at(x + b.position.x, y + b.position.y);
 	      if(bodies[i] == 28)
 		logd("%i %i %i\n", x, y, wall);
@@ -283,7 +282,7 @@ void update_game_board(u64 id){
 		did_collide = true;
 		goto end_col;
 	      }
-	      if(wall == WALL_UP && y > 0){
+	      if(wall == WALL_UP && y >0){
 		did_collide = true;
 		goto end_col;
 	      }
@@ -294,8 +293,6 @@ void update_game_board(u64 id){
 	    }
 	  }
 	end_col:
-	  if(bodies[i] == 28)
-	    logd(" Collision? %i\n", did_collide);
 	  if(!did_collide)
 	    set_body(bodies[i], b);
 	}
@@ -443,6 +440,7 @@ void test_gui(){
   }
   {
     u64 wall = intern_string("Pillar");
+    set_is_wall(wall, true);
     set_body(wall, (body){vec2_new(14,14), vec2_new(2,2)});
     if(once(wall)){    
       add_board_elements(game_board, wall);
@@ -450,6 +448,7 @@ void test_gui(){
   }
   {
     u64 wall = intern_string("Pillar2");
+    set_is_wall(wall, true);
     set_body(wall, (body){vec2_new(14,4), vec2_new(4,4)});
     if(once(wall)){    
       add_board_elements(game_board, wall);
