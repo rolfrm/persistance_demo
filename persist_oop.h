@@ -31,33 +31,55 @@ void * find_item(const char * table, u64 itemid, u64 size, bool create);
     }							\
   })
 
-//persisted_mem_area * create_mem_area(const char * name);
-//void mem_area_realloc(persisted_mem_area * area, u64 size)
+typedef struct{
+  mem_area * mem;
+  size_t value_size;
+  size_t key_size;
+  bool (* try_get)(u64 * key, void * value);
+  void (* remove)(u64 * key);
+  void (* add)(u64 * key, void * value);
+  void (* reinit)();
+  int (* compare)(void * key, void * value);
+  bool is_multi_table;
+  const char * name;
 
-#define CREATE_TABLE_DECL(Name, KeyType, ValueType) \
-  void set_ ## Name(KeyType key, ValueType value);  \
-  ValueType get_ ## Name (KeyType key);	 \
+}u64_table_info;
+
+#define CREATE_TABLE_DECL(Name, KeyType, ValueType)		\
+  void set_ ## Name(KeyType key, ValueType value);		\
+  ValueType get_ ## Name (KeyType key);				\
   bool try_get_ ## Name (KeyType key, ValueType * value);
 
-#define CREATE_TABLE(Name, KeyType, ValueType)\
-  persisted_mem_area * Name ## Initialize(){   \
-    static persisted_mem_area * mem = NULL;   \
-    if(mem == NULL){			      \
-      mem = create_mem_area(#Name);      \
-    }					      \
-    return mem;				      \
-  }					      \
-							\
-  void set_ ## Name(KeyType key, ValueType value){	\
+#define CREATE_TABLE(Name, KeyType, ValueType)			\
+  CREATE_TABLE_DECL(Name, KeyType, ValueType)			\
+  void KeyType ##_table_initialized(KeyType ## _table_info);	\
+  void Name ## _set (KeyType * k, ValueType * v){		\
+    set_ ## Name(*k, *v);					\
+  }								\
+persisted_mem_area * Name ## Initialize(){			\
+  static persisted_mem_area * mem = NULL;			\
+    if(mem == NULL){						\
+      mem = create_mem_area(#Name);				\
 								\
-    		\
+      KeyType ## _table_initialized((KeyType ## _table_info){	\
+	  .add = (void *) &Name ## _set, .value_size = sizeof(KeyType), \
+	    .key_size = sizeof(KeyType), .mem = mem		\
+	  });							\
+    }								\
+								\
+    return mem;							\
+  }								\
+								\
+  void set_ ## Name(KeyType key, ValueType value){		\
+								\
+								\
     persisted_mem_area * mem = Name ## Initialize();		\
 								\
 								\
     struct {							\
       KeyType key;						\
       ValueType value;						\
-    } * data = mem->ptr;					\
+    } __attribute__((packed)) * data = mem->ptr;					\
     size_t item_size = sizeof(*data);				\
     u64 cnt = mem->size / item_size;				\
     for(size_t i = 0; i < cnt; i++){				\
@@ -72,15 +94,15 @@ void * find_item(const char * table, u64 itemid, u64 size, bool create);
     data[cnt].value = value;					\
   }								\
 								\
-  ValueType get_ ## Name (KeyType key){			\
+  ValueType get_ ## Name (KeyType key){				\
     size_t item_size = sizeof(key) + sizeof(ValueType);		\
     persisted_mem_area * mem = Name ## Initialize();		\
-								\
+    								\
     u64 cnt = mem->size / item_size;				\
     struct {							\
-      KeyType key;							\
-      ValueType value;							\
-    } * data = mem->ptr;					\
+      KeyType key;						\
+      ValueType value;						\
+    } __attribute__((packed)) * data = mem->ptr;					\
 								\
     for(size_t i = 0; i < cnt; i++){				\
       if(data[i].key == key)					\
@@ -88,49 +110,49 @@ void * find_item(const char * table, u64 itemid, u64 size, bool create);
 								\
     }								\
 								\
-    struct {ValueType _default;} _default = {};				\
-    return _default._default;						\
-									\
-  }									\
-  bool try_get_ ## Name (KeyType key, ValueType * value){		\
-    size_t item_size = sizeof(key) + sizeof(ValueType);			\
-    persisted_mem_area * mem = Name ## Initialize();			\
-									\
-    u64 cnt = mem->size / item_size;					\
-    struct {								\
-      KeyType key;							\
-      ValueType value;							\
-    } * data = mem->ptr;						\
-									\
-    for(size_t i = 0; i < cnt; i++){					\
-      if(data[i].key == key)						\
-	return *value = data[i].value, true;				\
-									\
-    }									\
-    return false;							\
-									\
-  }									\
-									\
-  void clear_ ## Name(){						\
-    persisted_mem_area * mem = Name ## Initialize();			\
-    mem_area_realloc(mem, 1);						\
-  }									\
-  void unset_## Name(KeyType key){						\
-    size_t item_size = sizeof(key) + sizeof(ValueType);			\
-    persisted_mem_area * mem = Name ## Initialize();			\
-									\
-    u64 cnt = mem->size / item_size;					\
-    struct {								\
-      KeyType key;							\
-      ValueType value;							\
-    } * data = mem->ptr;						\
-									\
-    for(size_t i = 0; i < cnt; i++){					\
-      if(data[i].key == key){						\
-	data[i].key = 0;break;						\
-      }									\
-									\
-    }									\
+    struct {ValueType _default;} _default = {};			\
+    return _default._default;					\
+								\
+  }								\
+  bool try_get_ ## Name (KeyType key, ValueType * value){	\
+    size_t item_size = sizeof(key) + sizeof(ValueType);		\
+    persisted_mem_area * mem = Name ## Initialize();		\
+								\
+    u64 cnt = mem->size / item_size;				\
+    struct {							\
+      KeyType key;						\
+      ValueType value;						\
+    } __attribute__((packed)) * data = mem->ptr;					\
+								\
+    for(size_t i = 0; i < cnt; i++){				\
+      if(data[i].key == key)					\
+	return *value = data[i].value, true;			\
+								\
+    }								\
+    return false;						\
+								\
+  }								\
+								\
+  void clear_ ## Name(){					\
+    persisted_mem_area * mem = Name ## Initialize();		\
+    mem_area_realloc(mem, 1);					\
+  }								\
+  void unset_## Name(KeyType key){				\
+    size_t item_size = sizeof(key) + sizeof(ValueType);		\
+    persisted_mem_area * mem = Name ## Initialize();		\
+								\
+    u64 cnt = mem->size / item_size;				\
+    struct {							\
+      KeyType key;						\
+      ValueType value;						\
+    } __attribute__((packed)) * data = mem->ptr;					\
+								\
+    for(size_t i = 0; i < cnt; i++){				\
+      if(data[i].key == key){					\
+	data[i].key = 0;break;					\
+      }								\
+								\
+    }								\
   }									
 
 #define CREATE_MULTI_TABLE_DECL(Name, KeyType, ValueType)		\
@@ -142,17 +164,17 @@ void * find_item(const char * table, u64 itemid, u64 size, bool create);
   void clear_ ## Name();						
        
 #define CREATE_MULTI_TABLE(Name, KeyType, ValueType)\
+  void KeyType ##_table_initialized(KeyType ## _table_info);	\
   persisted_mem_area * Name ## Initialize(){   \
     static persisted_mem_area * mem = NULL;   \
     if(mem == NULL){			      \
       mem = create_mem_area(#Name);      \
+      KeyType ## _table_initialized((KeyType ## _table_info){});	\
     }					      \
     return mem;				      \
   }					      \
 							\
   void add_ ## Name(KeyType key, ValueType value){	\
-								\
-								\
     persisted_mem_area * mem = Name ## Initialize();		\
     struct {							\
       KeyType key;						\
@@ -215,7 +237,6 @@ void * find_item(const char * table, u64 itemid, u64 size, bool create);
     }									\
   									\
     return index;							\
-									\
   }									\
   void clear_item_ ## Name(KeyType key){				\
     size_t item_size = sizeof(key) + sizeof(ValueType);			\

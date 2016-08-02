@@ -1,29 +1,20 @@
 #version 410
 
 uniform vec4 color;
+uniform sampler2D tex;
+uniform int mode;
 
-in vec2 fragment;
 uniform vec2 size;
-
+in vec2 uv;
 out vec4 fragcolor;
 
-float udRoundBox( vec2 p, vec2 b, float r )
-{
-  return length(max(abs(p)-b, 0.0))-r;
-}
-
-
-
 void main(){
-
-  //  if(length(abs(fragment) - 3) - 10 > 0)
-  //  discard;
-  //if(udRoundBox(fragment,size * 0.5, 10) > 0)
-  //  discard;
-  
-  fragcolor = color;
-  
-  //fragcolor.r = abs(fragment).x - size.x;
-  //fragcolor.y = udRoundBox(fragment, size * 0.5, 0.0);
-  //fragcolor.x = fragment.x;
+  if(mode == 1){
+    vec4 col = texture(tex, uv);
+    if(col.x >=1 && col.y >= 1 && col.z >=1 && col.a >= 1)
+      discard;
+    fragcolor = col;
+  }else{
+    fragcolor = vec4(color);
+  }  
 }

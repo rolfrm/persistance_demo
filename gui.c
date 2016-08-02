@@ -8,6 +8,7 @@
 #include "gui_test.h"
 #include "persist_oop.h"
 #include "gui.h"
+
 CREATE_TABLE(once,u64,u8);
 
 bool once(u64 itemid){
@@ -437,35 +438,55 @@ void measure_rectangle(u64 rect_id, vec2 * size){
     *size =rect->size;
   
 }
-
 void rect_render(vec3 color, vec2 offset, vec2 size){
+  rect_render2(color, offset, size, 0, vec2_zero, vec2_zero);
+}
+void rect_render2(vec3 color, vec2 offset, vec2 size, i32 tex, vec2 uv_offset, vec2 uv_size){
 		
   static int initialized = false;
   static int shader = -1;
+  static int color_loc;
+  static int offset_loc;
+  static int size_loc;
+  static int window_size_loc;
+  //static int tex_loc;
+  static int mode_loc;
+  static int uv_offset_loc, uv_size_loc;
   if(!initialized){
     char * vs = read_file_to_string("rect_shader.vs");
     char * fs = read_file_to_string("rect_shader.fs");
     shader = load_simple_shader(vs, strlen(vs), fs, strlen(fs));
     logd("Shader: %i\n", shader);
     initialized = true;
+    color_loc = glGetUniformLocation(shader, "color");
+    offset_loc = glGetUniformLocation(shader, "offset");
+    size_loc = glGetUniformLocation(shader, "size");
+    window_size_loc = glGetUniformLocation(shader, "window_size");
+    //tex_loc = glGetUniformLocation(shader, "tex");
+    mode_loc = glGetUniformLocation(shader, "mode");
+    uv_offset_loc = glGetUniformLocation(shader, "uv_offset");
+    uv_size_loc = glGetUniformLocation(shader, "uv_size");
   }
   glUseProgram(shader);
-  
-  thickness corner = {};
-  
-  int color_loc = glGetUniformLocation(shader, "color");
-  int offset_loc = glGetUniformLocation(shader, "offset");
-  int size_loc = glGetUniformLocation(shader, "size");
-  int window_size_loc = glGetUniformLocation(shader, "window_size");
-  int roundness_loc = glGetUniformLocation(shader, "roundness");
+  if(tex != 0){
+    glUniform1i(mode_loc, 1);
+    glUniform2f(uv_offset_loc, uv_offset.x, uv_offset.y);
+    glUniform2f(uv_size_loc, uv_size.x, uv_size.y);
+    //glUniform1i(tex_loc, 0);
+    glBindTexture(GL_TEXTURE_2D, tex);
+  }
+  else
+    glUniform1i(mode_loc, 0);
 
-  glUniform4f(roundness_loc, corner.left, corner.up, corner.right, corner.down);
   glUniform4f(color_loc, color.x, color.y, color.z, 1.0);
   glUniform2f(offset_loc, offset.x, offset.y);
   glUniform2f(size_loc, size.x, size.y);
   glUniform2f(window_size_loc, window_size.x, window_size.y);
+  
+
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
+
 
 void render_rectangle(u64 rect_id){
   rectangle * rect = find_rectangle(rect_id, false);
@@ -477,7 +498,6 @@ void render_rectangle(u64 rect_id){
   if(get_is_mouse_over(rect_id))
     rect_render(vec3_new(1,1,1), vec2_new(offset.x - 2, offset.y - 2), vec2_new(size.x + 4, size.y + 4));
   rect_render(color, offset, size);
-
 }
 
 void rectangle_mouse_over(u64 control, double x, double y, u64 method){

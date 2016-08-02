@@ -38,6 +38,7 @@ control_pair * get_control_pair_parent(u64 parent_id, u64 * index);
 rectangle * get_rectangle(u64 id);
 rectangle * find_rectangle(u64 id, bool create);
 void rect_render(vec3 color, vec2 offset, vec2 size);
+void rect_render2(vec3 color, vec2 offset, vec2 size, i32 tex, vec2 uv_offset, vec2 uv_scale);
 u64 get_textline(u64 id);
 stackpanel * get_stackpanel(u64 id);
 void init_gui();
@@ -77,4 +78,3 @@ extern int key_release;
 extern int key_press;
 extern int key_repeat;
 extern int mod_ctrl;
-

@@ -6,6 +6,8 @@ typedef struct{
   int fd;
 }persisted_mem_area;
 
+typedef persisted_mem_area mem_area;
+
 persisted_mem_area * create_mem_area(const char * name);
 void mem_area_realloc(persisted_mem_area * area, u64 size);
 

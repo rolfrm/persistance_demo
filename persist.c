@@ -33,6 +33,25 @@ persisted_mem_area * get_mem_area_by_ptr(const void * ptr){
 }
 
 persisted_mem_area * create_mem_area(const char * name){
+  ASSERT(name[0] != '/' && name[0] != 0);
+  {
+    char * pt = (char * )name;
+    while(true){
+      char * slash = strchr(pt, '/');
+      if(slash == NULL) break;
+      if(slash != NULL && slash[-1] != '\\'){
+	size_t size = slash - name;
+	char s[20];
+	strcpy(s, name);
+	s[size] = 0;
+	char buf[100];
+	sprintf(buf, "data/%s", s);
+	mkdir(buf, 0777);
+      }
+      pt = slash + 1;
+      ASSERT(pt[0] != '/' && pt[0] != 0);
+    }
+  }
   const size_t min_size = 1;
   const char * data_directory = "data";
   mkdir(data_directory, 0777);

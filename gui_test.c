@@ -9,6 +9,45 @@
 #include "persist_oop.h"
 #include "gui.h"
 #include "console.h"
+#include "animation.h"
+void * memmem2(void * haystack, size_t haystack_size, void * needle, size_t needle_size, size_t stride){
+  void * end = haystack + haystack_size;
+  for(;haystack < end; haystack += stride)
+    if(memcmp(haystack, needle, needle_size) == 0)
+      return haystack;
+  return NULL;
+}
+
+void * table_lookup(u64_table_info * table, void * key, void ** pt){
+  mem_area * mem = table->mem;
+  u64 item_size = table->value_size + table->key_size;
+  u64 size = mem->size;
+  if(*pt == NULL)
+    *pt = mem->ptr;
+  else
+    size = size - (*pt - mem->ptr);
+  
+  void * result = memmem2(*pt, size, key, table->key_size, item_size);
+  if(result != NULL)
+    *pt = result + item_size;
+  return result;
+}
+/*
+void * table_insert(u64_table_info * table, void * key, void * value){
+  if(table->compare == NULL){
+    
+      
+    
+    if(!table->is_multi_table){
+      void * ptr = NULL;
+      ptr = table_lookup(table, key, ptr);
+      
+    }
+    
+  }else{
+
+  }
+  }*/
 
 vec3 vec3_rand(){
   float rnd(){ return 0.001 * (rand() % 1000); }
@@ -42,7 +81,7 @@ void measure_game_board(u64 id, vec2 * size){
 
 void render_game_board(u64 id){
   UNUSED(id);
-  rect_render(vec3_new(0.3,0.3,0.6), shared_offset, shared_size);
+  rect_render(vec3_new(1.0,1.0,1.0), shared_offset, shared_size);
   u64 board_element_cnt = 0;
   u64 bodies[10];
   size_t iter = 0;
@@ -54,8 +93,14 @@ void render_game_board(u64 id){
       if(!try_get_color(bodies[i], &color)){
 	color = vec3_new(1,0,0);
       }
-      vec2 size = vec2_scale(b.size, 10);
-      vec2 position = vec2_scale(b.position, 10);
+      vec2 size = b.size;
+      vec2 position = b.position;
+      size.x = floor(size.x);
+      size.y = floor(size.y);
+      position.x = floor(position.x);
+      position.y = floor(position.y);
+      size = vec2_scale(size, 7);
+      position = vec2_scale(position, 7);
       if(size.x == 0){
 	size.x = 2;
 	position.x -= 1;
@@ -68,7 +113,12 @@ void render_game_board(u64 id){
 	position.x -= 1;
 	size.x += 2;
       }
-      rect_render(color,position , size);
+      u64 anim = get_animation(bodies[i]);
+      if(anim != 0){
+	render_animated(color, position, size, 0.0f, anim);
+      }else{
+	rect_render(color,position , size);
+      }
       set_body(bodies[i], b);
     }
     
@@ -275,8 +325,6 @@ void update_game_board(u64 id){
 	  for(int y = 0; y <= b.size.y; y++){
 	    for(int x = 0; x <= b.size.x; x++){
 	      wall_kind wall = get_wall_at(x + b.position.x, y + b.position.y);
-	      if(bodies[i] == 28)
-		logd("%i %i %i\n", x, y, wall);
 	      if(wall == WALL_NONE) continue;
 	      if(wall == WALL_FULL) {
 		did_collide = true;
@@ -400,8 +448,67 @@ u64 parse_command(u64 id, const char * str, command_arg * out_args, u64 * in_out
   return 0;
 }
 
+struct {
+  size_t count;
+  u64_table_info * infos;
+}tables;
+
+void u64_table_initialized(u64_table_info table_info){
+  UNUSED(table_info);
+  //list_push2(tables.infos, tables.count, table_info);
+}
+
+void erase_item(u64 id){
+  for(size_t i = 0; i < tables.count; i++)
+    tables.infos[i].remove(&id);
+}
+
+CREATE_TABLE(test, u64, vec3);
+
 void test_gui(){
 
+  u64 anim_tex = intern_string("Test anim");
+
+  if(once(anim_tex)){
+    set_textures(anim_tex, "anim.png");
+  }
+  clear_texture_sections();
+  load_pixel_frame(anim_tex, 0, 10, 7, 16);
+  load_pixel_frame(anim_tex, 7, 10, 14, 16);
+  load_pixel_frame_center_of_mass(anim_tex, 14, 10, 21, 16, 15, 13);
+  
+  u64 anim1 = intern_string("Test anim1");
+  if(once(anim1)){
+    add_animation_frames(anim1, (animation_frame){.section = 0, .time = 0.1});
+    add_animation_frames(anim1, (animation_frame){.section = 1, .time = 0.1});
+    add_animation_frames(anim1, (animation_frame){.section = 2, .time = 0.1});
+    set_animation_texture(anim1, anim_tex);
+  }
+  texture_section sec[3];
+  u64 idx = 0;
+
+  u64 c = iter_texture_sections(anim_tex, sec, 3, &idx);
+  logd("%i %i %i\n", anim_tex, idx, c);
+  ASSERT(c == 3);
+  
+  /*
+  set_test(3, vec3_new(10,10,10));
+  set_test(5, vec3_new(13,13,13));
+  set_test(8, vec3_new(16,15,14));
+  struct{
+    u64 key;
+    vec3 value;
+  }__attribute__((packed)) val;
+  logd("VAL: %i %i\n", sizeof(val), 8 + sizeof(vec3));
+  u64 key = 5;
+  void * pt = NULL;
+  pt = table_lookup(tables.infos, &key, &pt);
+  vec3 * kvpair = pt;
+  if(kvpair == NULL)
+    logd("Not found..\n");
+  else
+    logd("Table count: %i %f\n", tables.count, kvpair->x);
+  */
   init_gui();
   window * win = make_window(4);
   sprintf(win->title, "%s", "Test Window");
@@ -410,7 +517,6 @@ void test_gui(){
   u64 game_board = intern_string("game board");
   load_game_board(game_board);
   add_control(win->id, game_board);
-
 
   u64 ball = intern_string("Ball");
   if(once(ball)){
@@ -429,6 +535,7 @@ void test_gui(){
   }
   
   u64 player = intern_string("Player");
+  set_animation(player, anim1);
   logd("Player: %i\n", player);
   set_color(player, vec3_new(0,0,1));
   if(once(player)){
@@ -640,6 +747,21 @@ void test_gui(){
   define_method(exit_cmd, invoke_command_method, (method) exit_board);
   set_should_exit(game_board, false);
 
+
+  command_state do_erase(u64 cmd, u64 id){
+    UNUSED(id);
+    command_arg arg;
+    if(get_command_args(cmd, &arg, 1) == 0) return CMD_DONE;
+    if(arg.type == COMMAND_ARG_ENTITY){
+      erase_item(arg.id);
+    }
+    return CMD_DONE;
+  }
+  u64 erase_cmd = intern_string("erase");
+  define_subclass(erase_cmd, command_class);
+  add_available_commands(game_board, erase_cmd);
+  define_method(erase_cmd, invoke_command_method, (method) do_erase);
+  
   command_state do_throw(u64 cmd, u64 id, u64 itemid){
     command_arg arg;
     logd("Executing throw!\n");
@@ -689,144 +811,6 @@ void test_gui(){
   define_method(ls_cmd, invoke_command_method, (method) do_ls);
   add_available_commands(player, ls_cmd);
   
-  
-  stackpanel * panel = get_stackpanel(intern_string("stackpanel1"));
-  set_horizontal_alignment(panel->id, HALIGN_CENTER);
-  panel->orientation = ORIENTATION_VERTICAL;
-  set_margin(panel->id, (thickness){30,30,20,20});
-  ASSERT(panel->id != win->id && panel->id != 0);
-  add_control(win->id, panel->id);
-  rectangle * rect = get_rectangle(intern_string("rect1"));
-  define_method(rect->id, mouse_down_method, (method) rectangle_clicked);
-  if(once(rect->id)){
-    rect->size = vec2_new(30, 30);
-    rect->color = vec3_new(1, 0, 0);
-    set_margin(rect->id, (thickness){1,1,3,3});
-    set_corner_roundness(rect->id, (thickness) {1, 1, 1, 1});
-  }
-  add_control(panel->id, rect->id);
-  ASSERT(rect->id != panel->id);
-
-  rect = get_rectangle(intern_string("rect2"));
-  if(once(rect->id)){
-    rect->size = vec2_new(30, 30);
-    rect->color = vec3_new(1, 1, 0);
-    set_margin(rect->id, (thickness){1,1,3,3});
-    thickness readback = get_margin(rect->id);
-    logd("%i: %f %f %f %f\n", rect->id, readback.left, readback.up, readback.right, readback.down);
-    ASSERT(get_margin(rect->id).up == 1);
-    
-    add_control(panel->id, rect->id);
-  }
-  set_horizontal_alignment(rect->id, HALIGN_RIGHT);
-  rect->color = vec3_new(1,0,0);
-  rect = get_rectangle(intern_string("rect3"));
-  if(once(rect->id)){
-    set_margin(rect->id, (thickness){1,1,1,3});
-    rect->size = vec2_new(30, 30);
-    rect->color = vec3_new(1, 1, 1);
-    add_control(panel->id, rect->id);
-  }
-  
-  u64 txtid = get_textline(intern_string("txt1"));
-  if(once(txtid)){
-    set_text(txtid, "Click me!");
-    set_margin(txtid, (thickness){40,3,40,3});
-  }
-  
-  stackpanel * panel2 = get_stackpanel(intern_string("stackpanel_nested"));
-  add_control(panel->id, panel2->id);
-  add_control(panel2->id, rect->id);
-
-  u64 btn_test = intern_string("button_test");
-  if(once(btn_test)){
-    set_margin(btn_test, (thickness) {10, 1, 10, 1});
-    define_subclass(btn_test, ui_element_class);
-  }
-
-  void rectangle_clicked(u64 control, double x, double y){
-    UNUSED(x);UNUSED(y);
-    rectangle * r = get_rectangle(control);
-    r->color = vec3_rand();
-  }
-  define_method(rectangle_class, mouse_down_method, (method) rectangle_clicked);
-  
-  int color_idx = 0;
-  vec3 colors[] = {vec3_new(1,0,0), vec3_new(0,1,0), vec3_new(0, 0, 1)};
-  
-  void button_clicked2(u64 control, double x, double y){
-    UNUSED(x);UNUSED(y);UNUSED(control);
-    logd("Clicked!\n");
-    rectangle * r = get_rectangle(intern_string("rect4"));
-    r->color = colors[color_idx];
-    color_idx = (color_idx + 1) % array_count(colors);
-  }
-
-  void button_render(u64 control){
-    u64 index = 0;
-    control_pair * child_control = NULL;
-    vec2 _size = vec2_zero;
-    while((child_control = get_control_pair_parent(control, &index))){
-       if(child_control == NULL)
-	break;
-       rectangle * rect = find_rectangle(child_control->child_id, false);
-       if(rect != NULL)
-	 continue;
-       vec2 size = measure_sub(child_control->child_id);
-       _size = vec2_max(_size, size);
-    }
-    index = 0;
-    while((child_control = get_control_pair_parent(control, &index))){
-      if(child_control == NULL)
-	break;
-      rectangle * rect = find_rectangle(child_control->child_id, false);
-      if(rect == NULL) continue;
-      rect->size = _size;
-    }
-    index = 0;
-    u64 base = get_baseclass(control, &index);
-    method base_method = get_method(base, render_control_method);
-    ASSERT(base_method != NULL);
-    base_method(control);      
-  }
-  
-  define_method(btn_test, mouse_down_method, (method) button_clicked2);
-  define_method(btn_test, render_control_method, (method) button_render);
-  
-  rect = get_rectangle(intern_string("rect4"));
-  if(once(rect->id)){
-    set_margin(rect->id, (thickness){0,0,0,0});
-    rect->size = vec2_new(40, 40);
-    rect->color = vec3_new(0.5, 0.5, 0.5);
-  }
-  add_control(btn_test, rect->id);
-  add_control(btn_test, txtid);
-  add_control(panel2->id, btn_test);
-
-  rect = get_rectangle(intern_string("rect5"));
-  if(once(rect->id)){
-    set_margin(rect->id, (thickness){3,3,3,3});
-    rect->size = vec2_new(100, 30);
-    rect->color = vec3_new(1, 1, 1);
-  }
-  add_control(panel->id, rect->id);
-
-  rect = get_rectangle(intern_string("rect6"));
-  if(once(rect->id)){
-    set_margin(rect->id, (thickness){1,1,1,3});
-    rect->size = vec2_new(30, 50);
-    rect->color = vec3_new(1, 1, 1);
-  }
-  add_control(panel->id, rect->id);
-  
-  rect = get_rectangle(intern_string("rect7"));
-  if(once(rect->id)){
-    set_margin(rect->id, (thickness){6,6,6,6});
-    rect->size = vec2_new(50, 30);
-    rect->color = vec3_new(1, 0, 1);
-  }
-  add_control(panel2->id, rect->id);
-
   u64 console = intern_string("console");
   set_focused_element(win->id, console);
   set_console_height(console, 300);
@@ -904,12 +888,12 @@ void test_gui(){
     vsprintf(buf, fmt, lst);
     push_console_history(console, buf);
   }
-  iron_log_printer = print_console;
+  //iron_log_printer = print_console;
   
   while(!get_should_exit(game_board)){
     update_game_board(game_board);
     window * w = persist_alloc("win_state", sizeof(window));
-    int cnt = (int)(persist_size(w)  / sizeof(window));
+    int cnt = (int)(persist_size(w) / sizeof(window));
     bool any_active = false;
     for(int j = 0; j < cnt; j++){
       if(!w[j].id != 0) continue;
