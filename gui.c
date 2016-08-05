@@ -6,6 +6,7 @@
 
 #include <GLFW/glfw3.h>
 #include "persist_oop.h"
+#include "sortable.h"
 #include "gui.h"
 
 GLFWwindow * find_glfw_window(u64 id);
@@ -227,7 +228,7 @@ window * make_window(u64 id){
 }
 CREATE_TABLE(margin, u64, thickness);
 CREATE_TABLE(corner_roundness, u64, thickness);
-CREATE_TABLE(color, u64, vec3);
+CREATE_TABLE2(color, u64, vec3);
 CREATE_TABLE(vertical_alignment, u64, vertical_alignment);
 CREATE_TABLE(horizontal_alignment, u64, horizontal_alignment);
 

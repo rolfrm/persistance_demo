@@ -2,12 +2,13 @@
 #include "persist.h"
 #include "persist_oop.h"
 #include "gui.h"
-#include "command.h"
 #include "sortable.h"
+#include "command.h"
+
 #include "game_board.h"
 
 CREATE_TABLE(command_invocation, u64, u64);
-CREATE_MULTI_TABLE(command_queue, u64, u64);
+CREATE_MULTI_TABLE2(command_queue, u64, u64);
 CREATE_MULTI_TABLE(command_args, u64, command_arg);
 CREATE_MULTI_TABLE(available_commands, u64, u64);
 CREATE_STRING_TABLE(command_name, u64);

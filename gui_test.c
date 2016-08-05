@@ -9,9 +9,10 @@
 #include "persist_oop.h"
 #include "gui.h"
 #include "console.h"
+#include "sortable.h"
 #include "animation.h"
 #include "command.h"
-#include "sortable.h"
+
 #include "game_board.h"
 
 CREATE_TABLE(damage, u64, float);
@@ -105,20 +106,26 @@ void update_alien_faction(u64 alien_faction, u64 player_faction){
   u64 cmd_inv = 0;
   idx = 0;
   while(0 != (c = iter_all_faction(id, faction, array_count(faction), &idx))){
-    for(u64 i = 0; i < c; i++){
-      if(faction[i] == alien_faction){
-	u64 existing_cmd = 0;
-	get_command_queue(id[i], &existing_cmd, 1);
-	if( existing_cmd == 0){
-	  if(cmd_inv == 0){
-	    cmd_inv = get_unique_number();
-	    add_command_args(cmd_inv, arg);
-	    set_command_invocation(cmd_inv, move_cmd);
-	  }
-	  add_command_queue(id[i], cmd_inv);
-	}
-      }
+    u64 j = 0;
+    for(u64 i = 0; i < c; i++)
+      if(faction[i] == alien_faction)
+	id[j++] = id[i];
+    u64 commands[j];
+    memset(commands, 0, sizeof(commands));
+    lookup_command_queue(id, commands, j);
+    u64 k = 0;
+    for(u64 i = 0; i < j; i++)
+      if(commands[i] == 0)
+	id[k++] = id[i];
+    if(k == 0) continue;
+    if(cmd_inv == 0){
+      cmd_inv = get_unique_number();
+      add_command_args(cmd_inv, arg);
+      set_command_invocation(cmd_inv, move_cmd);
     }
+    for(u64 i = 0; i < k; i++)
+      commands[i] = cmd_inv;
+    insert_command_queue(id, commands, k);
   }
 }
 
@@ -314,19 +321,6 @@ void test_gui(){
     }
   }
   
-  for(int i = 0; i < 50; i++){
-    char buffer[20];
-    sprintf(buffer, "alien_%i", i);
-    u64 alien = intern_string(buffer);
-    if(once(alien)){
-      set_animation(alien, alien_anim);
-      set_body(alien, (body){vec2_new(randf32() * 100, randf32() * 100), vec2_new(2,2)});
-      set_color(alien, vec3_new(1,1,1));
-      set_faction(alien, alien_faction);
-      add_board_elements(game_board, alien);
-    }
-  }
-
   
   {
     u64 alien = intern_string("alien2");
@@ -340,6 +334,19 @@ void test_gui(){
       set_faction(alien, alien_faction);
       set_name(alien, "alien");
     }
+  }
+  if(true){
+  for(int i = 0; i < 50; i++){
+    u64 alienID = 0x01122000000;
+    u64 alien = alienID + i;
+    if(once(alien)){
+      set_animation(alien, alien_anim);
+      set_body(alien, (body){vec2_new(randf32() * 100, randf32() * 100), vec2_new(2,2)});
+      set_color(alien, vec3_new(1,1,1));
+      set_faction(alien, alien_faction);
+      add_board_elements(game_board, alien);
+    }
+  }
   }
 
   
@@ -387,7 +394,8 @@ void test_gui(){
 
   command_state do_stop(u64 cmd, u64 id){
     UNUSED(cmd);
-    clear_item_command_queue(id);
+    u64 clear[] = {id, id ,id, id, id, id, id, id};
+    remove_command_queue(clear, array_count(clear));
     body b = get_body(id);
     set_target(id, b.position);
     set_body(id, b);
@@ -616,7 +624,7 @@ void test_gui(){
 	  }else{
 	    logd("Wielder command!\n");
 	    set_item_command_item(cmd_inv, id);
-	    add_command_queue(wielder, cmd_inv);
+	    insert_command_queue(&wielder, &cmd_inv, 1);
 	  }
 	}else{
 	
@@ -626,7 +634,7 @@ void test_gui(){
 	      cmd2(cmd_inv, id);
 	    
 	  }else
-	    add_command_queue(id, cmd_inv);
+	    insert_command_queue(&id, &cmd_inv, 1);
 	}
 	return true;
       }

@@ -13,7 +13,7 @@
 
 void table2_test();
 int main(){
-  //table2_test();
+  table2_test();
   //return 0;
   if (!glfwInit())
     return -1;

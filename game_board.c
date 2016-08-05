@@ -1,16 +1,17 @@
 #include <iron/full.h>
 #include "persist.h"
 #include "persist_oop.h"
+#include "sortable.h"
 #include "gui.h"
 #include "animation.h"
-#include "sortable.h"
+
 #include "game_board.h"
 #include "command.h"
 
 CREATE_TABLE2(body, u64, body);
 CREATE_MULTI_TABLE(board_elements, u64, u64);
 
-CREATE_TABLE(target, u64, vec2);
+CREATE_TABLE2(target, u64, vec2);
 CREATE_TABLE(is_paused, u64, bool);
 CREATE_TABLE(should_exit, u64, bool);
 CREATE_TABLE(is_instant, u64, bool);
@@ -29,9 +30,13 @@ void render_game_board(u64 id){
   rect_render(vec3_new(0.0,0.0,0.0), shared_offset, shared_size);
   u64 board_element_cnt = 0;
   u64 bodies[10];
+  u64 animations[array_count(bodies)];
   size_t iter = 0;
   do{
     board_element_cnt = iter_board_elements(id, bodies, array_count(bodies), &iter);
+    memset(animations,0,sizeof(animations));
+    lookup_animation(bodies, animations, board_element_cnt);
+
     for(u64 i = 0; i < board_element_cnt; i++){
       body b = get_body(bodies[i]);
       vec3 color;
@@ -58,9 +63,8 @@ void render_game_board(u64 id){
 	position.x -= 1;
 	size.x += 2;
       }
-      u64 anim = get_animation(bodies[i]);
-      if(anim != 0){
-	render_animated(color, position, size, 0.0f, anim);
+      if(animations[i] != 0){
+	render_animated(color, position, size, 0.0f, animations[i]);
       }else{
 	rect_render(color,position , size);
       }
@@ -92,72 +96,77 @@ typedef enum{
 }wall_kind;
 
 typedef struct{
-  wall_kind wall_chunks[16]; //4 by 4 wall chunks
+  wall_kind wall_chunks[64]; //8 by 8 wall chunks
 }mapchunk;
 
-CREATE_TABLE(map_chunks, u64, mapchunk);
+CREATE_TABLE2(map_chunks, u64, mapchunk);
 
-wall_kind get_wall_at(int x, int y){
+mapchunk * get_map_chunk_for(int x, int y){
   union{
     struct{
-      int x;
-      int y;
+      i16 head:1;
+      i32 x:31;
+      i32 y:31;
     };
     u64 index;
   }data;
-  data.x = x / 4;
-  data.y = y / 4;
-  mapchunk c = get_map_chunks(data.index);
-  return c.wall_chunks[x % 4 + (y % 4) * 4];
+  ASSERT(sizeof(data) == 8);
+  data.head = 1;
+  data.x = x / 8;
+  data.y = y / 8;
+
+  static u64 lastindex = 0;
+  static mapchunk * lastptr = NULL;
+  if(lastindex != data.index){
+    lastindex = data.index;
+    get_refs_map_chunks(&lastindex, &lastptr, 1);
+    if(lastptr == NULL)
+      set_map_chunks(lastindex, (mapchunk){});
+    get_refs_map_chunks(&lastindex, &lastptr, 1);
+  }
+  return lastptr;
+
+}
+
+wall_kind get_wall_at(int x, int y){
+  mapchunk c = *get_map_chunk_for(x, y);
+  return c.wall_chunks[x % 8 + (y % 8) * 4];
 }
 
 void set_wall_at(int x, int y, wall_kind k){
-  union{
-    struct{
-      int x;
-      int y;
-    };
-    u64 index;
-  }data;
-  data.x = x / 4;
-  data.y = y / 4;
-  mapchunk c = get_map_chunks(data.index);
-  c.wall_chunks[x % 4 + (y % 4) * 4] = k;
-  set_map_chunks(data.index, c);
+  mapchunk * p = get_map_chunk_for(x, y);
+  p->wall_chunks[x % 8 + (y % 8) * 8] = k;
 }
 
 void update_game_board(u64 id){
 
   void handle_commands(u64 entity){
-    u64 command = 1, it = 0;
+    u64 command = 1;
     while(command != 0){
-      command = 0;
-      int c = iter_command_queue(entity, &command, 1,  &it);
+      command = get_command_queue(entity);
+      if(command == 0)
+	break;
+      u64 cmd = get_command_invocation(command);
 
-      if(c == 0) break;
-      if(command != 0){
-	u64 cmd = get_command_invocation(command);
-
-	command_state (* cmd2)(u64 cmd, ...) =(void *) get_method(cmd, invoke_command_method);
-	bool pop = false;
-	if(cmd2 == NULL){
-	  pop = true;
+      command_state (* cmd2)(u64 cmd, ...) =(void *) get_method(cmd, invoke_command_method);
+      bool pop = false;
+      if(cmd2 == NULL){
+	pop = true;
+      }else{
+	u64 item = get_item_command_item(command);
+ 	
+	if(item != 0){
+	  if(cmd2(command, entity, item) == CMD_DONE)
+	    pop = true;
 	}else{
-	  u64 item = get_item_command_item(command);
-	  
-	  if(item != 0){
-	    if(cmd2(command, entity, item) == CMD_DONE)
-	      pop = true;
-	  }else{
-	    if(cmd2(command, entity) == CMD_DONE)
-	      pop = true;
-	  }
-	    
+	  if(cmd2(command, entity) == CMD_DONE)
+	    pop = true;
 	}
-	if(pop)
-	  clear_at_command_queue(it - 1);
-	else break;
+	    
       }
+      if(pop)
+	remove_command_queue(&entity, 1);
+      else break; 
     }
    }
   handle_commands(id);

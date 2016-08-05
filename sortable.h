@@ -3,6 +3,7 @@ typedef struct{
   mem_area * value_area;
   size_t key_size, value_size;
   int (*cmp)(const void * k1, const void * k2);
+  bool is_multi_table;
 }sorttable;
 
 bool sorttable_keys_sorted(sorttable * table, void * keys, u64 cnt);
@@ -28,13 +29,14 @@ void sorttable_removes(sorttable * table, void * keys, size_t cnt);
   void clear ## Name();\
   void unset_ ## Name(KeyType key);
 
-#define CREATE_TABLE2(Name, KeyType, ValueType)	\
+#define _CREATE_TABLE2(Name, KeyType, ValueType, IS_MULTI_TABLE)	\
   sorttable * Name ## _initialize(){		\
     static bool initialized = false;		\
     static sorttable table;			\
     if(!initialized){				\
       initialized = true;			\
       table = create_sorttable(sizeof(KeyType), sizeof(ValueType), #Name); \
+      table.is_multi_table = IS_MULTI_TABLE;				\
     }									\
     return &table;							\
   }									\
@@ -58,6 +60,7 @@ void sorttable_removes(sorttable * table, void * keys, size_t cnt);
   }									\
   ValueType get_ ## Name(KeyType key){					\
     ValueType value;							\
+    memset(&value, 0, sizeof(value));					\
     lookup_ ## Name(&key, &value, 1);						\
     return value;							\
   }									\
@@ -92,5 +95,8 @@ void sorttable_removes(sorttable * table, void * keys, size_t cnt);
     remove_ ## Name(&key, 1);\
     }
 			 
+#define CREATE_TABLE2(Name, KeyType, ValueType)\
+  _CREATE_TABLE2(Name, KeyType, ValueType, false)
 
-
+#define CREATE_MULTI_TABLE2(Name, KeyType, ValueType)\
+  _CREATE_TABLE2(Name, KeyType, ValueType, true)

@@ -3,9 +3,16 @@
 #include "sortable.h"
 
 bool sorttable_keys_sorted(sorttable * table, void * keys, u64 cnt){
-  for(u64 i = 0; i < cnt - 1; i++)
-    if(table->cmp(keys + (i * table->key_size), keys + ((i + 1) * table->key_size)) >= 0)
-      return false;
+  if(cnt == 0) return true;
+  if(table->is_multi_table){
+    for(u64 i = 0; i < cnt - 1; i++)
+      if(table->cmp(keys + (i * table->key_size), keys + ((i + 1) * table->key_size)) > 0)
+	return false;
+  }else{
+    for(u64 i = 0; i < cnt - 1; i++)
+      if(table->cmp(keys + (i * table->key_size), keys + ((i + 1) * table->key_size)) >= 0)
+	return false;
+  }
   return true;
 }
 
@@ -23,14 +30,16 @@ u64 sorttable_find(sorttable * table, void * key){
 }
 
 void sorttable_finds(sorttable * table, void * keys, u64 * indexes, u64 cnt){
+  ASSERT(sorttable_keys_sorted(table, keys, cnt));
   void * start = table->key_area->ptr + table->key_size;
   void * end = table->key_area->ptr + table->key_area->size;
   for(u64 i = 0; i < cnt; i++){
     u64 size = end - start;
     void * key_index = NULL;
-    void * key = keys + (i * table->key_size);
+    void * key = keys + i * table->key_size;
     if(table->cmp(key, start) == 0)
       key_index = start;
+      // todo: check if at end
     else
       key_index =bsearch(key, start, size / table->key_size, table->key_size, table->cmp);
     
@@ -53,7 +62,7 @@ static int keycmp(const u64 * k1,const  u64 * k2){
 }
 
 sorttable create_sorttable(size_t key_size, size_t value_size, const char * name){
-  sorttable table;
+  sorttable table = {};
   char pathbuf[100];
   sprintf(pathbuf, "table/%s.key", name);
   table.key_area = create_mem_area(pathbuf);
@@ -75,7 +84,7 @@ u64 sorttable_insert_key(sorttable * table, void * key){
   mem_area_realloc(table->value_area, table->value_area->size + table->value_size);
   void * pt = table->key_area->ptr;
   void * end = pt + table->key_area->size - table->key_size;
-  while(pt < end && table->cmp(pt, key) < 0)
+  while(pt < end && table->cmp(pt, key) <= 0)
     pt += table->key_size;
 
   u64 offset = (pt - table->key_area->ptr) / table->key_size;
@@ -101,12 +110,13 @@ void sorttable_insert(sorttable * table, void * key, void * value){
 }
 
 void sorttable_insert_keys(sorttable * table, void * keys, u64 * out_indexes, u64 cnt){
+  ASSERT(sorttable_keys_sorted(table, keys, cnt));
   mem_area_realloc(table->key_area, table->key_area->size + cnt * table->key_size);
   mem_area_realloc(table->value_area, table->value_area->size + cnt * table->value_size);
   void * pt = table->key_area->ptr;
   void * end = pt + table->key_area->size - table->key_size * cnt;
   for(u64 i = 0; i < cnt; i++){
-    while(pt < end && table->cmp(pt, keys) < 0)
+    while(pt < end && table->cmp(pt, keys) <= 0)
       pt += table->key_size;
 
     u64 offset = (pt - table->key_area->ptr) / table->key_size;
@@ -135,11 +145,16 @@ void sorttable_inserts(sorttable * table, void * keys, void * values, size_t cnt
   u64 indexes[cnt];
   sorttable_finds(table, keys, indexes, cnt);
   u64 newcnt = 0;
-  for(u64 i = 0; i < cnt; i++){
-    if(indexes[i] == 0){
-      newcnt += 1;
-    }else{
-      memcpy(table->value_area->ptr + table->value_size * indexes[i], values + table->value_size * i, table->value_size);
+  if(table->is_multi_table){
+    newcnt = cnt;
+    memset(indexes, 0, sizeof(indexes));
+  }else{
+    for(u64 i = 0; i < cnt; i++){
+      if(indexes[i] == 0){
+	newcnt += 1;
+      }else{
+	memcpy(table->value_area->ptr + table->value_size * indexes[i], values + table->value_size * i, table->value_size);
+      }
     }
   }
   u8 newkeys[newcnt * table->key_size];
@@ -226,7 +241,7 @@ void table2_test(){
     lookup_mtab2(keys2, values2, 2);
     ASSERT(values2[0] == 0 && values2[1] == 0);
   }
-    sorttable tabl = create_sorttable(sizeof(u64), sizeof(vec4), "mytab");
+  sorttable tabl = create_sorttable(sizeof(u64), sizeof(vec4), "mytab");
   {
     u64 x = 5;
     vec4 v = vec4_new(1,1,1,1);
@@ -288,4 +303,34 @@ void table2_test(){
   for(u64 i = 0; i < tabl.key_area->size / tabl.key_size; i++){
     logd("%i %i :", i, keypt[i]);vec4_print(vecs[i]); logd(" == "); vec4_print(vec4_new(i, i * 2,keypt[i], keypt[i])); logd("\n");
   }
+  {
+    sorttable tabl = create_sorttable(sizeof(u64), sizeof(vec4), "mymultitab");
+    tabl.is_multi_table = true;
+    u64 key1 = 61;
+    vec4 value = vec4_new(14, 15, 16, 17);
+    sorttable_inserts(&tabl, &key1, &value, 1);
+    value = vec4_new(1, 1, 2, 3);
+    sorttable_inserts(&tabl, &key1, &value, 1);
+
+    u64 keys[] = {61, 61, 61, 61, 61, 61, 61, 67};
+    u64 indexes[array_count(keys)];
+    sorttable_finds(&tabl,keys, indexes, array_count(keys));
+    for(u64 i = 0; i < array_count(keys); i++)
+      logd(" %i ", indexes[i]);
+    logd("\n");
+    //sorttable_inserts(&tabl, &key1, &value, 1);
+    //sorttable_inserts(&tabl, &key1, &value, 1);
+
+    logd("All keys:\n");
+    u64 * keypt = tabl.key_area->ptr;
+    vec4 * vecs = tabl.value_area->ptr;
+    for(u64 i = 0; i < tabl.key_area->size / tabl.key_size; i++){
+      logd("%i %i :", i, keypt[i]);vec4_print(vecs[i]); logd(" == "); vec4_print(vec4_new(i, i * 2,keypt[i], keypt[i])); logd("\n");
+    }
+    u64 to_remove[] = {61, 61, 61, 61};
+    sorttable_removes(&tabl, to_remove, array_count(to_remove));
+    ASSERT(tabl.key_area->size == tabl.key_size);
+    
+  }
+  //ASSERT(false);
 }

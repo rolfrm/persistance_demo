@@ -5,6 +5,7 @@
 
 #include "persist.h"
 #include "persist_oop.h"
+#include "sortable.h"
 #include "animation.h"
 #include <GLFW/glfw3.h>
 #include "game.h"
@@ -74,7 +75,7 @@ u64 load_pixel_frame_center_of_mass(u64 texture, int x, int y, int x2, int y2, i
   return 0;  
 }
 
-CREATE_TABLE(animation, u64, u64);
+CREATE_TABLE2(animation, u64, u64);
 
 struct{
   u32 count;
