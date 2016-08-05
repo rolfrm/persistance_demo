@@ -1,3 +1,41 @@
+typedef struct{
+  u64 id;
+  int width, height;
+  int x, y;
+  bool initialized;
+  char title[64];
+}window;
+
+typedef struct{
+  u64 id;
+  char name[64 - sizeof(u64)];
+}named_item;
+
+typedef enum{
+  ORIENTATION_HORIZONTAL,
+  ORIENTATION_VERTICAL
+}stackpanel_orientation;
+
+typedef struct{
+  u64 id;
+  stackpanel_orientation orientation;
+}stackpanel;
+
+typedef struct{
+  float left, up, right, down;
+}thickness;
+
+typedef struct{
+  u64 id;
+  vec2 size;
+  vec3 color;
+}rectangle;
+
+typedef struct{
+  u64 parent_id;
+  u64 child_id;
+}control_pair;
+
 typedef void (* render_prototype)(u64 id);
 typedef void (* measure_prototype)(u64 id, vec2 * size);
 typedef void (* char_handler_prototype)(u64 id, int codepoint, int mods);
@@ -78,3 +116,22 @@ extern int key_release;
 extern int key_press;
 extern int key_repeat;
 extern int mod_ctrl;
+
+named_item * get_named_item(const char * table, const char * name, bool create);
+u64 get_unique_number();
+
+void set_margin(u64 itemid, thickness t);
+thickness get_margin(u64 itemid);
+
+control_pair * add_control(u64 itemid, u64 subitem);
+
+
+void measure_child_controls(u64 control, vec2 * size);
+
+void handle_mouse_over(u64 control, double x, double y, u64 method);
+
+u64 intern_string(const char * name);
+void init_gui();
+
+stackpanel * get_stackpanel(u64 id);
+stackpanel * find_stackpanel(u64 id);

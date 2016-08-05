@@ -5,18 +5,18 @@
 #include "game.h"
 
 #include <GLFW/glfw3.h>
-#include "gui_test.h"
+//#include "gui_test.h"
 #include "persist_oop.h"
 #include "gui.h"
 #include "console.h"
 #include "animation.h"
-void * memmem2(void * haystack, size_t haystack_size, void * needle, size_t needle_size, size_t stride){
-  void * end = haystack + haystack_size;
-  for(;haystack < end; haystack += stride)
-    if(memcmp(haystack, needle, needle_size) == 0)
-      return haystack;
-  return NULL;
-}
+#include "command.h"
+#include "sortable.h"
+#include "game_board.h"
+
+CREATE_TABLE(damage, u64, float);
+CREATE_TABLE(is_dead, u64, bool);
+CREATE_TABLE(last_action, u64, u64);
 
 void * table_lookup(u64_table_info * table, void * key, void ** pt){
   mem_area * mem = table->mem;
@@ -66,388 +66,6 @@ void rectangle_clicked(u64 control, double x, double y){
   }
 }
 
-typedef struct{
-  vec2 position;
-  vec2 size;
-} body;
-
-CREATE_TABLE(body, u64, body);
-CREATE_MULTI_TABLE(board_elements, u64, u64);
-
-void measure_game_board(u64 id, vec2 * size){
-  UNUSED(id);
-  *size = vec2_new(0, 0);
-}
-
-void render_game_board(u64 id){
-  UNUSED(id);
-  rect_render(vec3_new(1.0,1.0,1.0), shared_offset, shared_size);
-  u64 board_element_cnt = 0;
-  u64 bodies[10];
-  size_t iter = 0;
-  do{
-    board_element_cnt = iter_board_elements(id, bodies, array_count(bodies), &iter);
-    for(u64 i = 0; i < board_element_cnt; i++){
-      body b = get_body(bodies[i]);
-      vec3 color;
-      if(!try_get_color(bodies[i], &color)){
-	color = vec3_new(1,0,0);
-      }
-      vec2 size = b.size;
-      vec2 position = b.position;
-      size.x = floor(size.x);
-      size.y = floor(size.y);
-      position.x = floor(position.x);
-      position.y = floor(position.y);
-      size = vec2_scale(size, 7);
-      position = vec2_scale(position, 7);
-      if(size.x == 0){
-	size.x = 2;
-	position.x -= 1;
-	position.y -= 1;
-	size.y += 2;
-      }
-      if(size.y == 0){
-	size.y = 2;
-	position.y -= 1;
-	position.x -= 1;
-	size.x += 2;
-      }
-      u64 anim = get_animation(bodies[i]);
-      if(anim != 0){
-	render_animated(color, position, size, 0.0f, anim);
-      }else{
-	rect_render(color,position , size);
-      }
-      set_body(bodies[i], b);
-    }
-    
-  }while(board_element_cnt == array_count(bodies));
-}
-
-void load_game_board(u64 id){
-  static bool initialized = false;
-  static u64 game_board_class;
-  if(!initialized){
-    initialized = true;
-    game_board_class = intern_string("game_board_class");
-    define_method(game_board_class, render_control_method, (method)render_game_board);
-    define_method(game_board_class, measure_control_method, (method)measure_game_board);
-  }
-  define_subclass(id, game_board_class);
-  
-}
-
-bool starts_with(const char *pre, const char *str)
-{
-  size_t lenpre = strlen(pre);
-  size_t lenstr = strlen(str);
-  return lenstr < lenpre ? false : strncmp(pre, str, lenpre) == 0;
-}
-
-#define UID ({u64 get_number(){static u64 number = 0; if(number == 0) number = get_unique_number2(); return number;}; get_number;})
-
-typedef enum{
-  COMMAND_ARG_POSITION,
-  COMMAND_ARG_ENTITY,
-  COMMAND_ARG_ITEM,
-
-} command_arg_type;
-
-typedef struct{
-  command_arg_type type;
-  union{
-    struct{
-      int x;
-      int y;
-    };
-    u64 id;
-  };
-
-}command_arg;
-
-CREATE_MULTI_TABLE(faction_visible_items, u64, u64);
-u64 get_visible_items(u64 id, u64 * items, u64 items_cnt){
-  UNUSED(id);
-  if(items == NULL){
-    return get_faction_visible_items(1, NULL, 10000);
-  }
-  return get_faction_visible_items(1, items, items_cnt);
-}
-
-CREATE_TABLE(command_invocation, u64, u64);
-CREATE_MULTI_TABLE(command_queue, u64, u64);
-CREATE_MULTI_TABLE(command_args, u64, command_arg);
-CREATE_MULTI_TABLE(available_commands, u64, u64);
-CREATE_STRING_TABLE(command_name, u64);
-CREATE_TABLE(target, u64, vec2);
-CREATE_TABLE(is_paused, u64, bool);
-CREATE_TABLE(should_exit, u64, bool);
-CREATE_TABLE(is_instant, u64, bool);
-CREATE_TABLE(wielded_item, u64, u64);
-CREATE_TABLE(item_command_item, u64, u64);
-CREATE_TABLE(is_wall, u64, bool);
-typedef enum{
-  CMD_DONE,
-  CMD_NOT_DONE
-}command_state;
-
-u64 invoke_command_method = 0;
-u64 command_class = 0;
-
-typedef enum{
-  WALL_NONE = 0,
-  WALL_UP = 1,
-  WALL_LEFT = 2,
-  WALL_FULL = 1 | 2,
-  WALL_HALF = 4
-}wall_kind;
-
-typedef struct{
-  wall_kind wall_chunks[16]; //4 by 4 wall chunks
-}mapchunk;
-
-CREATE_TABLE(map_chunks, u64, mapchunk);
-
-wall_kind get_wall_at(int x, int y){
-  union{
-    struct{
-      int x;
-      int y;
-    };
-    u64 index;
-  }data;
-  data.x = x / 4;
-  data.y = y / 4;
-  mapchunk c = get_map_chunks(data.index);
-  return c.wall_chunks[x % 4 + (y % 4) * 4];
-}
-
-void set_wall_at(int x, int y, wall_kind k){
-  union{
-    struct{
-      int x;
-      int y;
-    };
-    u64 index;
-  }data;
-  data.x = x / 4;
-  data.y = y / 4;
-  mapchunk c = get_map_chunks(data.index);
-  c.wall_chunks[x % 4 + (y % 4) * 4] = k;
-  set_map_chunks(data.index, c);
-}
-
-void update_game_board(u64 id){
-
-  void handle_commands(u64 entity){
-    u64 command = 1, it = 0;
-    while(command != 0){
-      int c = iter_command_queue(entity, &command, 1,  &it);
-      if(c == 0) break;
-      if(command != 0){
-	u64 cmd = get_command_invocation(command);
-	command_state (* cmd2)(u64 cmd, ...) =(void *) get_method(cmd, invoke_command_method);
-	bool pop = false;
-	if(cmd2 == NULL){
-	  pop = true;
-	}else{
-	  u64 item = get_item_command_item(command);
-	  
-	  if(item != 0){
-	    if(cmd2(command, entity, item) == CMD_DONE)
-	      pop = true;
-	  }else{
-	    if(cmd2(command, entity) == CMD_DONE)
-	      pop = true;
-	  }
-	    
-	}
-	if(pop)
-	  clear_at_command_queue(it - 1);
-	else break;
-      }
-    }
-   }
-  handle_commands(id);
-  if(get_is_paused(id))
-    return;
-  u64 board_element_cnt = 0;
-  u64 bodies[10];
-  size_t iter = 0;
-  do{
-    board_element_cnt = iter_board_elements(id, bodies, array_count(bodies), &iter);
-    for(u64 i = 0; i < board_element_cnt; i++){
-      body body;
-      if(try_get_body(bodies[i], &body)){
-	bool is_wall = get_is_wall(bodies[i]);
-	if(body.size.x < 0.1 && is_wall){
-	  wall_kind kind = WALL_LEFT;
-	  for(int y = 0; y < body.size.y; y++)
-	    set_wall_at(body.position.x, y + body.position.y, kind);
-	  
-	}else if(body.size.y < 0.1 && is_wall){
-	  wall_kind kind = WALL_UP;
-	  for(int x = 0; x < body.size.x; x++)
-	    set_wall_at(x + body.position.x, body.position.y, kind);
-	  
-	}else{
-	  wall_kind kind = is_wall ? WALL_FULL : WALL_HALF;
-	  for(int x = 0; x < body.size.x; x++){
-	    for(int y = 0; y < body.size.y; y++)
-	      set_wall_at(x + body.position.x, y + body.position.y, kind);
-	    
-	  }
-	}
-      }
-    }
-  }while(board_element_cnt == array_count(bodies));
-  iter = 0;
-    
-  do{
-    board_element_cnt = iter_board_elements(id, bodies, array_count(bodies), &iter);
-    for(u64 i = 0; i < board_element_cnt; i++){
-      handle_commands(bodies[i]);
-
-      body b = get_body(bodies[i]);
-      vec2 target;
-      if(try_get_target(bodies[i], &target)){
-	vec2 d = vec2_sub(target, b.position);
-	float dl = vec2_len(d);
-	if(dl > 0){
-	  if(dl > 1.0)
-	    d = vec2_scale(d, 1.0 / dl);
-	  else{
-	    unset_target(bodies[i]);
-	  }
-	  b.position = vec2_add(vec2_scale(d, 0.1), b.position);
-	  bool did_collide = false;
-	  for(int y = 0; y <= b.size.y; y++){
-	    for(int x = 0; x <= b.size.x; x++){
-	      wall_kind wall = get_wall_at(x + b.position.x, y + b.position.y);
-	      if(wall == WALL_NONE) continue;
-	      if(wall == WALL_FULL) {
-		did_collide = true;
-		goto end_col;
-	      }
-	      if(wall == WALL_UP && y >0){
-		did_collide = true;
-		goto end_col;
-	      }
-	      if(wall == WALL_LEFT && x > 0){
-		did_collide = true;
-		goto end_col;
-	      }
-	    }
-	  }
-	end_col:
-	  if(!did_collide)
-	    set_body(bodies[i], b);
-	}
-      }
-    }    
-  }while(board_element_cnt == array_count(bodies));
-}
-
-u64 parse_command(u64 id, const char * str, command_arg * out_args, u64 * in_out_cnt){
-  u64 visible_item_cnt = get_visible_items(id, NULL, 0);
-  u64 visible_items[visible_item_cnt];
-  get_visible_items(id, visible_items, visible_item_cnt);
-
-  u64 inventory_cnt = get_inventory(id, NULL, 10000);
-  u64 inventory[inventory_cnt];
-  get_inventory(id, inventory, inventory_cnt);
-  
-  *in_out_cnt = 0;
-  u64 avail_commands[32];
-  u64 idx = 0;
-  u64 cnt = 0;
-  while(0 < (cnt = iter_available_commands(id, avail_commands, array_count(avail_commands), &idx))){
-    for(u64 i = 0; i < cnt; i++){
-      named_item nm = unintern_string(avail_commands[i]);
-      if(false && starts_with(str, nm.name)){
-
-      }else{
-	char buf[33];
-	int offset = 0;
-	if(strcmp(str,nm.name) == 0){
-	  offset = sprintf(buf, "%s", nm.name);
-	}else{
-	  offset = sprintf(buf, "%s ", nm.name);
-	}
-	
-	if(starts_with(buf, str)){
-	  char * args_start = ((char *)str) + offset;
-	  while(*args_start != 0){
-	    while(*args_start == ' ')
-	      args_start += 1;
-	    if(*args_start == 0) break;
-	    int x, y;
-	    int c = sscanf(args_start, "%i ", &x);
-
-	    if(c == 1){
-	      while(*args_start != ' ' && *args_start != 0)
-		args_start += 1;
-	      
-	      while(*args_start == ' ')
-		args_start += 1;
-	      c += sscanf(args_start, "%i", &y);
-	      while(*args_start != ' ' && *args_start != 0)
-		args_start += 1;
-	    }
-	    if(c == 2){ 
-	      out_args->type = COMMAND_ARG_POSITION;
-	      out_args->x = x;
-	      out_args->y = y;
-	      *in_out_cnt += 1;
-	      out_args += 1;
-	      continue;
-	    }else if(c == 1)
-	      return 0;
-	    
-	    c = sscanf(args_start, "%s ", buf );
-	    
-	    if(c == 1 && strlen(buf) > 0){
-	      u64 prevcnt = *in_out_cnt;
-	      for(u64 i = 0; i < visible_item_cnt; i++){
-		char buf2[33];
-		u64 c2 = get_name(visible_items[i], buf2, 33);
-	        if(c2 > 0 && strcmp(buf2, buf) == 0){
-		  
-		  args_start += strlen(buf2);
-		  out_args->type = COMMAND_ARG_ENTITY;
-		  out_args->id = visible_items[i];
-		  *in_out_cnt += 1;
-		  break;
-		}
-	      }
-	      for(u64 i = 0; i < inventory_cnt; i++){
-		char buf2[33];
-		u64 c2 = get_name(inventory[i], buf2, 33);
-	        if(c2 > 0 && strcmp(buf2, buf) == 0){
-		  
-		  args_start += strlen(buf2);
-		  out_args->type = COMMAND_ARG_ITEM;
-		  out_args->id = inventory[i];
-		  *in_out_cnt += 1;
-		  break;
-		}
-	      }
-	      if(prevcnt == *in_out_cnt){
-		return 0;
-	      }
-	    }else return 0;
-	    
-	  }
-	  
-	  return avail_commands[i];
-	}
-      }
-    }
-  }
-  return 0;
-}
-
 struct {
   size_t count;
   u64_table_info * infos;
@@ -455,6 +73,7 @@ struct {
 
 void u64_table_initialized(u64_table_info table_info){
   UNUSED(table_info);
+  logd("Initialize:..\n");
   //list_push2(tables.infos, tables.count, table_info);
 }
 
@@ -463,7 +82,45 @@ void erase_item(u64 id){
     tables.infos[i].remove(&id);
 }
 
-CREATE_TABLE(test, u64, vec3);
+void update_alien_faction(u64 alien_faction, u64 player_faction){
+  static u64 move_cmd = 0;
+
+  if(move_cmd == 0)
+    move_cmd = intern_string("alien attack");
+  u64 player = 0;
+  u64 id[10], faction[10], idx = 0;
+  u64 c = 0;
+
+  while(0 != (c = iter_all_faction(id, faction, array_count(faction), &idx))){
+    for(u64 i = 0; i < c; i++){
+      if(faction[i] == player_faction && !get_is_dead(id[i])){
+	player = id[i];
+	goto player_found;
+      }
+    }
+  }
+  return;
+ player_found:;
+  command_arg arg = { .type = COMMAND_ARG_ENTITY, .id = player};
+  u64 cmd_inv = 0;
+  idx = 0;
+  while(0 != (c = iter_all_faction(id, faction, array_count(faction), &idx))){
+    for(u64 i = 0; i < c; i++){
+      if(faction[i] == alien_faction){
+	u64 existing_cmd = 0;
+	get_command_queue(id[i], &existing_cmd, 1);
+	if( existing_cmd == 0){
+	  if(cmd_inv == 0){
+	    cmd_inv = get_unique_number();
+	    add_command_args(cmd_inv, arg);
+	    set_command_invocation(cmd_inv, move_cmd);
+	  }
+	  add_command_queue(id[i], cmd_inv);
+	}
+      }
+    }
+  }
+}
 
 void test_gui(){
 
@@ -476,14 +133,65 @@ void test_gui(){
   load_pixel_frame(anim_tex, 0, 10, 7, 16);
   load_pixel_frame(anim_tex, 7, 10, 14, 16);
   load_pixel_frame_center_of_mass(anim_tex, 14, 10, 21, 16, 15, 13);
+
+  load_pixel_frame(anim_tex, 1, 17, 6, 22);
+  load_pixel_frame(anim_tex, 6, 17, 11, 22);
+  load_pixel_frame(anim_tex, 11, 17, 16, 22);
+  load_pixel_frame(anim_tex, 16, 17, 21, 22);
+  load_pixel_frame(anim_tex, 21, 17, 26, 22);
+  load_pixel_frame(anim_tex, 26, 17, 31, 22);
+
+  load_pixel_frame(anim_tex, 42, 10, 48, 16);
+  load_pixel_frame_center_of_mass(anim_tex, 49, 10, 56, 16, 51 ,13);
+  load_pixel_frame_center_of_mass(anim_tex, 57, 10, 64, 16, 59, 13);
+  load_pixel_frame(anim_tex, 65, 10, 71, 16);
+
+  load_pixel_frame(anim_tex, 0, 24, 9, 29);
+  load_pixel_frame(anim_tex, 10, 24, 19, 29);
   
-  u64 anim1 = intern_string("Test anim1");
+
+  u64 anim1 = intern_string("PlayerWalk");
   if(once(anim1)){
     add_animation_frames(anim1, (animation_frame){.section = 0, .time = 0.1});
     add_animation_frames(anim1, (animation_frame){.section = 1, .time = 0.1});
     add_animation_frames(anim1, (animation_frame){.section = 2, .time = 0.1});
     set_animation_texture(anim1, anim_tex);
   }
+
+  anim1 = intern_string("PlayerShoot");
+  if(once(anim1)){
+    add_animation_frames(anim1, (animation_frame){.section = 9, .time = 0.1});
+    add_animation_frames(anim1, (animation_frame){.section = 10, .time = 0.1});
+    add_animation_frames(anim1, (animation_frame){.section = 11, .time = 0.1});
+    add_animation_frames(anim1, (animation_frame){.section = 12, .time = 0.1});
+    set_animation_texture(anim1, anim_tex);
+  }
+
+  
+  u64 anim2 = intern_string("Test anim2");
+  if(once(anim2)){
+    add_animation_frames(anim2, (animation_frame){.section = 3, .time = 0.1});
+    add_animation_frames(anim2, (animation_frame){.section = 4, .time = 0.1});
+    add_animation_frames(anim2, (animation_frame){.section = 5, .time = 0.1});
+    add_animation_frames(anim2, (animation_frame){.section = 6, .time = 0.1});
+    add_animation_frames(anim2, (animation_frame){.section = 7, .time = 0.1});
+    add_animation_frames(anim2, (animation_frame){.section = 8, .time = 0.1});
+    set_animation_texture(anim2, anim_tex);
+  }
+
+  u64 anim3 = intern_string("PlayerStill");
+  if(once(anim3)){
+    add_animation_frames(anim3, (animation_frame){.section = 0, .time = 0.1});
+    set_animation_texture(anim3, anim_tex);
+  }
+
+  u64 alien_anim = intern_string("alien_walk");
+  if(once(alien_anim)){
+    add_animation_frames(alien_anim, (animation_frame){.section = 13, .time = 0.1});
+    add_animation_frames(alien_anim, (animation_frame){.section = 14, .time = 0.1});
+    set_animation_texture(alien_anim, anim_tex);
+  }
+  
   texture_section sec[3];
   u64 idx = 0;
 
@@ -514,11 +222,15 @@ void test_gui(){
   sprintf(win->title, "%s", "Test Window");
   logd("window opened: %p\n", win);
 
+  u64 player_faction = intern_string("player faction");
+  u64 alien_faction = intern_string("alien faction");
+  
   u64 game_board = intern_string("game board");
   load_game_board(game_board);
   add_control(win->id, game_board);
 
   u64 ball = intern_string("Ball");
+  set_animation(ball, 0);//set_animation(ball, anim2);
   if(once(ball)){
     add_faction_visible_items(1, ball);
     set_name(ball, "Ball");
@@ -533,17 +245,20 @@ void test_gui(){
     set_body(target, (body){vec2_new(10, 30), vec2_new(2, 1)});
     add_board_elements(game_board, target); 
   }
-  
-  u64 player = intern_string("Player");
-  set_animation(player, anim1);
-  logd("Player: %i\n", player);
-  set_color(player, vec3_new(0,0,1));
-  if(once(player)){
-    set_name(player, "Player");
-
-    add_faction_visible_items(1, player);
-    set_body(player, (body){ vec2_new(1,1), vec2_new(2,2) });
-    add_board_elements(game_board, player);
+  u64 player;
+  {
+    player = intern_string("Player");
+    set_animation(player, intern_string("PlayerStill"));
+    logd("Player: %i\n", player);
+    set_color(player, vec3_new(0,0,1));
+    set_faction(player, player_faction);
+    if(once(player)){
+      set_name(player, "Player");
+      
+      add_faction_visible_items(player_faction, player);
+      set_body(player, (body){ vec2_new(1,1), vec2_new(2,2) });
+      add_board_elements(game_board, player);
+    }
   }
   {
     u64 wall = intern_string("Pillar");
@@ -588,6 +303,7 @@ void test_gui(){
       add_board_elements(game_board, wall);
     }
   }
+  
   {
     u64 wall = intern_string("Wall4");
     set_color(wall, vec3_new(0.2, 0.2, 0.2));
@@ -597,7 +313,36 @@ void test_gui(){
       add_board_elements(game_board, wall);
     }
   }
+  
+  for(int i = 0; i < 50; i++){
+    char buffer[20];
+    sprintf(buffer, "alien_%i", i);
+    u64 alien = intern_string(buffer);
+    if(once(alien)){
+      set_animation(alien, alien_anim);
+      set_body(alien, (body){vec2_new(randf32() * 100, randf32() * 100), vec2_new(2,2)});
+      set_color(alien, vec3_new(1,1,1));
+      set_faction(alien, alien_faction);
+      add_board_elements(game_board, alien);
+    }
+  }
 
+  
+  {
+    u64 alien = intern_string("alien2");
+    if(once(alien)){
+      logd("Loaded alien\n");
+      add_board_elements(game_board, alien);
+      add_faction_visible_items(1, alien);
+      set_animation(alien, alien_anim);
+      set_body(alien, (body){vec2_new(50,50), vec2_new(2,2)});
+      set_color(alien, vec3_new(1,1,1));
+      set_faction(alien, alien_faction);
+      set_name(alien, "alien");
+    }
+  }
+
+  
   
   clear_available_commands();
   command_class = intern_string("command class");
@@ -626,12 +371,17 @@ void test_gui(){
       x = b.position.x;
       y = b.position.y;
     }
+
     body b = get_body(id);
     float d = vec2_len(vec2_sub(b.position, vec2_new(x, y)));
     set_target(id, vec2_new(x, y));
-    if(d > 0.1)
+    if(d > 0.1){
+      //set_animation(id, intern_string("PlayerWalk"));
       return CMD_NOT_DONE;
-    return CMD_DONE;
+    }else{
+      //set_animation(id, intern_string("PlayerStill"));
+      return CMD_DONE;
+    }
   }
   define_method(move_cmd, invoke_command_method, (method) do_move);
 
@@ -787,7 +537,6 @@ void test_gui(){
   u64 throw_cmd = intern_string("throw");
   define_subclass(throw_cmd, command_class);
   define_method(throw_cmd, invoke_command_method, (method) do_throw);
-  
   add_available_commands(ball, throw_cmd);
 
   command_state do_ls(u64 cmd, u64 id){
@@ -810,6 +559,33 @@ void test_gui(){
   define_subclass(ls_cmd, command_class);
   define_method(ls_cmd, invoke_command_method, (method) do_ls);
   add_available_commands(player, ls_cmd);
+
+  command_state do_alien_attack(u64 cmd, u64 id){
+    command_arg arg;
+    if(get_command_args(cmd, &arg, 1) == 0 || arg.type != COMMAND_ARG_ENTITY)
+      return CMD_DONE;
+    if(get_is_dead(arg.id))
+      return CMD_DONE;
+    
+    if(CMD_NOT_DONE == do_move(cmd, id)) return CMD_NOT_DONE;
+    
+
+    u64 lst = get_last_action(id);
+    u64 cooldown = 500000; //500 us.
+    if(timestamp() - lst > cooldown){
+      if(randf32() < 0.3){
+	float dmg = floor(randf32() * 4.0 + 1.0);
+	set_damage(arg.id, get_damage(arg.id) + dmg);
+      }
+      set_last_action(id, timestamp());
+    }
+    
+    return CMD_NOT_DONE;
+  }
+  
+  u64 alien_attack_cmd = intern_string("alien attack");
+  define_subclass(alien_attack_cmd, command_class);
+  define_method(alien_attack_cmd, invoke_command_method, (method) do_alien_attack);
   
   u64 console = intern_string("console");
   set_focused_element(win->id, console);
@@ -856,16 +632,13 @@ void test_gui(){
       }
       return false;
     }
-    if(parse_cmd(player, 0)){
+    if(parse_cmd(player, 0) || parse_cmd(game_board, 0)){
     }else{
-      if( parse_cmd(game_board, 0)){
-      }
       u64 wielded_item = get_wielded_item(player);
       if(wielded_item != 0 && parse_cmd(wielded_item, player)){
       }else{
 	logd("Error: Unknown command '%s'\n", cmd);
       }
-  
     }
   }
 
@@ -891,7 +664,26 @@ void test_gui(){
   //iron_log_printer = print_console;
   
   while(!get_should_exit(game_board)){
+    u64 time_start = timestamp();
+    if(!get_is_paused(game_board)){
+
+      u64 id[10], idx = 0;
+      float dmg[10];
+      u64 c;
+      while(0 != (c = iter_all_damage(id, dmg, array_count(dmg), &idx))){
+	for(u64 i = 0; i < c; i++){
+	  if(dmg[i] > 20){
+	    logd("DEAD! %f\n", dmg[i]);
+	    set_is_dead(id[i], true);
+	    unset_damage(id[i]);
+	  }
+	}
+      }
+      update_alien_faction(alien_faction, player_faction);
+    }
     update_game_board(game_board);
+    u64 time_start2 = timestamp();
+    logd("DT: %i\n", time_start2 - time_start);
     window * w = persist_alloc("win_state", sizeof(window));
     int cnt = (int)(persist_size(w) / sizeof(window));
     bool any_active = false;

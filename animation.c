@@ -102,17 +102,18 @@ void render_animated(vec3 color, vec2 offset, vec2 size, float time, u64 animati
   u64 tex = get_animation_texture(animation);
   if(tex == 0) return;
   UNUSED(time);
-  animation_frame frame;
+  animation_frame frame[10];
   texture_section sec[20]; 
   size_t idx = 0;
-  iter_animation_frames(animation, &frame, 1, &idx);
-  u64 ts = (((double)timestamp()) * 5e-6 );
+  u64 c = iter_animation_frames(animation, frame, array_count(frame), &idx);
+  u64 ts = (((double)timestamp()) * 0.000005 );
   idx = 0;
-  u64 c = iter_texture_sections(tex, sec, 20, &idx);
-  ts = ts % c;
+  iter_texture_sections(tex, sec, 20, &idx);
+  ts = frame[ts % c].section;
+
   i32 gltex = get_animation_gltexture(tex);
 
-  vec2 render_size = vec2_scale(sec[ts].pixel_size, 2);
+  vec2 render_size = vec2_scale(sec[ts].pixel_size, 3);
   vec2 center = vec2_add(offset, vec2_scale(size, 0.5));
   vec2 offset2 = vec2_sub(center, vec2_scale(render_size, 0.5));
   rect_render2(color, vec2_add(offset2, sec[ts].render_offset), render_size , gltex, sec[ts].uv_offset, sec[ts].uv_size);

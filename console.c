@@ -5,7 +5,6 @@
 #include "game.h"
 
 #include <GLFW/glfw3.h>
-#include "gui_test.h"
 #include "persist_oop.h"
 #include "gui.h"
 #include "console.h"

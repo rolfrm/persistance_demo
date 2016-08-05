@@ -1,12 +1,12 @@
 OPT = -g3 -O0
-LIB_SOURCES =  iron/mem.c iron/process.c iron/array.c iron/math.c iron/time.c  iron/log.c iron/fileio.c iron/linmath.c iron/test.c iron/error.c iron/image.c iron/gl.c iron/coroutines2.c main.c persist.c shader_utils.c game.c hsv.c gui_test.c persist_oop.c stb_truetype.c gui.c console.c stb_image.c animation.c
+LIB_SOURCES =  iron/mem.c iron/process.c iron/array.c iron/math.c iron/time.c  iron/log.c iron/fileio.c iron/linmath.c iron/test.c iron/error.c iron/image.c iron/gl.c iron/coroutines2.c main.c persist.c shader_utils.c hsv.c gui_test.c persist_oop.c stb_truetype.c gui.c console.c stb_image.c animation.c command.c game_board.c sortable.c #game.c main2.c
 CC = gcc
 TARGET = run.exe
 LIB_OBJECTS =$(LIB_SOURCES:.c=.o)
 LDFLAGS= -L. $(OPT) -Wextra -fopenmp #-Wl,-stack_size,0x100000000 -lmcheck #-ftlo #setrlimit on linux 
 LIBS= -ldl -lm -lGL -lpthread -lglfw -lGLEW -lpng
 ALL= $(TARGET)
-CFLAGS = -I. -std=c11 -gdwarf-2 -c $(OPT) -Wall -Wextra -Werror=implicit-function-declaration -Wformat=0 -D_GNU_SOURCE -fdiagnostics-color -Wextra  -Wwrite-strings -fbounds-check -Werror -msse4.2 -mtune=corei7 -fopenmp -ffast-math -Werror=maybe-uninitialized -Wsuggest-attribute=const #-DDEBUG  
+CFLAGS = -I. -std=c11 -gdwarf-2 -c $(OPT) -Wall -Wextra -Werror=implicit-function-declaration -Wformat=0 -D_GNU_SOURCE -fdiagnostics-color -Wextra  -Wwrite-strings -fbounds-check -Werror -msse4.2 -mtune=corei7 -fopenmp -ffast-math -Werror=maybe-uninitialized # -Wsuggest-attribute=const #-DDEBUG  
 
 $(TARGET): $(LIB_OBJECTS)
 	$(CC) $(LDFLAGS) $(LIB_OBJECTS) $(LIBS) -o $@

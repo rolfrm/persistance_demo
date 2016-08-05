@@ -34,6 +34,9 @@ persisted_mem_area * get_mem_area_by_ptr(const void * ptr){
 
 persisted_mem_area * create_mem_area(const char * name){
   ASSERT(name[0] != '/' && name[0] != 0);
+  const char * data_directory = "data";
+  mkdir(data_directory, 0777);
+  
   {
     char * pt = (char * )name;
     while(true){
@@ -53,8 +56,7 @@ persisted_mem_area * create_mem_area(const char * name){
     }
   }
   const size_t min_size = 1;
-  const char * data_directory = "data";
-  mkdir(data_directory, 0777);
+
   char path[100];
   sprintf(path, "%s/%s",data_directory, name);
   int fd = open(path, O_RDWR | O_CREAT, 0666);

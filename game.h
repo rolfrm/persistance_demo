@@ -26,13 +26,6 @@ typedef struct{
   main_modes mode;
 }main_state;
 
-typedef struct{
-  u64 id;
-  int width, height;
-  int x, y;
-  bool initialized;
-  char title[64];
-}window;
 
 typedef struct{
   vec3 axis;

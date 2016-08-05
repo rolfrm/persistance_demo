@@ -48,7 +48,8 @@ typedef struct{
 #define CREATE_TABLE_DECL(Name, KeyType, ValueType)		\
   void set_ ## Name(KeyType key, ValueType value);		\
   ValueType get_ ## Name (KeyType key);				\
-  bool try_get_ ## Name (KeyType key, ValueType * value);
+  bool try_get_ ## Name (KeyType key, ValueType * value);	\
+  u64 iter_all_ ## Name (KeyType * key, ValueType * value, size_t cnt, u64 * idx);
 
 #define CREATE_TABLE(Name, KeyType, ValueType)			\
   CREATE_TABLE_DECL(Name, KeyType, ValueType)			\
@@ -56,103 +57,120 @@ typedef struct{
   void Name ## _set (KeyType * k, ValueType * v){		\
     set_ ## Name(*k, *v);					\
   }								\
-persisted_mem_area * Name ## Initialize(){			\
-  static persisted_mem_area * mem = NULL;			\
+  persisted_mem_area * Name ## Initialize(){			\
+    static persisted_mem_area * mem = NULL;			\
     if(mem == NULL){						\
       mem = create_mem_area(#Name);				\
-								\
-      KeyType ## _table_initialized((KeyType ## _table_info){	\
+      								\
+      KeyType ## _table_initialized((KeyType ## _table_info){		\
 	  .add = (void *) &Name ## _set, .value_size = sizeof(KeyType), \
-	    .key_size = sizeof(KeyType), .mem = mem		\
-	  });							\
-    }								\
-								\
-    return mem;							\
-  }								\
-								\
-  void set_ ## Name(KeyType key, ValueType value){		\
-								\
-								\
-    persisted_mem_area * mem = Name ## Initialize();		\
-								\
-								\
-    struct {							\
-      KeyType key;						\
-      ValueType value;						\
-    } __attribute__((packed)) * data = mem->ptr;					\
-    size_t item_size = sizeof(*data);				\
-    u64 cnt = mem->size / item_size;				\
-    for(size_t i = 0; i < cnt; i++){				\
-      if(data[i].key == key){					\
-	data[i].value = value;					\
-	return;							\
-      }								\
-    }								\
-    mem_area_realloc(mem, mem->size + item_size);		\
-    data = mem->ptr;						\
-    data[cnt].key = key;					\
-    data[cnt].value = value;					\
-  }								\
-								\
-  ValueType get_ ## Name (KeyType key){				\
-    size_t item_size = sizeof(key) + sizeof(ValueType);		\
-    persisted_mem_area * mem = Name ## Initialize();		\
-    								\
-    u64 cnt = mem->size / item_size;				\
-    struct {							\
-      KeyType key;						\
-      ValueType value;						\
-    } __attribute__((packed)) * data = mem->ptr;					\
-								\
-    for(size_t i = 0; i < cnt; i++){				\
-      if(data[i].key == key)					\
-	return data[i].value;					\
-								\
-    }								\
-								\
-    struct {ValueType _default;} _default = {};			\
-    return _default._default;					\
-								\
-  }								\
-  bool try_get_ ## Name (KeyType key, ValueType * value){	\
-    size_t item_size = sizeof(key) + sizeof(ValueType);		\
-    persisted_mem_area * mem = Name ## Initialize();		\
-								\
-    u64 cnt = mem->size / item_size;				\
-    struct {							\
-      KeyType key;						\
-      ValueType value;						\
-    } __attribute__((packed)) * data = mem->ptr;					\
-								\
-    for(size_t i = 0; i < cnt; i++){				\
-      if(data[i].key == key)					\
-	return *value = data[i].value, true;			\
-								\
-    }								\
-    return false;						\
-								\
-  }								\
-								\
-  void clear_ ## Name(){					\
-    persisted_mem_area * mem = Name ## Initialize();		\
-    mem_area_realloc(mem, 1);					\
-  }								\
-  void unset_## Name(KeyType key){				\
-    size_t item_size = sizeof(key) + sizeof(ValueType);		\
-    persisted_mem_area * mem = Name ## Initialize();		\
-								\
-    u64 cnt = mem->size / item_size;				\
-    struct {							\
-      KeyType key;						\
-      ValueType value;						\
-    } __attribute__((packed)) * data = mem->ptr;					\
-								\
-    for(size_t i = 0; i < cnt; i++){				\
-      if(data[i].key == key){					\
-	data[i].key = 0;break;					\
-      }								\
-								\
-    }								\
+	    .key_size = sizeof(KeyType), .mem = mem			\
+	    });								\
+    }									\
+    									\
+    return mem;								\
+  }									\
+  									\
+  void set_ ## Name(KeyType key, ValueType value){			\
+    									\
+    									\
+    persisted_mem_area * mem = Name ## Initialize();			\
+    									\
+    									\
+    struct {								\
+      KeyType key;							\
+      ValueType value;							\
+    } __attribute__((packed)) * data = mem->ptr;			\
+    size_t item_size = sizeof(*data);					\
+    u64 cnt = mem->size / item_size;					\
+    for(size_t i = 0; i < cnt; i++){					\
+      if(data[i].key == key){						\
+	data[i].value = value;						\
+	return;								\
+      }									\
+    }									\
+    mem_area_realloc(mem, mem->size + item_size);			\
+    data = mem->ptr;							\
+    data[cnt].key = key;						\
+    data[cnt].value = value;						\
+  }									\
+  									\
+  ValueType get_ ## Name (KeyType key){					\
+    size_t item_size = sizeof(key) + sizeof(ValueType);			\
+    persisted_mem_area * mem = Name ## Initialize();			\
+    									\
+    u64 cnt = mem->size / item_size;					\
+    struct {								\
+      KeyType key;							\
+      ValueType value;							\
+    } __attribute__((packed)) * data = mem->ptr;			\
+    									\
+    for(size_t i = 0; i < cnt; i++){					\
+      if(data[i].key == key)						\
+	return data[i].value;						\
+      									\
+    }									\
+    									\
+    struct {ValueType _default;} _default = {};				\
+    return _default._default;						\
+    									\
+  }									\
+  u64 iter_all_ ## Name (KeyType * key, ValueType * value, size_t _cnt, u64 * idx){ \
+    size_t item_size = sizeof(KeyType) + sizeof(ValueType);		\
+    persisted_mem_area * mem = Name ## Initialize();			\
+									\
+    u64 cnt = mem->size / item_size;					\
+    struct {								\
+      KeyType key;							\
+      ValueType value;							\
+    } __attribute__((packed)) * data = mem->ptr;			\
+    u64 i;								\
+    for(i = 0; i < _cnt && *idx < cnt; (*idx)++){			\
+      if(data[*idx].key == 0) continue;					\
+      key[i] = data[*idx].key;						\
+      value[i++] = data[*idx].value;					\
+    }									\
+    return i;								\
+  }									\
+  bool try_get_ ## Name (KeyType key, ValueType * value){		\
+    size_t item_size = sizeof(key) + sizeof(ValueType);			\
+    persisted_mem_area * mem = Name ## Initialize();			\
+									\
+    u64 cnt = mem->size / item_size;					\
+    struct {								\
+      KeyType key;							\
+      ValueType value;							\
+    } __attribute__((packed)) * data = mem->ptr;			\
+    									\
+    for(size_t i = 0; i < cnt; i++){					\
+      if(data[i].key == key)						\
+	return *value = data[i].value, true;				\
+      									\
+    }									\
+    return false;							\
+    									\
+  }									\
+  									\
+  void clear_ ## Name(){						\
+    persisted_mem_area * mem = Name ## Initialize();			\
+    mem_area_realloc(mem, 1);						\
+  }									\
+  void unset_## Name(KeyType key){					\
+    size_t item_size = sizeof(key) + sizeof(ValueType);			\
+    persisted_mem_area * mem = Name ## Initialize();			\
+    									\
+    u64 cnt = mem->size / item_size;					\
+    struct {								\
+      KeyType key;							\
+      ValueType value;							\
+    } __attribute__((packed)) * data = mem->ptr;			\
+    									\
+    for(size_t i = 0; i < cnt; i++){					\
+      if(data[i].key == key){						\
+	data[i].key = 0;break;						\
+      }									\
+      									\
+    }									\
   }									
 
 #define CREATE_MULTI_TABLE_DECL(Name, KeyType, ValueType)		\

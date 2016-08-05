@@ -5,9 +5,11 @@
 #include "game.h"
 
 #include <GLFW/glfw3.h>
-#include "gui_test.h"
 #include "persist_oop.h"
 #include "gui.h"
+
+GLFWwindow * find_glfw_window(u64 id);
+window * get_window_glfw(GLFWwindow * window);
 
 CREATE_TABLE(once,u64,u8);
 
@@ -873,3 +875,5 @@ int key_release = 0;
 int key_press = 1;
 int key_repeat = 2;
 int mod_ctrl= 2;
+
+
