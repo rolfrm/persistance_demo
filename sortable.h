@@ -15,6 +15,8 @@ void sorttable_insert(sorttable * table, void * key, void * value);
 void sorttable_insert_keys(sorttable * table, void * keys, u64 * out_indexes, u64 cnt);
 void sorttable_inserts(sorttable * table, void * keys, void * values, size_t cnt);
 void sorttable_removes(sorttable * table, void * keys, size_t cnt);
+void sorttable_remove_indexes(sorttable * table, u64 * indexes, size_t index_cnt);
+size_t sorttable_iter(sorttable * table, void * keys, size_t keycnt, void * out_keys, u64 * indexes, size_t cnt, size_t * idx);
 
 #define CREATE_TABLE_DECL2(Name, KeyType, ValueType)\
   sorttable * Name ## _initialize();		    \
@@ -25,9 +27,13 @@ void sorttable_removes(sorttable * table, void * keys, size_t cnt);
   ValueType get_ ## Name(KeyType key);					\
   void set_ ## Name(KeyType key, ValueType val);			\
   u64 iter_all_ ## Name(KeyType * keys, ValueType * values, size_t _cnt, u64 * idx); \
+  u64 iter_ ## Name(KeyType * keys, size_t key_cnt, void * out_keys, u64 * out_indexes, size_t idx_cnt, size_t * idx); \
   bool try_get_ ## Name(KeyType key, ValueType * value);		\
   void clear ## Name();\
-  void unset_ ## Name(KeyType key);
+  void unset_ ## Name(KeyType key);\
+  ValueType * ref_at_ ## Name(u64 index);\
+  void remove_at_ ## Name(u64 * index, size_t cnt);
+
 
 #define _CREATE_TABLE2(Name, KeyType, ValueType, IS_MULTI_TABLE)	\
   sorttable * Name ## _initialize(){		\
@@ -73,7 +79,7 @@ void sorttable_removes(sorttable * table, void * keys, size_t cnt);
     u64 cnt = area->key_area->size / sizeof(KeyType);			\
     KeyType * k = area->key_area->ptr;					\
     ValueType * v = area->value_area->ptr;				\
-    for(i = 0; i < _cnt && *idx < cnt; (*idx)++) {			\
+    for(i = 0; i < _cnt && *idx < cnt; (*idx)++,i++) {			\
       keys[i] = k[*idx];						\
       values[i] = v[*idx];						\
     }									\
@@ -93,7 +99,23 @@ void sorttable_removes(sorttable * table, void * keys, size_t cnt);
     }\
     void unset_ ## Name(KeyType key){		\
     remove_ ## Name(&key, 1);\
+    }			     \
+    u64 iter_ ## Name(KeyType * keys, size_t key_cnt, void * out_keys, u64 * out_indexes, size_t idx_cnt, size_t * idx){ \
+      sorttable * table = Name ## _initialize();				\
+      return sorttable_iter(table, keys, key_cnt, out_keys, out_indexes, idx_cnt, idx); \
+    }\
+    ValueType * ref_at_ ## Name(u64 index) {\
+      sorttable * table = Name ## _initialize();	\
+      ASSERT(index < (table->value_area->size / table->value_size));	\
+      return table->value_area->ptr + index * table->value_size;\
+    }								\
+    void remove_at_ ## Name(u64 * index, size_t cnt){		\
+      sorttable_remove_indexes(Name ## _initialize(), index, cnt);\
     }
+      
+
+
+       
 			 
 #define CREATE_TABLE2(Name, KeyType, ValueType)\
   _CREATE_TABLE2(Name, KeyType, ValueType, false)

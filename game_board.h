@@ -8,7 +8,7 @@ void update_game_board(u64 id);
 u64 get_visible_items(u64 id, u64 * items, u64 items_cnt);
 
 CREATE_TABLE_DECL2(body, u64, body);
-CREATE_MULTI_TABLE_DECL(board_elements, u64, u64)
+CREATE_TABLE_DECL2(board_elements, u64, u64)
 
 // here?
 CREATE_MULTI_TABLE_DECL(faction_visible_items, u64, u64)
@@ -23,4 +23,4 @@ CREATE_TABLE_DECL(is_instant, u64, bool);
 CREATE_TABLE_DECL(wielded_item, u64, u64);
 CREATE_TABLE_DECL(item_command_item, u64, u64);
 CREATE_TABLE_DECL(is_wall, u64, bool);
-CREATE_TABLE_DECL(faction, u64, u64);
+CREATE_TABLE_DECL2(faction, u64, u64);

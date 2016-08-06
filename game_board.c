@@ -9,7 +9,7 @@
 #include "command.h"
 
 CREATE_TABLE2(body, u64, body);
-CREATE_MULTI_TABLE(board_elements, u64, u64);
+CREATE_MULTI_TABLE2(board_elements, u64, u64);
 
 CREATE_TABLE2(target, u64, vec2);
 CREATE_TABLE(is_paused, u64, bool);
@@ -33,11 +33,31 @@ void render_game_board(u64 id){
   u64 animations[array_count(bodies)];
   size_t iter = 0;
   do{
-    board_element_cnt = iter_board_elements(id, bodies, array_count(bodies), &iter);
+    board_element_cnt = iter_board_elements(&id, 1, NULL, bodies, array_count(bodies), &iter);
+    u64 indexer[board_element_cnt];
+    for(u64 i = 0; i < board_element_cnt; i++){
+      indexer[i] = i;
+      bodies[i] = *ref_at_board_elements(bodies[i]);
+    }
+    int cmp(u64 *a, u64 * b){
+      u64 _a = bodies[*a], _b = bodies[*b];
+      if(_a > _b) return 1;
+      if(_a == _b) return 0;
+      return -1;
+    }
+    qsort(indexer, board_element_cnt, sizeof(u64), (void *) cmp);
+    u64 bodies2[board_element_cnt];
+    //logd("iter: %i %i\n", iter, board_element_cnt);
+    for(u64 i = 0; i < board_element_cnt; i++){
+      bodies2[i] = bodies[indexer[i]];
+      //logd("%i %i %i\n", indexer[i], bodies2[i]);
+    }
     memset(animations,0,sizeof(animations));
-    lookup_animation(bodies, animations, board_element_cnt);
+    
+    lookup_animation(bodies2, animations, board_element_cnt);
 
     for(u64 i = 0; i < board_element_cnt; i++){
+
       body b = get_body(bodies[i]);
       vec3 color;
       if(!try_get_color(bodies[i], &color)){
@@ -139,7 +159,6 @@ void set_wall_at(int x, int y, wall_kind k){
 }
 
 void update_game_board(u64 id){
-
   void handle_commands(u64 entity){
     u64 command = 1;
     while(command != 0){
@@ -176,8 +195,10 @@ void update_game_board(u64 id){
   u64 bodies[10];
   size_t iter = 0;
   do{
-    board_element_cnt = iter_board_elements(id, bodies, array_count(bodies), &iter);
+
+    board_element_cnt = iter_board_elements(&id, 1, NULL, bodies, array_count(bodies), &iter);
     for(u64 i = 0; i < board_element_cnt; i++){
+      bodies[i] = *ref_at_board_elements(bodies[i]);
       body body;
       if(try_get_body(bodies[i], &body)){
 	bool is_wall = get_is_wall(bodies[i]);
@@ -196,7 +217,6 @@ void update_game_board(u64 id){
 	  for(int x = 0; x < body.size.x; x++){
 	    for(int y = 0; y < body.size.y; y++)
 	      set_wall_at(x + body.position.x, y + body.position.y, kind);
-	    
 	  }
 	}
       }
@@ -205,8 +225,9 @@ void update_game_board(u64 id){
   iter = 0;
     
   do{
-    board_element_cnt = iter_board_elements(id, bodies, array_count(bodies), &iter);
+    board_element_cnt = iter_board_elements(&id,1,NULL, bodies, array_count(bodies), &iter);
     for(u64 i = 0; i < board_element_cnt; i++){
+      bodies[i] = *ref_at_board_elements(bodies[i]);
       handle_commands(bodies[i]);
 
       body b = get_body(bodies[i]);
@@ -260,4 +281,4 @@ u64 get_visible_items(u64 id, u64 * items, u64 items_cnt){
 }
 
 CREATE_STRING_TABLE(name, u64);
-CREATE_TABLE(faction, u64, u64);
+CREATE_TABLE2(faction, u64, u64);
