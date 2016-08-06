@@ -30,43 +30,40 @@ static bool indexes_unique_and_sorted(u64 * indexes, u64 cnt){
   return true;
 }
 
-
-u64 sorttable_find(sorttable * table, void * key){
-  void * start = table->key_area->size + table->key_area->ptr;
-  
-  void * key_index = NULL;
-  if(table->cmp(key, start) == 0)
-    key_index = start;
-  else
-    key_index = bsearch(key, start, table->key_area->size / table->key_size, table->key_size, table->cmp);
-  if(key_index == NULL) return 0;
-  size_t offset = key_index - table->key_area->ptr;
-  return (offset) / table->key_size;
-}
-
 void sorttable_finds(sorttable * table, void * keys, u64 * indexes, u64 cnt){
   ASSERT(sorttable_keys_sorted(table, keys, cnt));
   void * start = table->key_area->ptr + table->key_size;
   void * end = table->key_area->ptr + table->key_area->size;
+  memset(indexes, 0, cnt * sizeof(u64));
   for(u64 i = 0; i < cnt; i++){
     u64 size = end - start;
     void * key_index = NULL;
     void * key = keys + i * table->key_size;
-    if(table->cmp(key, start) == 0)
+    int startcmp = table->cmp(key, start);
+    if(startcmp < 0) continue;
+    if(startcmp == 0)
       key_index = start;
-      // todo: check if at end
+    else if(table->cmp(key, end - table->key_size) > 0)
+      return;
     else
-      key_index =memmem(start,size,key,table->key_size);//bsearch(key, start, size / table->key_size, table->key_size, table->cmp);
+      //key_index =memmem(start,size,key,table->key_size);
+      key_index = bsearch(key, start, size / table->key_size, table->key_size, table->cmp);
     
     if(key_index == 0){
       indexes[i] = 0;
     }else{
       indexes[i] = (key_index - table->key_area->ptr) / table->key_size;
       start = key_index + table->key_size;
-    }
-    
+    }    
   }
 }
+
+u64 sorttable_find(sorttable * table, void * key){
+  u64 idx = 0;
+  sorttable_finds(table, key, &idx, 1);
+  return idx;
+}
+
 
 static int keycmp(const u64 * k1,const  u64 * k2){
   if(*k1 > *k2)
@@ -121,10 +118,7 @@ u64 sorttable_insert_key(sorttable * table, void * key){
 }
 
 void sorttable_insert(sorttable * table, void * key, void * value){
-  u64 idx = sorttable_find(table, key);
-  if(idx == 0)
-    idx = sorttable_insert_key(table, key);
-  memcpy(table->value_area->ptr + idx * table->value_size, value, table->value_size);
+  sorttable_inserts(table, key, value, 1);
 }
 
 void sorttable_insert_keys(sorttable * table, void * keys, u64 * out_indexes, u64 cnt){

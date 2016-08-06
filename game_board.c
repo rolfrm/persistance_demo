@@ -9,7 +9,7 @@
 #include "command.h"
 
 CREATE_TABLE2(body, u64, body);
-CREATE_MULTI_TABLE2(board_elements, u64, u64);
+//CREATE_MULTI_TABLE2(board_elements, u64, u64);
 
 CREATE_TABLE2(target, u64, vec2);
 CREATE_TABLE(is_paused, u64, bool);
@@ -19,6 +19,49 @@ CREATE_TABLE(wielded_item, u64, u64);
 CREATE_TABLE(item_command_item, u64, u64);
 CREATE_TABLE(is_wall, u64, bool);
 CREATE_MULTI_TABLE(inventory, u64, u64);
+
+sorttable * get_sorttable(u64 game_board){
+  static struct{
+    u64 * boards;
+    sorttable ** tables;
+    u64 cnt;
+  }tables;
+  for(u64 i = 0; i < tables.cnt; i++)
+    if(tables.boards[i] == game_board)
+      return tables.tables[i];
+  char buf[100];
+  sprintf(buf, "game_board.%i", game_board);
+  sorttable tab = create_sorttable(sizeof(u64), sizeof(u64), buf);
+  sorttable * newtab = iron_clone(&tab, sizeof(tab));
+  list_push(tables.boards, tables.cnt, game_board);
+  list_push2(tables.tables, tables.cnt, newtab );
+  return newtab;
+}
+
+void add_board_element(u64 game_board, u64 target){
+  sorttable * table = get_sorttable(game_board);
+  sorttable_insert(table, &target, &target);
+}
+
+void remove_board_element(u64 game_board, u64 item){
+  sorttable * table = get_sorttable(game_board);
+  sorttable_removes(table, &item, 1);
+}
+
+size_t iter_board_elements2(u64 game_board, u64 * items, size_t item_cnt, u64 * idx){
+  sorttable * table = get_sorttable(game_board);
+  void * offset = table->value_area->ptr + *idx * table->value_size;
+  u64 next = MIN(item_cnt, table->value_area->size / table->value_size - *idx);
+  memcpy(items, offset, next * table->value_size);
+  *idx += next;
+  return next;
+}
+
+/*u64 * get_board_elements(u64 game_board, size_t * out_cnt){
+  sorttable * table = get_sorttable(game_board);
+  *out_cnt = table->value_area->size / table->value_size;
+  return table->value_area->ptr;
+  }*/
 
 void measure_game_board(u64 id, vec2 * size){
   UNUSED(id);
@@ -33,28 +76,9 @@ void render_game_board(u64 id){
   u64 animations[array_count(bodies)];
   size_t iter = 0;
   do{
-    board_element_cnt = iter_board_elements(&id, 1, NULL, bodies, array_count(bodies), &iter);
-    u64 indexer[board_element_cnt];
-    for(u64 i = 0; i < board_element_cnt; i++){
-      indexer[i] = i;
-      bodies[i] = *ref_at_board_elements(bodies[i]);
-    }
-    int cmp(u64 *a, u64 * b){
-      u64 _a = bodies[*a], _b = bodies[*b];
-      if(_a > _b) return 1;
-      if(_a == _b) return 0;
-      return -1;
-    }
-    qsort(indexer, board_element_cnt, sizeof(u64), (void *) cmp);
-    u64 bodies2[board_element_cnt];
-    //logd("iter: %i %i\n", iter, board_element_cnt);
-    for(u64 i = 0; i < board_element_cnt; i++){
-      bodies2[i] = bodies[indexer[i]];
-      //logd("%i %i %i\n", indexer[i], bodies2[i]);
-    }
+    board_element_cnt = iter_board_elements2(id, bodies, array_count(bodies), &iter);
     memset(animations,0,sizeof(animations));
-    
-    lookup_animation(bodies2, animations, board_element_cnt);
+    lookup_animation(bodies, animations, board_element_cnt);
 
     for(u64 i = 0; i < board_element_cnt; i++){
 
@@ -196,9 +220,8 @@ void update_game_board(u64 id){
   size_t iter = 0;
   do{
 
-    board_element_cnt = iter_board_elements(&id, 1, NULL, bodies, array_count(bodies), &iter);
+    board_element_cnt = iter_board_elements2(id, bodies, array_count(bodies), &iter);
     for(u64 i = 0; i < board_element_cnt; i++){
-      bodies[i] = *ref_at_board_elements(bodies[i]);
       body body;
       if(try_get_body(bodies[i], &body)){
 	bool is_wall = get_is_wall(bodies[i]);
@@ -225,9 +248,8 @@ void update_game_board(u64 id){
   iter = 0;
     
   do{
-    board_element_cnt = iter_board_elements(&id,1,NULL, bodies, array_count(bodies), &iter);
+    board_element_cnt = iter_board_elements2(id, bodies, array_count(bodies), &iter);
     for(u64 i = 0; i < board_element_cnt; i++){
-      bodies[i] = *ref_at_board_elements(bodies[i]);
       handle_commands(bodies[i]);
 
       body b = get_body(bodies[i]);

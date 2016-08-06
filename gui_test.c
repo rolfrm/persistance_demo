@@ -212,7 +212,7 @@ void test_gui(){
     add_faction_visible_items(1, ball);
     set_name(ball, "Ball");
     set_body(ball, (body){vec2_new(20,10), vec2_new(1,1)});
-    insert_board_elements(&game_board, &ball, 1);
+    add_board_element(game_board, ball);
   }
 
   u64 target = intern_string("Target");
@@ -220,7 +220,7 @@ void test_gui(){
     add_faction_visible_items(1, target);
     set_name(target, "Target");
     set_body(target, (body){vec2_new(10, 30), vec2_new(2, 1)});
-    set_board_elements(game_board, target); 
+    add_board_element(game_board, target); 
   }
   u64 player;
   {
@@ -234,7 +234,7 @@ void test_gui(){
       
       add_faction_visible_items(player_faction, player);
       set_body(player, (body){ vec2_new(1,1), vec2_new(2,2) });
-      set_board_elements(game_board, player);
+      add_board_element(game_board, player);
     }
   }
   {
@@ -242,7 +242,7 @@ void test_gui(){
     set_is_wall(wall, true);
     set_body(wall, (body){vec2_new(14,14), vec2_new(2,2)});
     if(once(wall)){    
-      set_board_elements(game_board, wall);
+      add_board_element(game_board, wall);
     }
   }
   {
@@ -250,7 +250,7 @@ void test_gui(){
     set_is_wall(wall, true);
     set_body(wall, (body){vec2_new(14,4), vec2_new(4,4)});
     if(once(wall)){    
-      set_board_elements(game_board, wall);
+      add_board_element(game_board, wall);
     }
   }
   {
@@ -259,7 +259,7 @@ void test_gui(){
     set_color(wall, vec3_new(0.2, 0.2, 0.2));
     set_body(wall, (body){vec2_new(4,4), vec2_new(10,0)});
     if(once(wall)){    
-      set_board_elements(game_board, wall);
+      add_board_element(game_board, wall);
     }
   }
   {
@@ -268,7 +268,7 @@ void test_gui(){
     set_is_wall(wall, true);
     set_body(wall, (body){vec2_new(4,14), vec2_new(10,0)});
     if(once(wall)){    
-      set_board_elements(game_board, wall);
+      add_board_element(game_board, wall);
     }
   }
   {
@@ -277,7 +277,7 @@ void test_gui(){
     set_is_wall(wall, true);
     set_body(wall, (body){vec2_new(4,4), vec2_new(0,10)});
     if(once(wall)){    
-      set_board_elements(game_board, wall);
+      add_board_element(game_board, wall);
     }
   }
   
@@ -287,12 +287,12 @@ void test_gui(){
     set_is_wall(wall, true);
     set_body(wall, (body){vec2_new(14,4), vec2_new(0,10)});
     if(once(wall)){    
-      set_board_elements(game_board, wall);
+      add_board_element(game_board, wall);
     }
   }
   
   if(true){
-  for(int i = 0; i < 50; i++){
+  for(int i = 0; i < 5000; i++){
     u64 alienID = 0x01122000000;
     u64 alien = alienID + i;
     if(once(alien)){
@@ -300,7 +300,7 @@ void test_gui(){
       set_body(alien, (body){vec2_new(randf32() * 100, randf32() * 100), vec2_new(2,2)});
       set_color(alien, vec3_new(1,1,1));
       set_faction(alien, alien_faction);
-      set_board_elements(game_board, alien);
+      add_board_element(game_board, alien);
     }
   }
   }
@@ -309,7 +309,7 @@ void test_gui(){
     u64 alien = intern_string("alien2");
     if(once(alien)){
       logd("Loaded alien\n");
-      set_board_elements(game_board, alien);
+      add_board_element(game_board, alien);
       add_faction_visible_items(1, alien);
       set_animation(alien, alien_anim);
       set_body(alien, (body){vec2_new(50,50), vec2_new(2,2)});
@@ -387,17 +387,7 @@ void test_gui(){
     if(arg.type == COMMAND_ARG_ENTITY){
       add_inventory(id, arg.id);
       logd("ADDED to inventory\n");
-      remove_board_elements(&arg.id, 1);
-      u64 item_index, it = 0;
-      int c = 0;
-      
-      while((c = iter_board_elements(&game_board,1, NULL, &item_index, 1,  &it)) > 0){
-	
-	if(*ref_at_board_elements(item_index) == arg.id){
-	  remove_at_board_elements(&item_index, 1);
-	  break;
-	}
-      }
+      remove_board_element(game_board, arg.id);
     }
     return CMD_DONE;
   }
@@ -415,7 +405,7 @@ void test_gui(){
       body b = get_body(arg.id);
       b.position = get_body(id).position;
       set_body(arg.id, b);
-      set_board_elements(game_board, arg.id);
+      add_board_element(game_board, arg.id);
 
       u64 item, it = 0;
       int c = 0;
@@ -499,7 +489,7 @@ void test_gui(){
     if(get_command_args(cmd, &arg, 1) == 0) return CMD_DONE;
     if(arg.type == COMMAND_ARG_ENTITY){
       logd("Throwing %i from %i to hit %i\n", id, itemid, arg.id);
-      set_board_elements(game_board, itemid);
+      add_board_element(game_board, itemid);
       u64 item, it = 0;
       int c = 0;
       while((c = iter_inventory(id, &item, 1,  &it)) > 0){
@@ -672,12 +662,13 @@ void test_gui(){
       if(!w[j].id != 0) continue;
       any_active = true;
       auto method = get_method(w[j].id, render_control_method);
-      if(method!= NULL) method(w[j].id);
+      UNUSED(method);//if(method!= NULL) method(w[j].id);
     }
     if(!any_active){
       logd("Ending program\n");
       break;
     }
     glfwPollEvents();
+    iron_sleep(0.1);
   }
 }

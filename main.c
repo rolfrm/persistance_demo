@@ -14,7 +14,7 @@
 void table2_test();
 int main(){
   table2_test();
-  //return 0;
+  //  return 0;
   if (!glfwInit())
     return -1;
   test_gui();
