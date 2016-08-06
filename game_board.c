@@ -8,6 +8,8 @@
 #include "game_board.h"
 #include "command.h"
 
+CREATE_TABLE_DECL(is_dead, u64, bool);
+
 CREATE_TABLE2(body, u64, body);
 //CREATE_MULTI_TABLE2(board_elements, u64, u64);
 
@@ -174,7 +176,7 @@ mapchunk * get_map_chunk_for(int x, int y){
 
 wall_kind get_wall_at(int x, int y){
   mapchunk c = *get_map_chunk_for(x, y);
-  return c.wall_chunks[x % 8 + (y % 8) * 4];
+  return c.wall_chunks[x % 8 + (y % 8) * 8];
 }
 
 void set_wall_at(int x, int y, wall_kind k){
@@ -250,6 +252,7 @@ void update_game_board(u64 id){
   do{
     board_element_cnt = iter_board_elements2(id, bodies, array_count(bodies), &iter);
     for(u64 i = 0; i < board_element_cnt; i++){
+      if(get_is_dead(bodies[i])) continue;
       handle_commands(bodies[i]);
 
       body b = get_body(bodies[i]);

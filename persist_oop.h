@@ -64,7 +64,7 @@ typedef struct{
       								\
       KeyType ## _table_initialized((KeyType ## _table_info){		\
 	  .add = (void *) &Name ## _set, .value_size = sizeof(KeyType), \
-	    .key_size = sizeof(KeyType), .mem = mem			\
+	    .key_size = sizeof(KeyType), .mem = mem, .name = #Name			\
 	    });								\
     }									\
     									\
@@ -187,7 +187,7 @@ typedef struct{
     static persisted_mem_area * mem = NULL;   \
     if(mem == NULL){			      \
       mem = create_mem_area(#Name);      \
-      KeyType ## _table_initialized((KeyType ## _table_info){});	\
+      KeyType ## _table_initialized((KeyType ## _table_info){.name = #Name});	\
     }					      \
     return mem;				      \
   }					      \

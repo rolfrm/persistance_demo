@@ -44,7 +44,7 @@ struct {
 
 void u64_table_initialized(u64_table_info table_info){
   UNUSED(table_info);
-  logd("Initialize:..\n");
+  logd("Initialize:.. %s\n", table_info.name);
   //list_push2(tables.infos, tables.count, table_info);
 }
 
@@ -61,7 +61,6 @@ void update_alien_faction(u64 alien_faction, u64 player_faction){
   u64 player = 0;
   u64 id[10], faction[10], idx = 0;
   u64 c = 0;
-  logd("Update faction!\n");
   while(0 != (c = iter_all_faction(id, faction, array_count(faction), &idx))){
     for(u64 i = 0; i < c; i++){
       if(faction[i] == player_faction && !get_is_dead(id[i])){
@@ -292,7 +291,7 @@ void test_gui(){
   }
   
   if(true){
-  for(int i = 0; i < 5000; i++){
+  for(int i = 0; i < 50000; i++){
     u64 alienID = 0x01122000000;
     u64 alien = alienID + i;
     if(once(alien)){
@@ -318,9 +317,6 @@ void test_gui(){
       set_name(alien, "alien");
     }
   }
-  
-
-  
   
   clear_available_commands();
   command_class = intern_string("command class");
@@ -535,12 +531,13 @@ void test_gui(){
     command_arg arg;
     if(get_command_args(cmd, &arg, 1) == 0 || arg.type != COMMAND_ARG_ENTITY)
       return CMD_DONE;
-    if(get_is_dead(arg.id))
+    if(get_is_dead(arg.id)){
+      remove_target(&id, 1);
       return CMD_DONE;
+    }
     
     if(CMD_NOT_DONE == do_move(cmd, id)) return CMD_NOT_DONE;
     
-
     u64 lst = get_last_action(id);
     u64 cooldown = 500000; //500 us.
     if(timestamp() - lst > cooldown){
@@ -643,6 +640,7 @@ void test_gui(){
       u64 c;
       while(0 != (c = iter_all_damage(id, dmg, array_count(dmg), &idx))){
 	for(u64 i = 0; i < c; i++){
+	  logd("DEAD? %f\n", dmg[i]);
 	  if(dmg[i] > 20){
 	    logd("DEAD! %f\n", dmg[i]);
 	    set_is_dead(id[i], true);
@@ -654,7 +652,9 @@ void test_gui(){
     }
     update_game_board(game_board);
     u64 time_start2 = timestamp();
-    logd("DT: %i\n", time_start2 - time_start);
+    u64 dt = time_start2 - time_start;
+    UNUSED(dt);
+    //logd("DT: %i\n", time_start2 - time_start);
     window * w = persist_alloc("win_state", sizeof(window));
     int cnt = (int)(persist_size(w) / sizeof(window));
     bool any_active = false;
@@ -662,13 +662,14 @@ void test_gui(){
       if(!w[j].id != 0) continue;
       any_active = true;
       auto method = get_method(w[j].id, render_control_method);
-      UNUSED(method);//if(method!= NULL) method(w[j].id);
+      UNUSED(method);
+      if(method!= NULL) method(w[j].id);
     }
     if(!any_active){
       logd("Ending program\n");
       break;
     }
     glfwPollEvents();
-    iron_sleep(0.1);
+    iron_sleep(0.01);
   }
 }

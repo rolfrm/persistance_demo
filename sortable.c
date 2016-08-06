@@ -24,6 +24,7 @@ bool sorttable_keys_sorted(sorttable * table, void * keys, u64 cnt){
 // }
 
 static bool indexes_unique_and_sorted(u64 * indexes, u64 cnt){
+  if(cnt == 0) return true;
   for(u64 i = 0; i < cnt - 1; i++)
     if(indexes[i] >= indexes[i + 1])
       return false;
