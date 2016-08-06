@@ -19,9 +19,10 @@ CREATE_TABLE(should_exit, u64, bool);
 CREATE_TABLE(is_instant, u64, bool);
 CREATE_TABLE(wielded_item, u64, u64);
 CREATE_TABLE(item_command_item, u64, u64);
-CREATE_TABLE(is_wall, u64, bool);
+CREATE_TABLE2(is_wall, u64, bool);
 CREATE_MULTI_TABLE(inventory, u64, u64);
-
+CREATE_TABLE2(focused_entity, u64, u64);
+CREATE_TABLE2(camera_position, u64, vec2);
 sorttable * get_sorttable(u64 game_board){
   static struct{
     u64 * boards;
@@ -73,6 +74,18 @@ void measure_game_board(u64 id, vec2 * size){
 void render_game_board(u64 id){
   UNUSED(id);
   rect_render(vec3_new(0.0,0.0,0.0), shared_offset, shared_size);
+  {
+    u64 focused_entity = get_focused_entity(id);
+    if(focused_entity != 0){
+      body b;
+      if(try_get_body(focused_entity, &b)){
+	set_camera_position(id, b.position);
+      }
+    }
+  }
+  vec2 px_size = vec2_sub(shared_size, vec2_new(0, 300)); // hack. use a vertical stackpanel to fix.
+  
+  vec2 camera_position = get_camera_position(id);
   u64 board_element_cnt = 0;
   u64 bodies[10];
   u64 animations[array_count(bodies)];
@@ -90,7 +103,7 @@ void render_game_board(u64 id){
 	color = vec3_new(1,0,0);
       }
       vec2 size = b.size;
-      vec2 position = b.position;
+      vec2 position = vec2_sub(b.position, vec2_sub(camera_position, vec2_scale(px_size, 0.5 / 7.0)));
       size.x = floor(size.x);
       size.y = floor(size.y);
       position.x = floor(position.x);
@@ -158,8 +171,8 @@ mapchunk * get_map_chunk_for(int x, int y){
   }data;
   ASSERT(sizeof(data) == 8);
   data.head = 1;
-  data.x = x / 8;
-  data.y = y / 8;
+  data.x = x << 3;
+  data.y = y << 3;
 
   static u64 lastindex = 0;
   static mapchunk * lastptr = NULL;
@@ -176,12 +189,28 @@ mapchunk * get_map_chunk_for(int x, int y){
 
 wall_kind get_wall_at(int x, int y){
   mapchunk c = *get_map_chunk_for(x, y);
-  return c.wall_chunks[x % 8 + (y % 8) * 8];
+  return c.wall_chunks[(x & 3) + ((y & 3) >> 3)];
 }
 
 void set_wall_at(int x, int y, wall_kind k){
   mapchunk * p = get_map_chunk_for(x, y);
-  p->wall_chunks[x % 8 + (y % 8) * 8] = k;
+  p->wall_chunks[(x & 3) + ((y & 3) >> 3)] = k;
+}
+
+void test_walls(){
+  clear_map_chunks();
+  for(int i = -10; i < 10; i++){
+    for(int j = -10; j < 10; j++){
+      set_wall_at(i, j, (wall_kind)((i + 10) + (j + 10) * 20));
+    }
+  }
+  for(int i = -10; i < 10; i++){
+    for(int j = -10; j < 10; j++){
+      int x = (int) get_wall_at(i, j);
+      ASSERT(x == ((i + 10) + (j + 10) * 20));
+    }
+  }
+  clear_map_chunks();
 }
 
 void update_game_board(u64 id){

@@ -228,6 +228,7 @@ void test_gui(){
     logd("Player: %i\n", player);
     set_color(player, vec3_new(0,0,1));
     set_faction(player, player_faction);
+    set_focused_entity(game_board, player);
     if(once(player)){
       set_name(player, "Player");
       
@@ -291,7 +292,7 @@ void test_gui(){
   }
   
   if(true){
-  for(int i = 0; i < 50000; i++){
+    for(int i = 0; i < 5/*0000*/; i++){
     u64 alienID = 0x01122000000;
     u64 alien = alienID + i;
     if(once(alien)){

@@ -12,9 +12,12 @@
 #include "gui_test.h"
 
 void table2_test();
+void test_walls();
 int main(){
   table2_test();
-  //  return 0;
+  test_walls();
+  
+  //return 0;
   if (!glfwInit())
     return -1;
   test_gui();

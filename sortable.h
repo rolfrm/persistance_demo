@@ -29,7 +29,7 @@ size_t sorttable_iter(sorttable * table, void * keys, size_t keycnt, void * out_
   u64 iter_all_ ## Name(KeyType * keys, ValueType * values, size_t _cnt, u64 * idx); \
   u64 iter_ ## Name(KeyType * keys, size_t key_cnt, void * out_keys, u64 * out_indexes, size_t idx_cnt, size_t * idx); \
   bool try_get_ ## Name(KeyType key, ValueType * value);		\
-  void clear ## Name();\
+  void clear_ ## Name();							\
   void unset_ ## Name(KeyType key);\
   ValueType * ref_at_ ## Name(u64 index);\
   void remove_at_ ## Name(u64 * index, size_t cnt);
@@ -92,7 +92,7 @@ size_t sorttable_iter(sorttable * table, void * keys, size_t keycnt, void * out_
     *value = *v;					\
     return true;					\
   }   \
-    void clear ## Name(){\
+    void clear_ ## Name(){\
     sorttable * area = Name ## _initialize(); \
     mem_area_realloc(area->key_area, sizeof(KeyType));\
     mem_area_realloc(area->key_area, sizeof(ValueType));\
