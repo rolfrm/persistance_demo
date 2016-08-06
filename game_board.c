@@ -171,19 +171,18 @@ mapchunk * get_map_chunk_for(int x, int y){
   }data;
   ASSERT(sizeof(data) == 8);
   data.head = 1;
-  data.x = x << 3;
-  data.y = y << 3;
-
-  static u64 lastindex = 0;
-  static mapchunk * lastptr = NULL;
-  if(lastindex != data.index){
-    lastindex = data.index;
-    get_refs_map_chunks(&lastindex, &lastptr, 1);
-    if(lastptr == NULL)
-      set_map_chunks(lastindex, (mapchunk){});
-    get_refs_map_chunks(&lastindex, &lastptr, 1);
+  data.x = x >> 3;
+  data.y = y >> 3;
+  logd("%i %i\n", data.x, data.y);
+  mapchunk * ptr = NULL;
+  get_refs_map_chunks(&data.index, &ptr, 1);
+  if(ptr == NULL){
+    mapchunk m = {};
+    set_map_chunks(data.index, m);
   }
-  return lastptr;
+  get_refs_map_chunks(&data.index, &ptr, 1);
+  ASSERT(ptr != NULL);
+  return ptr;
 
 }
 
