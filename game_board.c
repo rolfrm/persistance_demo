@@ -173,7 +173,6 @@ mapchunk * get_map_chunk_for(int x, int y){
   data.head = 1;
   data.x = x >> 3;
   data.y = y >> 3;
-  logd("%i %i\n", data.x, data.y);
   mapchunk * ptr = NULL;
   get_refs_map_chunks(&data.index, &ptr, 1);
   if(ptr == NULL){
@@ -188,12 +187,16 @@ mapchunk * get_map_chunk_for(int x, int y){
 
 wall_kind get_wall_at(int x, int y){
   mapchunk c = *get_map_chunk_for(x, y);
-  return c.wall_chunks[(x & 3) + ((y & 3) >> 3)];
+  x = x & 7;
+  y = y & 7;
+  return c.wall_chunks[x + (y << 3)];
 }
 
 void set_wall_at(int x, int y, wall_kind k){
   mapchunk * p = get_map_chunk_for(x, y);
-  p->wall_chunks[(x & 3) + ((y & 3) >> 3)] = k;
+  x = x & 7;
+  y = y & 7;
+  p->wall_chunks[x + (y << 3)] = k;
 }
 
 void test_walls(){

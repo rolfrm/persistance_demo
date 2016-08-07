@@ -94,8 +94,8 @@ size_t sorttable_iter(sorttable * table, void * keys, size_t keycnt, void * out_
   }   \
     void clear_ ## Name(){\
     sorttable * area = Name ## _initialize(); \
-    mem_area_realloc(area->key_area, sizeof(KeyType));\
-    mem_area_realloc(area->key_area, sizeof(ValueType));\
+    mem_area_realloc(area->key_area, sizeof(KeyType));		\
+    mem_area_realloc(area->value_area, sizeof(ValueType));\
     }\
     void unset_ ## Name(KeyType key){		\
     remove_ ## Name(&key, 1);\

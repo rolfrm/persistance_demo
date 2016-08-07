@@ -2,6 +2,10 @@
 #include "persist.h"
 #include "sortable.h"
 
+void sorttable_check_sanity(sorttable * table){
+  ASSERT(table->key_area->size / table->key_size == table->value_area->size / table->value_size);
+}
+
 bool sorttable_keys_sorted(sorttable * table, void * keys, u64 cnt){
   if(cnt == 0) return true;
   if(table->is_multi_table){
@@ -16,13 +20,6 @@ bool sorttable_keys_sorted(sorttable * table, void * keys, u64 cnt){
   return true;
 }
 
-// static bool indexes_sorted(u64 * indexes, u64 cnt){
-//   for(u64 i = 0; i < cnt; i++)
-//     if(indexes[i] > indexes[i + 1))
-//       return false;
-//   return true;
-// }
-
 static bool indexes_unique_and_sorted(u64 * indexes, u64 cnt){
   if(cnt == 0) return true;
   for(u64 i = 0; i < cnt - 1; i++)
@@ -33,6 +30,7 @@ static bool indexes_unique_and_sorted(u64 * indexes, u64 cnt){
 
 void sorttable_finds(sorttable * table, void * keys, u64 * indexes, u64 cnt){
   ASSERT(sorttable_keys_sorted(table, keys, cnt));
+  sorttable_check_sanity(table);
   void * start = table->key_area->ptr + table->key_size;
   void * end = table->key_area->ptr + table->key_area->size;
   memset(indexes, 0, cnt * sizeof(u64));
@@ -85,37 +83,20 @@ sorttable create_sorttable(size_t key_size, size_t value_size, const char * name
   table.value_size = value_size;
   table.cmp = (void *) keycmp;
   
-  if(table.key_area->size <= 8){
+  if(table.key_area->size < key_size){
     mem_area_realloc(table.key_area, key_size);
     memset(table.key_area->ptr, 0, key_size);
     mem_area_realloc(table.value_area, value_size);
     memset(table.value_area->ptr, 0, value_size);
   }
-
+  sorttable_check_sanity(&table);
   return table;
 }
 
 u64 sorttable_insert_key(sorttable * table, void * key){
-  mem_area_realloc(table->key_area, table->key_area->size + table->key_size);
-  mem_area_realloc(table->value_area, table->value_area->size + table->value_size);
-  void * pt = table->key_area->ptr;
-  void * end = pt + table->key_area->size - table->key_size;
-  while(pt < end && table->cmp(pt, key) <= 0)
-    pt += table->key_size;
-
-  u64 offset = (pt - table->key_area->ptr) / table->key_size;
-  u64 newcnt = table->key_area->size / table->key_size;
-  
-  memmove(pt + table->key_size, pt , end - pt);
-  memmove(pt, key, table->key_size);
-
-  memmove(table->value_area->ptr + (offset + 1) * table->value_size,
-	  table->value_area->ptr + offset * table->value_size,
-	  (newcnt - offset  - 1) * table->value_size);
-  
-  memset(table->value_area->ptr + offset * table->value_size, 0, table->value_size);
-  
-  return (pt - table->key_area->ptr) / table->key_size;
+  u64 idx = 0;
+  sorttable_insert_keys(table, key, &idx, 1);
+  return idx;
 }
 
 void sorttable_insert(sorttable * table, void * key, void * value){
@@ -124,25 +105,25 @@ void sorttable_insert(sorttable * table, void * key, void * value){
 
 void sorttable_insert_keys(sorttable * table, void * keys, u64 * out_indexes, u64 cnt){
   ASSERT(sorttable_keys_sorted(table, keys, cnt));
+  sorttable_check_sanity(table);
   mem_area_realloc(table->key_area, table->key_area->size + cnt * table->key_size);
   mem_area_realloc(table->value_area, table->value_area->size + cnt * table->value_size);
+  sorttable_check_sanity(table);  
   void * pt = table->key_area->ptr;
   void * end = pt + table->key_area->size - table->key_size * cnt;
+  void * vend = table->value_area->ptr + table->value_area->size - table->value_size * cnt;
   for(u64 i = 0; i < cnt; i++){
     while(pt < end && table->cmp(pt, keys) <= 0)
       pt += table->key_size;
-
     u64 offset = (pt - table->key_area->ptr) / table->key_size;
-    u64 newcnt = table->key_area->size / table->key_size;
-  
+
     memmove(pt + table->key_size, pt , end - pt);
     memmove(pt, keys, table->key_size);
 
-    memmove(table->value_area->ptr + (offset + 1) * table->value_size,
-	    table->value_area->ptr + offset * table->value_size,
-	    (newcnt - offset  - 1) * table->value_size);
-  
-    memset(table->value_area->ptr + offset * table->value_size, 0, table->value_size);
+    void * vpt = table->value_area->ptr +  offset * table->value_size;
+    
+    memmove(vpt + table->value_size, vpt, vend - vpt);
+    memset(vpt, 0, table->value_size);
   
     *out_indexes = (pt - table->key_area->ptr) / table->key_size;
     
@@ -150,10 +131,12 @@ void sorttable_insert_keys(sorttable * table, void * keys, u64 * out_indexes, u6
     keys += table->key_size;
     pt += table->key_size;
     end += table->key_size;
+    vend += table->value_size;
   }
 }
 
 void sorttable_inserts(sorttable * table, void * keys, void * values, size_t cnt){
+  sorttable_check_sanity(table);
   ASSERT(sorttable_keys_sorted(table, keys, cnt));
   u64 indexes[cnt];
   sorttable_finds(table, keys, indexes, cnt);
@@ -176,12 +159,18 @@ void sorttable_inserts(sorttable * table, void * keys, void * values, size_t cnt
   for(u64 i = 0; i < cnt; i++){
     if(indexes[i] == 0){
       memcpy(newvalues + table->value_size * offset, values + i * table->value_size, table->value_size);
-      memcpy(newkeys + table->key_size * offset++, keys + i * table->key_size, table->key_size);
+      memcpy(newkeys + table->key_size * offset, keys + i * table->key_size, table->key_size);
+      offset += 1;
     }
   }
+  memset(indexes, 0, sizeof(indexes));
+  if(offset == 0)
+    return;
+  logd("newcnt2: %i\n", newcnt);
   sorttable_insert_keys(table, newkeys, indexes, newcnt);
   for(u64 i = 0; i < newcnt; i++){
     ASSERT(indexes[i]);
+    logd(">> %i\n", indexes[i]);
     memcpy(table->value_area->ptr + table->value_size * indexes[i], newvalues + table->value_size * i, table->value_size);
   }
 }
@@ -204,6 +193,7 @@ void sorttable_remove_indexes(sorttable * table, u64 * indexes, size_t cnt){
   }
   mem_area_realloc(table->key_area, table_cnt * key_size);
   mem_area_realloc(table->value_area, table_cnt * value_size);
+  sorttable_check_sanity(table);
 }
 
 void sorttable_removes(sorttable * table, void * keys, size_t cnt){
