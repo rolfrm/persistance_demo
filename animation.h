@@ -17,13 +17,20 @@ typedef struct{
   float time;
 }animation_frame;
 
+typedef struct{
+  u64 animation;
+  u64 frame;
+  float time;
+}animation_state;
+
 CREATE_STRING_TABLE_DECL(textures, u64);
 CREATE_TABLE_DECL(animation_texture, u64, u64);
 CREATE_MULTI_TABLE_DECL(texture_sections, u64, texture_section);
-CREATE_MULTI_TABLE_DECL(animation_frames, u64, animation_frame);
+CREATE_TABLE_DECL2(animation_frames, u64, animation_frame);
 CREATE_TABLE_DECL(texture_info, u64, texture_info);
-CREATE_TABLE_DECL2(animation, u64, u64);
+CREATE_TABLE_DECL2(animation, u64, animation_state);
 u64 load_pixel_frame(u64 texture, int x, int y, int x2, int y2);
 u64 load_pixel_frame_center_of_mass(u64 texture, int x, int y, int x2, int y2, int cx, int cy);
 //u64 render_animated(vec2 offset, vec2 size, float time, u64 animation);
-void render_animated(vec3 color, vec2 offset, vec2 size, float time, u64 animation);
+void render_animated(vec3 color, vec2 offset, vec2 size, animation_state * animation);
+void reset_animation(u64 id, u64 anim);

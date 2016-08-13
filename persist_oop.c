@@ -2,41 +2,19 @@
 #include <iron/full.h>
 #include "persist.h"
 #include "persist_oop.h"
+#include "sortable.h"
 
-subclass * define_subclass(u64 class, u64 base_class){
-  ASSERT(class != 0 && base_class != 0);
-  size_t total_size = 0;
-  subclass * w = persist_alloc2("subclasses", sizeof(subclass), &total_size);
-  u32 cnt = total_size / sizeof(subclass);
-  subclass * free = NULL;
-  for(u32 i = 0; i < cnt; i++){
-    if(w[i].base_class == base_class && w[i].class == class){
-      return w + i;
-    }else if(w[i].base_class == 0 && free == NULL){
-      free = w + i;
-    }
-  }
-  if(free == NULL){
-    w = persist_realloc(w, sizeof(subclass) * (cnt + 1));
-    free = w + cnt;
-  }
-  free->class = class;
-  free->base_class = base_class;
-  return free;
+CREATE_MULTI_TABLE2(base_class, u64, u64);
+
+void define_subclass(u64 class, u64 base_class){
+  set_base_class(class, base_class);
 }
 
 u64 get_baseclass(u64 class, u64 * index){
-  size_t total_size = 0;
-  subclass * w = persist_alloc2("subclasses", sizeof(subclass), &total_size);
-  u64 cnt = total_size / sizeof(subclass);
-  for(; *index < cnt; *index += 1){
-    u64 i = *index;
-    if(w[i].class == class){
-      u64 result = w[i].base_class;
-      *index += 1;
-      return result;
-    }
-  }
+  u64 r = 0;
+  iter_base_class(&class, 1, &class, &r, 1, index);
+  if(r != 0)
+    return *ref_at_base_class(r);
   return 0;
 }
 

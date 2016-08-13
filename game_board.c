@@ -23,22 +23,29 @@ CREATE_TABLE2(is_wall, u64, bool);
 CREATE_MULTI_TABLE(inventory, u64, u64);
 CREATE_TABLE2(focused_entity, u64, u64);
 CREATE_TABLE2(camera_position, u64, vec2);
-sorttable * get_sorttable(u64 game_board){
-  static struct{
+
+
+sorttable * get_sorttable_for(const char * basename, size_t keysize, size_t value_size, u64 id){
+    static struct{
     u64 * boards;
     sorttable ** tables;
     u64 cnt;
   }tables;
   for(u64 i = 0; i < tables.cnt; i++)
-    if(tables.boards[i] == game_board)
+    if(tables.boards[i] == id)
       return tables.tables[i];
   char buf[100];
-  sprintf(buf, "game_board.%i", game_board);
-  sorttable tab = create_sorttable(sizeof(u64), sizeof(u64), buf);
+  sprintf(buf, "%s.%i", basename, id);
+  sorttable tab = create_sorttable(keysize, value_size, buf);
   sorttable * newtab = iron_clone(&tab, sizeof(tab));
-  list_push(tables.boards, tables.cnt, game_board);
+  list_push(tables.boards, tables.cnt, id);
   list_push2(tables.tables, tables.cnt, newtab );
   return newtab;
+}
+
+
+sorttable * get_sorttable(u64 game_board){
+  return get_sorttable_for("game_board", sizeof(u64), sizeof(u64), game_board);
 }
 
 void add_board_element(u64 game_board, u64 target){
@@ -59,12 +66,6 @@ size_t iter_board_elements2(u64 game_board, u64 * items, size_t item_cnt, u64 * 
   *idx += next;
   return next;
 }
-
-/*u64 * get_board_elements(u64 game_board, size_t * out_cnt){
-  sorttable * table = get_sorttable(game_board);
-  *out_cnt = table->value_area->size / table->value_size;
-  return table->value_area->ptr;
-  }*/
 
 void measure_game_board(u64 id, vec2 * size){
   UNUSED(id);
@@ -88,12 +89,11 @@ void render_game_board(u64 id){
   vec2 camera_position = get_camera_position(id);
   u64 board_element_cnt = 0;
   u64 bodies[10];
-  u64 animations[array_count(bodies)];
+  animation_state * animations[array_count(bodies)];
   size_t iter = 0;
   do{
     board_element_cnt = iter_board_elements2(id, bodies, array_count(bodies), &iter);
-    memset(animations,0,sizeof(animations));
-    lookup_animation(bodies, animations, board_element_cnt);
+    get_refs_animation(bodies, animations, board_element_cnt);
 
     for(u64 i = 0; i < board_element_cnt; i++){
 
@@ -122,8 +122,9 @@ void render_game_board(u64 id){
 	position.x -= 1;
 	size.x += 2;
       }
-      if(animations[i] != 0){
-	render_animated(color, position, size, 0.0f, animations[i]);
+      if(animations[i] != NULL){
+	animations[i]->time += 0.01;	
+	render_animated(color, position, size, animations[i]);
       }else{
 	rect_render(color,position , size);
       }
@@ -325,7 +326,6 @@ void update_game_board(u64 id){
     }    
   }while(board_element_cnt == array_count(bodies));
 }
-
 
 CREATE_MULTI_TABLE(faction_visible_items, u64, u64);
 u64 get_visible_items(u64 id, u64 * items, u64 items_cnt){

@@ -1,7 +1,3 @@
-typedef struct{
-  u64 base_class;
-  u64 class;
-}subclass;
 
 typedef struct{
   u64 id;
@@ -9,7 +5,7 @@ typedef struct{
 
 typedef void (* method)(u64 control, ...);
 
-subclass * define_subclass(u64 class, u64 base_class);
+void define_subclass(u64 class, u64 base_class);
 u64 get_baseclass(u64 class, u64 * index);
 void define_method(u64 class_id, u64 method_id, method handler);
 method get_method(u64 class_id, u64 method_id);

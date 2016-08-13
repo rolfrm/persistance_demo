@@ -166,11 +166,9 @@ void sorttable_inserts(sorttable * table, void * keys, void * values, size_t cnt
   memset(indexes, 0, sizeof(indexes));
   if(offset == 0)
     return;
-  logd("newcnt2: %i\n", newcnt);
   sorttable_insert_keys(table, newkeys, indexes, newcnt);
   for(u64 i = 0; i < newcnt; i++){
     ASSERT(indexes[i]);
-    logd(">> %i\n", indexes[i]);
     memcpy(table->value_area->ptr + table->value_size * indexes[i], newvalues + table->value_size * i, table->value_size);
   }
 }

@@ -24,6 +24,7 @@ size_t sorttable_iter(sorttable * table, void * keys, size_t keycnt, void * out_
   void lookup_ ##Name(KeyType * keys, ValueType * out_values, size_t cnt); \
   void remove_ ## Name (KeyType * keys, size_t cnt);			\
   void get_refs_ ## Name(KeyType * keys, ValueType ** values, size_t cnt);\
+  void get_refs2_ ## Name(KeyType * keys, ValueType ** values, KeyType ** keyref, size_t cnt); \
   ValueType get_ ## Name(KeyType key);					\
   void set_ ## Name(KeyType key, ValueType val);			\
   u64 iter_all_ ## Name(KeyType * keys, ValueType * values, size_t _cnt, u64 * idx); \
@@ -63,6 +64,18 @@ size_t sorttable_iter(sorttable * table, void * keys, size_t keycnt, void * out_
     sorttable_finds(Name ## _initialize(), keys, indexes, cnt);		\
     ValueType * src = (Name ## _initialize())->value_area->ptr;		\
     for(u64 i = 0; i < cnt; i++) values[i] = (indexes[i] == 0 ? NULL : src + indexes[i]); \
+  }									\
+  void get_refs2_ ## Name(KeyType * keys, ValueType ** values, KeyType ** keyref, size_t cnt){ \
+    u64 indexes[cnt];							\
+    sorttable_finds(Name ## _initialize(), keys, indexes, cnt);		\
+    sorttable * table = (Name ## _initialize());			\
+    ValueType * src = table->value_area->ptr;				\
+    KeyType * keysrc = table->key_area->ptr;				\
+    for(u64 i = 0; i < cnt; i++)					\
+      if(indexes[i] != 0){						\
+	values[i] = src + indexes[i];					\
+	keyref[i] = keysrc + indexes[i];				\
+      }else{values[i] = NULL; keyref[i] = NULL;}			\
   }									\
   ValueType get_ ## Name(KeyType key){					\
     ValueType value;							\

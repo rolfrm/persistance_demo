@@ -97,9 +97,11 @@ void update_alien_faction(u64 alien_faction, u64 player_faction){
     insert_command_queue(id, commands, k);
   }
 }
-
+CREATE_TABLE2(shooting_animation, u64, u64);
+CREATE_TABLE2(idle_animation, u64, u64);
+CREATE_TABLE2(walking_animation, u64, u64);
+CREATE_TABLE2(is_shooting, u64, u64);
 void test_gui(){
-
   u64 anim_tex = intern_string("Test anim");
 
   if(once(anim_tex)){
@@ -125,47 +127,62 @@ void test_gui(){
   load_pixel_frame(anim_tex, 0, 24, 9, 29);
   load_pixel_frame(anim_tex, 10, 24, 19, 29);
   
-
-  u64 anim1 = intern_string("PlayerWalk");
-  if(once(anim1)){
-    add_animation_frames(anim1, (animation_frame){.section = 0, .time = 0.1});
-    add_animation_frames(anim1, (animation_frame){.section = 1, .time = 0.1});
-    add_animation_frames(anim1, (animation_frame){.section = 2, .time = 0.1});
-    set_animation_texture(anim1, anim_tex);
+  {
+    u64 anim1 = intern_string("PlayerWalk");
+    if(once(anim1)){
+      animation_frame frames[] = {{.section = 0, .time = 0.1},
+				  {.section = 1, .time = 0.1},
+				  {.section = 2, .time = 0.1}};
+      u64 keys[] = {anim1, anim1, anim1};
+      insert_animation_frames(keys, frames, array_count(frames));
+      set_animation_texture(anim1, anim_tex);
+    }
   }
-
-  anim1 = intern_string("PlayerShoot");
-  if(once(anim1)){
-    add_animation_frames(anim1, (animation_frame){.section = 9, .time = 0.1});
-    add_animation_frames(anim1, (animation_frame){.section = 10, .time = 0.1});
-    add_animation_frames(anim1, (animation_frame){.section = 11, .time = 0.1});
-    add_animation_frames(anim1, (animation_frame){.section = 12, .time = 0.1});
-    set_animation_texture(anim1, anim_tex);
+  {
+    u64 anim1 = intern_string("PlayerShoot");
+    if(once(anim1)){
+      animation_frame frames[] = {{.section = 9, .time = 0.1},
+				  {.section = 10, .time = 0.1},
+				  {.section = 11, .time = 0.1},
+				  {.section = 12, .time = 0.1}};
+      u64 keys[] = {anim1, anim1, anim1, anim1};
+      insert_animation_frames(keys, frames, array_count(frames));
+      set_animation_texture(anim1, anim_tex);
+    }
   }
-
   
   u64 anim2 = intern_string("Test anim2");
   if(once(anim2)){
-    add_animation_frames(anim2, (animation_frame){.section = 3, .time = 0.1});
-    add_animation_frames(anim2, (animation_frame){.section = 4, .time = 0.1});
-    add_animation_frames(anim2, (animation_frame){.section = 5, .time = 0.1});
-    add_animation_frames(anim2, (animation_frame){.section = 6, .time = 0.1});
-    add_animation_frames(anim2, (animation_frame){.section = 7, .time = 0.1});
-    add_animation_frames(anim2, (animation_frame){.section = 8, .time = 0.1});
+    animation_frame frames[] = {{.section = 3, .time = 0.1},
+				{.section = 4, .time = 0.1},
+				{.section = 5, .time = 0.1},
+				{.section = 6, .time = 0.1},
+				{.section = 7, .time = 0.1},
+				{.section = 8, .time = 0.1}};
+    u64 keys[] = {anim2, anim2, anim2, anim2, anim2, anim2};
+    insert_animation_frames(keys, frames, array_count(frames));
     set_animation_texture(anim2, anim_tex);
   }
 
   u64 anim3 = intern_string("PlayerStill");
   if(once(anim3)){
-    add_animation_frames(anim3, (animation_frame){.section = 0, .time = 0.1});
+    set_animation_frames(anim3, (animation_frame){.section = 0, .time = 0.1});
     set_animation_texture(anim3, anim_tex);
   }
-
-  u64 alien_anim = intern_string("alien_walk");
-  if(once(alien_anim)){
-    add_animation_frames(alien_anim, (animation_frame){.section = 13, .time = 0.1});
-    add_animation_frames(alien_anim, (animation_frame){.section = 14, .time = 0.1});
-    set_animation_texture(alien_anim, anim_tex);
+  {
+    u64 alien_anim = intern_string("alien_walk");
+    if(once(alien_anim)){
+      set_animation_frames(alien_anim, (animation_frame){.section = 13, .time = 0.1});
+      set_animation_frames(alien_anim, (animation_frame){.section = 14, .time = 0.1});
+      set_animation_texture(alien_anim, anim_tex);
+    }
+  }
+  {
+    u64 alien_anim = intern_string("alien_idle");
+    if(once(alien_anim)){
+      set_animation_frames(alien_anim, (animation_frame){.section = 13, .time = 10.0});
+      set_animation_texture(alien_anim, anim_tex);
+    }
   }
   
   texture_section sec[3];
@@ -175,24 +192,6 @@ void test_gui(){
   logd("%i %i %i\n", anim_tex, idx, c);
   ASSERT(c == 3);
   
-  /*
-  set_test(3, vec3_new(10,10,10));
-  set_test(5, vec3_new(13,13,13));
-  set_test(8, vec3_new(16,15,14));
-  struct{
-    u64 key;
-    vec3 value;
-  }__attribute__((packed)) val;
-  logd("VAL: %i %i\n", sizeof(val), 8 + sizeof(vec3));
-  u64 key = 5;
-  void * pt = NULL;
-  pt = table_lookup(tables.infos, &key, &pt);
-  vec3 * kvpair = pt;
-  if(kvpair == NULL)
-    logd("Not found..\n");
-  else
-    logd("Table count: %i %f\n", tables.count, kvpair->x);
-  */
   init_gui();
   window * win = make_window(4);
   sprintf(win->title, "%s", "Test Window");
@@ -206,7 +205,7 @@ void test_gui(){
   add_control(win->id, game_board);
 
   u64 ball = intern_string("Ball");
-  set_animation(ball, 0);//set_animation(ball, anim2);
+  reset_animation(ball, 0);
   if(once(ball)){
     add_faction_visible_items(1, ball);
     set_name(ball, "Ball");
@@ -224,11 +223,14 @@ void test_gui(){
   u64 player;
   {
     player = intern_string("Player");
-    set_animation(player, intern_string("PlayerStill"));
+    reset_animation(player, intern_string("PlayerStill"));
     logd("Player: %i\n", player);
     set_color(player, vec3_new(0,0,1));
     set_faction(player, player_faction);
     set_focused_entity(game_board, player);
+    set_shooting_animation(player, intern_string("PlayerShoot"));
+    set_idle_animation(player, intern_string("PlayerStill"));
+    set_walking_animation(player, intern_string("PlayerWalk"));
     if(once(player)){
       set_name(player, "Player");
       
@@ -290,19 +292,23 @@ void test_gui(){
       add_board_element(game_board, wall);
     }
   }
+
+  u64 alien_class = intern_string("Alien Class");
+  set_color(alien_class, vec3_new(1,1,1));
+  set_idle_animation(alien_class, intern_string("alien_idle"));
+  set_walking_animation(alien_class, intern_string("alien_idle"));
+  set_faction(alien_class, alien_faction);
   
   if(true){
     for(int i = 0; i < 5/*0000*/; i++){
-    u64 alienID = 0x01122000000;
-    u64 alien = alienID + i;
-    if(once(alien)){
-      set_animation(alien, alien_anim);
-      set_body(alien, (body){vec2_new(randf32() * 100, randf32() * 100), vec2_new(2,2)});
-      set_color(alien, vec3_new(1,1,1));
-      set_faction(alien, alien_faction);
-      add_board_element(game_board, alien);
+      u64 alienID = 0x01122000000;
+      u64 alien = alienID + i;
+      if(once(alien)){
+	define_subclass(alien, alien_class);
+	set_body(alien, (body){vec2_new(randf32() * 100, randf32() * 100), vec2_new(2,2)});
+	add_board_element(game_board, alien);
+      }
     }
-  }
   }
   
   {
@@ -311,11 +317,21 @@ void test_gui(){
       logd("Loaded alien\n");
       add_board_element(game_board, alien);
       add_faction_visible_items(1, alien);
-      set_animation(alien, alien_anim);
+      define_subclass(alien, alien_class);
       set_body(alien, (body){vec2_new(50,50), vec2_new(2,2)});
-      set_color(alien, vec3_new(1,1,1));
-      set_faction(alien, alien_faction);
       set_name(alien, "alien");
+    }
+  }
+  
+  u64 gun = intern_string("gun");
+  add_faction_visible_items(1, gun);
+  {
+    if(once(gun)){
+      set_body(gun, (body){vec2_new(50, 20), vec2_new(1, 1)});
+      set_color(gun, vec3_new(0.5, 1.0, 0.5));
+      set_name(gun, "gun");
+      add_board_element(game_board, gun);
+
     }
   }
   
@@ -350,11 +366,17 @@ void test_gui(){
     body b = get_body(id);
     float d = vec2_len(vec2_sub(b.position, vec2_new(x, y)));
     set_target(id, vec2_new(x, y));
+    u64 anim;
+    animation_state current_anim = get_animation(id);
+    
     if(d > 0.1){
-      //set_animation(id, intern_string("PlayerWalk"));
+      
+      if(try_get_walking_animation(id, &anim) && anim != current_anim.animation)
+	reset_animation(id, anim);
       return CMD_NOT_DONE;
     }else{
-      //set_animation(id, intern_string("PlayerStill"));
+      if(try_get_idle_animation(id, &anim))
+	reset_animation(id, anim);
       return CMD_DONE;
     }
   }
@@ -367,6 +389,9 @@ void test_gui(){
     body b = get_body(id);
     set_target(id, b.position);
     set_body(id, b);
+    u64 idle = 0;
+    if(try_get_idle_animation(id, &idle))
+      reset_animation(id, idle);
     return CMD_DONE;
   }
   
@@ -506,7 +531,7 @@ void test_gui(){
   define_subclass(throw_cmd, command_class);
   define_method(throw_cmd, invoke_command_method, (method) do_throw);
   add_available_commands(ball, throw_cmd);
-
+  add_available_commands(gun, throw_cmd);
   command_state do_ls(u64 cmd, u64 id){
     UNUSED(cmd);
     logd("List cmd..\n");
@@ -555,6 +580,68 @@ void test_gui(){
   u64 alien_attack_cmd = intern_string("alien attack");
   define_subclass(alien_attack_cmd, command_class);
   define_method(alien_attack_cmd, invoke_command_method, (method) do_alien_attack);
+
+  command_state do_shoot(u64 cmd, u64 id, u64 itemid){
+    u64 is_shooting_ts;
+    
+    if(try_get_is_shooting(id, &is_shooting_ts)){
+      logd("WtF??\n");
+      if(is_shooting_ts > timestamp())
+	return CMD_NOT_DONE;
+      u64 idle;
+      if(try_get_idle_animation(id, &idle))
+	reset_animation(id, idle);
+      remove_is_shooting(&id, 1);
+      return CMD_DONE;
+      
+    }
+    
+
+    static u64 bulletId = 0x11122000000;
+    command_arg arg;
+    logd("Shooting..\n");
+    if(get_command_args(cmd, &arg, 1) == 0) return CMD_DONE;
+    if(arg.type == COMMAND_ARG_ITEM) return CMD_DONE;
+    u64 ts = get_last_action(itemid);
+    u64 ts1 = timestamp();
+    u64 cooldown = 500000;
+
+    if(ts1 - ts < cooldown)
+      return CMD_NOT_DONE;
+    
+    
+    body shooter_body = get_body(id);
+    body target_body = get_body(arg.id);
+    u64 bullet = bulletId++;
+    set_body(bullet, (body){shooter_body.position, vec2_new(1,1)});
+    add_board_element(game_board, bullet);
+    set_target(bullet, target_body.position);
+    set_color(bullet, vec3_new(1,1,1));
+    set_last_action(itemid, ts1);
+    u64 shooting_animation;
+    if(try_get_shooting_animation(id, &shooting_animation)){
+      u64 n_frames = 20;
+      animation_frame frames[n_frames];
+      memset(frames, 0, sizeof(frames));
+      u64 keys[n_frames];
+      for(u64 i = 0; i < n_frames; i++)
+	keys[i] = shooting_animation;
+      lookup_animation_frames(keys, frames, n_frames);
+      
+      float total_time = 0.0;
+      for(u64 i = 0; i < n_frames && frames[i].time > 0.0f; i++)
+	total_time += frames[i].time;
+      set_is_shooting(id, ts1 + total_time * 1e6);
+      reset_animation(id, shooting_animation);
+      return CMD_NOT_DONE;
+    }else
+      return CMD_DONE;
+  }
+
+  u64 shoot_cmd = intern_string("shoot");
+  define_subclass(shoot_cmd, command_class);
+  define_method(shoot_cmd, invoke_command_method, (method) do_shoot);
+  add_available_commands(gun, shoot_cmd);  
   
   u64 console = intern_string("console");
   set_focused_element(win->id, console);
@@ -649,7 +736,7 @@ void test_gui(){
 	  }
 	}
       }
-      update_alien_faction(alien_faction, player_faction);
+      //update_alien_faction(alien_faction, player_faction);
     }
     update_game_board(game_board);
     u64 time_start2 = timestamp();

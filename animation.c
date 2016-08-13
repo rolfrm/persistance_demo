@@ -33,7 +33,7 @@ CREATE_TABLE(animation_texture, u64, u64);
 CREATE_STRING_TABLE(textures, u64);
 CREATE_TABLE(animation_textures, u64, u64);
 CREATE_MULTI_TABLE(texture_sections, u64, texture_section);
-CREATE_MULTI_TABLE(animation_frames, u64, animation_frame);
+CREATE_MULTI_TABLE2(animation_frames, u64, animation_frame);
 CREATE_TABLE(texture_info, u64, texture_info);
 u64 load_pixel_frame(u64 texture, int x, int y, int x2, int y2){
   texture_info texinfo;
@@ -75,7 +75,7 @@ u64 load_pixel_frame_center_of_mass(u64 texture, int x, int y, int x2, int y2, i
   return 0;  
 }
 
-CREATE_TABLE2(animation, u64, u64);
+CREATE_TABLE2(animation, u64, animation_state);
 
 struct{
   u32 count;
@@ -98,19 +98,27 @@ i32 get_animation_gltexture(u64 tex){
   return newtex;
 }
 
-void render_animated(vec3 color, vec2 offset, vec2 size, float time, u64 animation){
+void render_animated(vec3 color, vec2 offset, vec2 size, animation_state * animation){
   UNUSED(size);
-  u64 tex = get_animation_texture(animation);
+  u64 tex = get_animation_texture(animation->animation);
   if(tex == 0) return;
-  UNUSED(time);
-  animation_frame frame[10];
-  texture_section sec[20]; 
-  size_t idx = 0;
-  u64 c = iter_animation_frames(animation, frame, array_count(frame), &idx);
-  u64 ts = (((double)timestamp()) * 0.000005 );
-  idx = 0;
+  
+  animation_frame * frame = NULL;
+  u64 * key = NULL;
+  get_refs2_animation_frames(&animation->animation, &frame, &key, 1);
+  if(frame == NULL || key == NULL) return;
+  ASSERT(key[animation->frame] == animation->animation);
+  while(animation->time > frame[animation->frame].time){
+    animation->time -= frame[animation->frame].time;
+    animation->frame += 1;
+    if(key[animation->frame] != animation->animation)
+      animation->frame = 0;
+  }
+  
+  texture_section sec[20];
+  u64 idx = 0;
   iter_texture_sections(tex, sec, 20, &idx);
-  ts = frame[ts % c].section;
+  u64 ts = frame[animation->frame].section;
 
   i32 gltex = get_animation_gltexture(tex);
 
@@ -118,4 +126,9 @@ void render_animated(vec3 color, vec2 offset, vec2 size, float time, u64 animati
   vec2 center = vec2_add(offset, vec2_scale(size, 0.5));
   vec2 offset2 = vec2_sub(center, vec2_scale(render_size, 0.5));
   rect_render2(color, vec2_add(offset2, sec[ts].render_offset), render_size , gltex, sec[ts].uv_offset, sec[ts].uv_size);
+}
+
+void reset_animation(u64 id, u64 anim){
+  
+  set_animation(id, (animation_state){.animation = anim, .frame = 0, .time = 0});
 }
