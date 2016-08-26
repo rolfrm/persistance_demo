@@ -5,12 +5,12 @@
 #include "game.h"
 
 #include <GLFW/glfw3.h>
-#include "persist_oop.h"
 #include "sortable.h"
+#include "persist_oop.h"
+
 #include "gui.h"
 
 GLFWwindow * find_glfw_window(u64 id);
-window * get_window_glfw(GLFWwindow * window);
 
 CREATE_TABLE(once,u64,u8);
 
@@ -25,7 +25,14 @@ bool once(u64 itemid){
 
 CREATE_TABLE(is_mouse_over, u64, bool);
 CREATE_TABLE(focused_element, u64, u64);
-GLFWwindow * windows[10] = {};
+CREATE_TABLE2(window_state, u64, window);
+
+struct{
+  GLFWwindow ** glfw_window;
+  u64 * window_id;
+  u64 cnt;
+}windows;
+
 
 u64 window_close_method = 0;
 u64 mouse_over_method = 0;
@@ -43,19 +50,21 @@ u64 rectangle_class;
 u64 textline_class;
 __thread bool mouse_button_action;
 
-window * get_window(GLFWwindow * glwindow){
-  
-  window * w = persist_alloc("win_state", sizeof(window));
-  for(u32 i = 0; i < array_count(windows); i++){
-    if(windows[i] == glwindow)
-      return w + i;
+u64 get_window(GLFWwindow * glwindow){  
+  for(u32 i = 0; i < windows.cnt; i++){
+    if(windows.glfw_window[i] == glwindow)
+      return windows.window_id[i];
   }
-  return NULL;
+  return 0;
+}
+
+window * get_window_ref(GLFWwindow * glwindow){
+  return get_ref_window_state(get_window(glwindow));
 }
 
 void window_pos_callback(GLFWwindow* glwindow, int xpos, int ypos)
 {
-  window * w = get_window(glwindow);
+  window * w = get_window_ref(glwindow);
   w->x = xpos;
   w->y = ypos;
   glfwGetWindowPos(glwindow, &w->x, &w->y);
@@ -63,50 +72,50 @@ void window_pos_callback(GLFWwindow* glwindow, int xpos, int ypos)
 }
 
 void window_size_callback(GLFWwindow* glwindow, int width, int height)
-{
-  window * w = get_window(glwindow);
+{  
+  window * w = get_window_ref(glwindow);
   w->width = width;
   w->height = height;
 }
 
 void cursor_pos_callback(GLFWwindow * glwindow, double x, double y){
-  window * w = get_window(glwindow);
-  window * win = w;
-  auto on_mouse_over = get_method(w->id, mouse_over_method);
+  u64 win_id = get_window(glwindow);
+  window * win = get_ref_window_state(win_id);
+  auto on_mouse_over = get_method(win_id, mouse_over_method);
   clear_is_mouse_over();
   
-  GLFWwindow * glfwWin = find_glfw_window(win->id);
+  GLFWwindow * glfwWin = find_glfw_window(win_id);
   glfwGetWindowSize(glfwWin, &win->width, &win->height);
-  thickness margin = get_margin(win->id);
+  thickness margin = get_margin(win_id);
   window_size = vec2_new(win->width, win->height);
   shared_offset = vec2_new(margin.left, margin.up);
   shared_size = vec2_new(win->width - margin.left - margin.right, win->height - margin.up - margin.down);
   if(on_mouse_over != NULL)
-    on_mouse_over(w->id, x, y, 0);
+    on_mouse_over(win_id, x, y, 0);
 }
 
 void mouse_button_callback(GLFWwindow * glwindow, int button, int action, int mods){
-  UNUSED(glwindow); UNUSED(mods);
+  UNUSED(mods);
   mouse_button_action = action == GLFW_PRESS ? 1 : 0;
   if(action == GLFW_REPEAT){
     mouse_button_action = 2;
   }
   if(button == 0){
-    window * w = get_window(glwindow);
-    window * win = w;
-    auto on_mouse_over = get_method(w->id, mouse_over_method);
+    u64 win_id = get_window(glwindow);
+    window * win = get_window_ref(glwindow);
+    auto on_mouse_over = get_method(win_id, mouse_over_method);
     if(on_mouse_over != NULL){
       double x, y;
       glfwGetCursorPos(glwindow, &x, &y);
       clear_is_mouse_over();
-      thickness margin = get_margin(win->id);
+      thickness margin = get_margin(win_id);
       //margin.left += 0.05f;
-      GLFWwindow * glfwWin = find_glfw_window(win->id);
+      GLFWwindow * glfwWin = find_glfw_window(win_id);
       glfwGetWindowSize(glfwWin, &win->width, &win->height);
       window_size = vec2_new(win->width, win->height);
       shared_offset = vec2_new(margin.left, margin.up);
       shared_size = vec2_new(win->width - margin.left - margin.right, win->height - margin.up - margin.down);
-      on_mouse_over(w->id, x, y, mouse_down_method);
+      on_mouse_over(win_id, x, y, mouse_down_method);
     }
   }
 }
@@ -124,8 +133,8 @@ void scroll_callback(GLFWwindow * glwindow, double x, double y){
 
 void key_callback(GLFWwindow* glwindow, int key, int scancode, int action, int mods){
   UNUSED(scancode);
-  window * w = get_window(glwindow);
-  u64 focused = get_focused_element(w->id);
+  u64 win_id = get_window(glwindow);
+  u64 focused = get_focused_element(win_id);
   if(focused == 0) return;
   method m = get_method(focused, key_handler_method);
   m(focused, key, mods, action);
@@ -134,8 +143,8 @@ void key_callback(GLFWwindow* glwindow, int key, int scancode, int action, int m
 void char_callback(GLFWwindow * glwindow, u32 codepoint){
   if(0 == codepoint_to_utf8(codepoint,NULL, 10))
     return; // WTF! Invalid codepoint!
-  window * w = get_window(glwindow);
-  u64 focused = get_focused_element(w->id);
+  u64 win_id = get_window(glwindow);
+  u64 focused = get_focused_element(win_id);
   if(focused == 0) return;
   
   method m = get_method(focused, char_handler_method);
@@ -144,40 +153,35 @@ void char_callback(GLFWwindow * glwindow, u32 codepoint){
 }
 
 void window_close_callback(GLFWwindow * glwindow){
-
-  window * w = get_window(glwindow);
-  auto close_method = get_method(w->id, window_close_method);
+  u64 win_id = get_window(glwindow);
+  auto close_method = get_method(win_id, window_close_method);
   if(close_method != NULL)
-    close_method(w->id);
+    close_method(win_id);
 }
 
 
 void load_window(u64 id){
-  window * w = find_item("win_state", id, sizeof(window), true);
-  window * _w = persist_alloc("win_state", 0);
-  int index = w - _w;
-  if(!w->initialized){
-    w->width = 640;
-    w->height = 640;
-    w->initialized = true;
-    w->id = id;
-    sprintf(w->title, "%s", "Test Window");
+  
+  window w;
+  if(try_get_window_state(id, &w) == false){
+    w = (window){.width = 640, .height = 640};
+    sprintf(w.title, "%s", "Test Window");
   }
-  if(w->height <= 0) w->height = 200;
-  if(w->width <= 0) w->width = 200;
-  //glfwWindowHint(GLFW_DECORATED, GL_FALSE);
+  if(w.height <= 0) w.height = 200;
+  if(w.width <= 0) w.width = 200;
   static GLFWwindow * ctx = NULL;
-  logd("Window size: %i %i %s %i %i\n", index,w->initialized, w->title, w->width, w->height);
-  GLFWwindow * window = glfwCreateWindow(w->width, w->height, w->title, NULL, ctx);
+  logd("Window size:  %s %i %i\n", w.title, w.width, w.height);
+  GLFWwindow * window = glfwCreateWindow(w.width, w.height, w.title, NULL, ctx);
   ASSERT(window != NULL);
   if(ctx == NULL){
     ctx = window;
     glfwMakeContextCurrent(window);
     glewInit();
   }
-  glfwSetWindowPos(window, w->x, w->y);
-  glfwSetWindowSize(window, w->width, w->height);
-  windows[index] = window;
+  glfwSetWindowPos(window, w.x, w.y);
+  glfwSetWindowSize(window, w.width, w.height);
+  list_push(windows.window_id, windows.cnt, id);
+  list_push2(windows.glfw_window, windows.cnt, window);
 
   glfwSetWindowPosCallback(window, window_pos_callback);
   glfwSetWindowSizeCallback(window, window_size_callback);
@@ -187,44 +191,26 @@ void load_window(u64 id){
   glfwSetScrollCallback(window, scroll_callback);
   glfwSetWindowCloseCallback(window, window_close_callback);
   glfwSetCharCallback(window, char_callback);
-  
+  insert_window_state(&id, &w, 1);
 }
 
-window * find_window(u64 id){
-  window * w = persist_alloc("win_state", sizeof(window));
-  u32 cnt = persist_size(w) / sizeof(window);
-  for(u32 i = 0; i < MIN(cnt, array_count(windows)); i++){
-    if(w[i].id == id)
-      return w + i;
-  }
-  return NULL;
-}
 
 GLFWwindow * find_glfw_window(u64 id){
-  window * w = persist_alloc("win_state", sizeof(window));
-  u32 cnt = persist_size(w) / sizeof(window);
-  for(u32 i = 0; i < MIN(cnt, array_count(windows)); i++){
-    if(w[i].id == id)
-      return windows[i];
+  
+  for(u32 i = 0; i < windows.cnt; i++){
+    if(windows.window_id[i] == id)
+      return windows.glfw_window[i];
   }
   return NULL;
 }
 
-window * get_window_glfw(GLFWwindow * win){
-  UNUSED(win);
-  ASSERT(false);
-  return NULL;
-}
-
-window * make_window(u64 id){
+void make_window(u64 id){
   if(id == 0) id = get_unique_number();
   GLFWwindow * win = find_glfw_window(id);
   if(win == NULL)
     load_window(id);
   ASSERT(find_glfw_window(id) != NULL);
-  window * _win = find_window(id);
-  define_subclass(_win->id, window_class);
-  return _win;
+  define_subclass(id, window_class);
 }
 CREATE_TABLE(margin, u64, thickness);
 CREATE_TABLE(corner_roundness, u64, thickness);
@@ -752,7 +738,7 @@ void measure_stackpanel(u64 stk_id, vec2 * s){
 
 
 void render_window(u64 window_id){
-  window * win = find_window(window_id);
+  window win = get_window_state(window_id);
   {
     GLFWwindow * win = find_glfw_window(window_id);
     if(win == NULL)
@@ -760,30 +746,29 @@ void render_window(u64 window_id){
   }
   
   bool last = true;
-  thickness margin = get_margin(win->id);
+  thickness margin = get_margin(window_id);
   //margin.left += 0.05f;
-  GLFWwindow * glfwWin = find_glfw_window(win->id);
-  glfwSetWindowTitle(glfwWin, win->title);
-  glfwGetWindowSize(glfwWin, &win->width, &win->height);
+  GLFWwindow * glfwWin = find_glfw_window(window_id);
+  glfwSetWindowTitle(glfwWin, win.title);
+  glfwGetWindowSize(glfwWin, &win.width, &win.height);
   glfwMakeContextCurrent(glfwWin);
-  glViewport(0, 0, win->width, win->height);
-  window_size = vec2_new(win->width, win->height);
+  glViewport(0, 0, win.width, win.height);
+  window_size = vec2_new(win.width, win.height);
   
   
   glClearColor(0.8, 0.8, 1, 1);
   glClear(GL_COLOR_BUFFER_BIT);
   shared_offset = vec2_new(margin.left, margin.up);
-  shared_size = vec2_new(win->width - margin.left - margin.right, win->height - margin.up - margin.down);
+  shared_size = vec2_new(win.width - margin.left - margin.right, win.height - margin.up - margin.down);
   u64 index = 0;
   control_pair * child_control = NULL;
-  while((child_control = get_control_pair_parent(win->id, &index))){
+  while((child_control = get_control_pair_parent(window_id, &index))){
     if(child_control == NULL)
       break;
     ASSERT(child_control->child_id != 0);
   
     render_sub(child_control->child_id);
   }
-  //set_margin(win->id, margin);
   if(last)
     glfwSwapInterval(1);
   else
@@ -803,9 +788,8 @@ void on_btn_clicked2(u64 control){
 }
 
 void window_close(u64 win_id){
-  UNUSED(win_id);
-  window * win = find_window(win_id);
-  win->id = 0;
+  window * win = get_ref_window_state(win_id);
+  UNUSED(win);
 }
 
 void measure_child_controls(u64 control, vec2 * size){

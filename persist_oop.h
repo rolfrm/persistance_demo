@@ -310,3 +310,5 @@ typedef struct{
   u64 get_ ## Name(KeyType item, char * out, u64 buffer_size);		\
   void set_ ## Name(KeyType item, const char * name);			\
   void remove_ ## Name(KeyType item);					
+
+CREATE_TABLE_DECL2(base_class, u64, u64);

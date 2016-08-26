@@ -4,8 +4,8 @@
 #include "stb_image.h"
 
 #include "persist.h"
-#include "persist_oop.h"
 #include "sortable.h"
+#include "persist_oop.h"
 #include "animation.h"
 #include <GLFW/glfw3.h>
 #include "game.h"
@@ -29,12 +29,14 @@ i32 load_gl_texture(const char * path){
   stbi_image_free(data);
   return out;
 }
+
 CREATE_TABLE(animation_texture, u64, u64);
 CREATE_STRING_TABLE(textures, u64);
 CREATE_TABLE(animation_textures, u64, u64);
 CREATE_MULTI_TABLE(texture_sections, u64, texture_section);
 CREATE_MULTI_TABLE2(animation_frames, u64, animation_frame);
 CREATE_TABLE(texture_info, u64, texture_info);
+
 u64 load_pixel_frame(u64 texture, int x, int y, int x2, int y2){
   texture_info texinfo;
   if(!try_get_texture_info(texture, &texinfo)){

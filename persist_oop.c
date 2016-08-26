@@ -1,8 +1,8 @@
 #include <GLFW/glfw3.h>
 #include <iron/full.h>
 #include "persist.h"
-#include "persist_oop.h"
 #include "sortable.h"
+#include "persist_oop.h"
 
 CREATE_MULTI_TABLE2(base_class, u64, u64);
 
@@ -13,6 +13,7 @@ void define_subclass(u64 class, u64 base_class){
 u64 get_baseclass(u64 class, u64 * index){
   u64 r = 0;
   iter_base_class(&class, 1, &class, &r, 1, index);
+
   if(r != 0)
     return *ref_at_base_class(r);
   return 0;
@@ -25,8 +26,8 @@ void define_method(u64 class_id, u64 method_id, method handler){
 method get_method(u64 class_id, u64 method_id){
   if(class_id == 0)
     return NULL;
-  //ASSERT(class_id != 0);
   method cmd = get_command_handler(class_id, method_id);
+  
   if(cmd == NULL){
     u64 idx = 0;
   next_cls:;
@@ -52,25 +53,23 @@ method get_command_handler(u64 control_id, u64 command_id){
 }
 
 method * get_command_handler2(u64 control_id, u64 command_id, bool create){
-  static method handlers[100] = {};
-  static bool inited[100] ={};
-  static u64 control_ids[100] = {};
-  static u64 command_ids[1000] = {};
-  for(u64 i = 0; i < array_count(inited); i++){
-    if(inited[i] && control_ids[i] == control_id &&  command_ids[i] == command_id)
-      return handlers + i;
-  }
-  if(create){
-    for(u64 i = 0; i < array_count(inited); i++){
-      if(!inited[i]){
-	inited[i] = true;
-	control_ids[i] = control_id;
-	command_ids[i] = command_id;
-	return handlers + i;
-      }
-    }
-  }
-  return NULL;
+  UNUSED(create);
+  static sorttable * tab = NULL;
+  if(tab == NULL)
+    tab = IRON_CLONE(create_sorttable(sizeof(u128), sizeof(method), NULL));
+  union{
+    struct {
+      u64 _id, _command_id;
+    };
+    u128 index;
+  }key;
+  key._id = control_id;
+  key._command_id = command_id;
+  u64 idx = sorttable_find(tab, &key.index);
+  if(idx == 0)
+    idx = sorttable_insert_key(tab, &key.index);
+  method * mtab = tab->value_area->ptr;
+  return mtab + idx;
 }
 
 void attach_handler(u64 control_id, u64 command_id, void * handler){
@@ -108,3 +107,32 @@ void * find_item(const char * table, u64 itemid, u64 size, bool create){
   *id = itemid;
   return free;
 }
+
+u64 intern_string(const char *);
+
+void test_persist_oop(){
+  u64 scls = intern_string("cls2");
+  u64 cls = intern_string("test cls");
+  define_subclass(cls, scls);
+  u64 i = 0;
+  ASSERT(get_baseclass(cls, &i) == scls);
+  u64 mth1 = intern_string("test method");
+  u64 mth2 = intern_string("test method2");
+  
+  bool called = false;
+  void was_called(){
+    called = true;
+  }
+  bool called2 = false;
+  void was_called2(){
+    called2 = true;
+  }
+  
+  define_method(cls, mth1, (method) was_called);
+  define_method(scls, mth2, (method)was_called2);
+  
+  get_method(cls, mth1)(cls);
+  get_method(cls, mth2)(cls);
+  ASSERT(called);
+  ASSERT(called2);
+} 

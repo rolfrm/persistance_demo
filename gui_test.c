@@ -6,8 +6,9 @@
 
 #include <GLFW/glfw3.h>
 //#include "gui_test.h"
-#include "persist_oop.h"
 #include "sortable.h"
+#include "persist_oop.h"
+
 #include "gui.h"
 #include "console.h"
 
@@ -55,7 +56,7 @@ void erase_item(u64 id){
 
 void update_alien_faction(u64 alien_faction, u64 player_faction){
   static u64 move_cmd = 0;
-
+  
   if(move_cmd == 0)
     move_cmd = intern_string("alien attack");
   u64 player = 0;
@@ -74,7 +75,20 @@ void update_alien_faction(u64 alien_faction, u64 player_faction){
   command_arg arg = { .type = COMMAND_ARG_ENTITY, .id = player};
   u64 cmd_inv = 0;
   idx = 0;
+  u64 lookup_cnt = 0;
+  u64 classes[array_count(id)];
+  u64 class_lookup[array_count(id)];
+  //u64 indexer[array_count(id)];
   while(0 != (c = iter_all_faction(id, faction, array_count(faction), &idx))){
+
+    for(u64 i = 0; i < c; i++){
+      if(faction[i] == 0){
+	//indexer[lookup_cnt] = lookup_cnt;
+	class_lookup[lookup_cnt++] = id[i];
+      }
+    }
+    lookup_base_class(class_lookup, classes, lookup_cnt);
+    
     u64 j = 0;
     for(u64 i = 0; i < c; i++)
       if(faction[i] == alien_faction)
@@ -185,15 +199,13 @@ void test_gui(){
     }
   }
   
-  texture_section sec[3];
-  u64 idx = 0;
-
-  u64 c = iter_texture_sections(anim_tex, sec, 3, &idx);
-  logd("%i %i %i\n", anim_tex, idx, c);
-  ASSERT(c == 3);
-  
   init_gui();
-  window * win = make_window(4);
+  u64 win_id = intern_string("WIN!");
+  
+  make_window(win_id);
+  auto m1 = get_method(win_id, render_control_method);
+  ASSERT(m1 != NULL);
+  window * win = get_ref_window_state(win_id);
   sprintf(win->title, "%s", "Test Window");
   logd("window opened: %p\n", win);
 
@@ -202,7 +214,7 @@ void test_gui(){
   
   u64 game_board = intern_string("game board");
   load_game_board(game_board);
-  add_control(win->id, game_board);
+  add_control(win_id, game_board);
 
   u64 ball = intern_string("Ball");
   reset_animation(ball, 0);
@@ -233,7 +245,6 @@ void test_gui(){
     set_walking_animation(player, intern_string("PlayerWalk"));
     if(once(player)){
       set_name(player, "Player");
-      
       add_faction_visible_items(player_faction, player);
       set_body(player, (body){ vec2_new(1,1), vec2_new(2,2) });
       add_board_element(game_board, player);
@@ -324,17 +335,15 @@ void test_gui(){
   }
   
   u64 gun = intern_string("gun");
-  add_faction_visible_items(1, gun);
   {
     if(once(gun)){
+      add_faction_visible_items(1, gun);
       set_body(gun, (body){vec2_new(50, 20), vec2_new(1, 1)});
       set_color(gun, vec3_new(0.5, 1.0, 0.5));
       set_name(gun, "gun");
       add_board_element(game_board, gun);
-
     }
   }
-  
   clear_available_commands();
   command_class = intern_string("command class");
   invoke_command_method = intern_string("invoke");
@@ -434,9 +443,7 @@ void test_gui(){
       while((c = iter_inventory(id, &item, 1,  &it)) > 0){
 	if(item == arg.id)
 	  clear_at_inventory(it - 1);
-
       }
-
     }
     return CMD_DONE;
   }
@@ -585,7 +592,6 @@ void test_gui(){
     u64 is_shooting_ts;
     
     if(try_get_is_shooting(id, &is_shooting_ts)){
-      logd("WtF??\n");
       if(is_shooting_ts > timestamp())
 	return CMD_NOT_DONE;
       u64 idle;
@@ -593,13 +599,10 @@ void test_gui(){
 	reset_animation(id, idle);
       remove_is_shooting(&id, 1);
       return CMD_DONE;
-      
     }
     
-
     static u64 bulletId = 0x11122000000;
     command_arg arg;
-    logd("Shooting..\n");
     if(get_command_args(cmd, &arg, 1) == 0) return CMD_DONE;
     if(arg.type == COMMAND_ARG_ITEM) return CMD_DONE;
     u64 ts = get_last_action(itemid);
@@ -608,7 +611,6 @@ void test_gui(){
 
     if(ts1 - ts < cooldown)
       return CMD_NOT_DONE;
-    
     
     body shooter_body = get_body(id);
     body target_body = get_body(arg.id);
@@ -644,10 +646,10 @@ void test_gui(){
   add_available_commands(gun, shoot_cmd);  
   
   u64 console = intern_string("console");
-  set_focused_element(win->id, console);
+  set_focused_element(win_id, console);
   set_console_height(console, 300);
   create_console(console);
-  add_control(win->id, console);
+  add_control(win_id, console);
   set_margin(console, (thickness){5,5,5,5});
   set_vertical_alignment(console, VALIGN_BOTTOM);
   set_console_history_cnt(console, 100);
@@ -718,10 +720,34 @@ void test_gui(){
     push_console_history(console, buf);
   }
   //iron_log_printer = print_console;
-  
-  while(!get_should_exit(game_board)){
+  logd("Update2\n");
+  bool should_exit = false;
+  while(!(should_exit = get_should_exit(game_board))){
     u64 time_start = timestamp();
     if(!get_is_paused(game_board)){
+
+      u64 bodies[10];
+      u64 board_element_cnt = 0;
+      size_t iter = 0;
+      do{
+	board_element_cnt = iter_board_elements2(game_board, bodies, array_count(bodies), &iter);
+	for(u64 i = 0; i < board_element_cnt; i++){
+	  u64 id = bodies[i];
+	  animation_state * get_animation;
+	  get_refs_animation(&id, &get_animation, 1);
+	  if(get_animation == NULL){
+	    u64 anim = get_idle_animation(id);
+	    if(anim == 0){
+	      u64 bid = 0;
+	      u64 base = 0;
+	      while ((0 !=  (base = get_baseclass(id, &bid))) && anim == 0)
+		anim = get_idle_animation(base);
+	    }
+	    if(anim != 0)
+	      reset_animation(id, anim);
+	  }
+	}
+      }while(board_element_cnt == array_count(bodies));
 
       u64 id[10], idx = 0;
       float dmg[10];
@@ -736,23 +762,24 @@ void test_gui(){
 	  }
 	}
       }
-      //update_alien_faction(alien_faction, player_faction);
+      update_alien_faction(alien_faction, player_faction);
     }
     update_game_board(game_board);
     u64 time_start2 = timestamp();
     u64 dt = time_start2 - time_start;
     UNUSED(dt);
     //logd("DT: %i\n", time_start2 - time_start);
-    window * w = persist_alloc("win_state", sizeof(window));
-    int cnt = (int)(persist_size(w) / sizeof(window));
-    bool any_active = false;
-    for(int j = 0; j < cnt; j++){
-      if(!w[j].id != 0) continue;
+    window w;
+    u64 id, j=0;
+    bool any_active = false;    
+    while(1 == iter_all_window_state(&id, &w, 1, &j)){
+      if(id == 0) continue;
       any_active = true;
-      auto method = get_method(w[j].id, render_control_method);
-      UNUSED(method);
-      if(method!= NULL) method(w[j].id);
+      auto method = get_method(id, render_control_method);
+      ASSERT(method != NULL);
+      if(method!= NULL) method(id);      
     }
+    
     if(!any_active){
       logd("Ending program\n");
       break;

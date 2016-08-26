@@ -1,7 +1,8 @@
 #include <iron/full.h>
 #include "persist.h"
-#include "persist_oop.h"
 #include "sortable.h"
+#include "persist_oop.h"
+
 #include "gui.h"
 #include "animation.h"
 
@@ -74,7 +75,7 @@ void measure_game_board(u64 id, vec2 * size){
 
 void render_game_board(u64 id){
   UNUSED(id);
-  rect_render(vec3_new(0.0,0.0,0.0), shared_offset, shared_size);
+  rect_render(vec3_new(0.1,0.1,0.1), shared_offset, shared_size);
   {
     u64 focused_entity = get_focused_entity(id);
     if(focused_entity != 0){
@@ -89,12 +90,16 @@ void render_game_board(u64 id){
   vec2 camera_position = get_camera_position(id);
   u64 board_element_cnt = 0;
   u64 bodies[10];
+  body bodyobj[array_count(bodies)];
+  u64 classes[array_count(bodies)];
+	      
   animation_state * animations[array_count(bodies)];
   size_t iter = 0;
   do{
     board_element_cnt = iter_board_elements2(id, bodies, array_count(bodies), &iter);
     get_refs_animation(bodies, animations, board_element_cnt);
-
+    lookup_body(bodies,bodyobj, board_element_cnt);
+    lookup_base_class(bodies, classes, board_element_cnt);
     for(u64 i = 0; i < board_element_cnt; i++){
 
       body b = get_body(bodies[i]);

@@ -72,6 +72,15 @@ static int keycmp(const u64 * k1,const  u64 * k2){
   else return -1;
 }
 
+static int keycmp128(const u128 * k1,const  u128 * k2){
+  if(*k1 > *k2)
+    return 1;
+  else if(*k1 == *k2)
+    return 0;
+  else return -1;
+}
+
+
 sorttable create_sorttable(size_t key_size, size_t value_size, const char * name){
   sorttable table = {};
   char pathbuf[100];
@@ -81,7 +90,10 @@ sorttable create_sorttable(size_t key_size, size_t value_size, const char * name
   table.value_area = create_mem_area(pathbuf);
   table.key_size = key_size;
   table.value_size = value_size;
-  table.cmp = (void *) keycmp;
+  if(key_size == sizeof(u128))
+    table.cmp = (void *) keycmp128;
+  else
+    table.cmp = (void *) keycmp;
   
   if(table.key_area->size < key_size){
     mem_area_realloc(table.key_area, key_size);

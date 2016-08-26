@@ -33,45 +33,49 @@ persisted_mem_area * get_mem_area_by_ptr(const void * ptr){
 }
 
 persisted_mem_area * create_mem_area(const char * name){
-  ASSERT(name[0] != '/' && name[0] != 0);
-  const char * data_directory = "data";
-  mkdir(data_directory, 0777);
-  
-  {
-    char * pt = (char * )name;
-    while(true){
-      char * slash = strchr(pt, '/');
-      if(slash == NULL) break;
-      if(slash != NULL && slash[-1] != '\\'){
-	size_t size = slash - name;
-	char s[20];
-	strcpy(s, name);
-	s[size] = 0;
-	char buf[100];
-	sprintf(buf, "data/%s", s);
-	mkdir(buf, 0777);
+  int fd = 0;
+  u64 size = 0;
+  if(name != NULL){
+    ASSERT(name[0] != '/' && name[0] != 0);
+    const char * data_directory = "data";
+    mkdir(data_directory, 0777);
+    
+    {
+      char * pt = (char * )name;
+      while(true){
+	char * slash = strchr(pt, '/');
+	if(slash == NULL) break;
+	if(slash != NULL && slash[-1] != '\\'){
+	  size_t size = slash - name;
+	  char s[20];
+	  strcpy(s, name);
+	  s[size] = 0;
+	  char buf[100];
+	  sprintf(buf, "data/%s", s);
+	  mkdir(buf, 0777);
+	}
+	pt = slash + 1;
+	ASSERT(pt[0] != '/' && pt[0] != 0);
       }
-      pt = slash + 1;
-      ASSERT(pt[0] != '/' && pt[0] != 0);
     }
-  }
-  const size_t min_size = 1;
+    const size_t min_size = 1;
 
-  char path[100];
-  sprintf(path, "%s/%s",data_directory, name);
-  int fd = open(path, O_RDWR | O_CREAT, 0666);
-  ASSERT(fd >= 0);
-  u64 size = lseek(fd, 0, SEEK_END);
-  if(size < min_size){
-    lseek(fd, 0, SEEK_SET);
-    ASSERT(0 == ftruncate(fd, min_size));
+    char path[100];
+    sprintf(path, "%s/%s",data_directory, name);
+    fd = open(path, O_RDWR | O_CREAT, 0666);
+    ASSERT(fd >= 0);
     size = lseek(fd, 0, SEEK_END);
+    if(size < min_size){
+      lseek(fd, 0, SEEK_SET);
+      ASSERT(0 == ftruncate(fd, min_size));
+      size = lseek(fd, 0, SEEK_END);
+    }
+    lseek(fd, 0, SEEK_SET);
   }
-  lseek(fd, 0, SEEK_SET);
   void * ptr = mmap(NULL, size, PROT_READ | PROT_WRITE , MAP_SHARED, fd, 0);
   ASSERT(ptr != NULL);
   persisted_mem_area mema = {.ptr = ptr, .size = size, .name = (char *) name, .fd = fd};
-  return iron_clone(&mema, sizeof(mema));
+  return IRON_CLONE(mema);
 }
 
 

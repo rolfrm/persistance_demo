@@ -5,6 +5,7 @@
 #include "game.h"
 
 #include <GLFW/glfw3.h>
+#include "sortable.h"
 #include "persist_oop.h"
 #include "gui.h"
 #include "console.h"
@@ -153,8 +154,20 @@ void key_handler_console(u64 id, int key, int mods, int action){
   UNUSED(mods);
   if(key == key_enter && action == key_press){
     int len = get_text(id, NULL, 1000);
+    
     char buffer[len];
     get_text(id, buffer, len);
+    for(int i = 0; i < len; i++)
+      if(buffer[i] == '\n'){
+	buffer[i] = 0;
+	break;
+      }
+    logd("Exec buffer: '%s'\n", buffer);
+    if(buffer[0] == 0){
+      set_text(id, "");
+      return;
+    }
+      
     push_console_history(id, buffer);
     
     remove_text(id);

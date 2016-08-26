@@ -1,8 +1,9 @@
 #include <iron/full.h>
 #include "persist.h"
+#include "sortable.h"
 #include "persist_oop.h"
 #include "gui.h"
-#include "sortable.h"
+
 #include "command.h"
 
 #include "game_board.h"

@@ -1,5 +1,4 @@
 typedef struct{
-  u64 id;
   int width, height;
   int x, y;
   bool initialized;
@@ -60,8 +59,7 @@ extern u64 rectangle_class;
 extern u64 textline_class;
 extern __thread vec2 shared_offset, shared_size, window_size;
 extern __thread bool mouse_button_action;
-window * find_window(u64 id);
-window * make_window(u64 id);
+void make_window(u64 id);
 
 CREATE_TABLE_DECL(margin, u64, thickness);
 CREATE_TABLE_DECL(corner_roundness, u64, thickness);
@@ -69,6 +67,7 @@ CREATE_TABLE_DECL(color, u64, vec3);
 CREATE_STRING_TABLE_DECL(text, u64);
 CREATE_STRING_TABLE_DECL(name, u64);
 CREATE_MULTI_TABLE_DECL(inventory, u64, u64);
+CREATE_TABLE_DECL2(window_state, u64, window);
 u64 get_unique_number();
 u64 intern_string(const char * name);
 control_pair * add_control(u64 id, u64 other_id);
