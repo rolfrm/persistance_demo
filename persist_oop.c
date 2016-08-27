@@ -6,8 +6,29 @@
 
 CREATE_MULTI_TABLE2(base_class, u64, u64);
 
+bool is_subclass(u64 class, u64 base_class){
+  u64 r[10];
+  u64 index = 0;
+  u64 cnt;
+  while(0 < (cnt = iter2_base_class(class, r, array_count(r), &index))){
+    if(cnt == 0)
+      return false;
+    for(u64 i = 0; i < cnt; i++){
+      if(r[i] == base_class)
+	return true;
+      
+    }
+    for(u64 i = 0; i < cnt; i++){
+      if(is_subclass(r[i], base_class))
+	return true;
+    }
+  }
+  return false;
+}
+
 void define_subclass(u64 class, u64 base_class){
-  set_base_class(class, base_class);
+  if(!is_subclass(class, base_class))
+    set_base_class(class, base_class);
 }
 
 u64 get_baseclass(u64 class, u64 * index){
@@ -113,26 +134,33 @@ u64 intern_string(const char *);
 void test_persist_oop(){
   u64 scls = intern_string("cls2");
   u64 cls = intern_string("test cls");
+  u64 obj1 = intern_string("test obj");
   define_subclass(cls, scls);
+  define_subclass(obj1, cls);
   u64 i = 0;
   ASSERT(get_baseclass(cls, &i) == scls);
   u64 mth1 = intern_string("test method");
   u64 mth2 = intern_string("test method2");
   
-  bool called = false;
+  int called = 0;
   void was_called(){
-    called = true;
+    called += 1;
   }
-  bool called2 = false;
+  bool called2 = 0;
   void was_called2(){
-    called2 = true;
+    called2 += 1;
   }
   
   define_method(cls, mth1, (method) was_called);
   define_method(scls, mth2, (method)was_called2);
+
+
   
-  get_method(cls, mth1)(cls);
-  get_method(cls, mth2)(cls);
-  ASSERT(called);
-  ASSERT(called2);
+  CALL_BASE_METHOD(obj1, mth1, obj1);
+  CALL_BASE_METHOD(obj1, mth2, obj1);
+  //get_method(cls, mth1)(cls);
+  //get_method(cls, mth2)(cls);
+  logd("CALLED: %i\n", called);
+  ASSERT(called == 1);
+  ASSERT(called2 == 1);
 } 
