@@ -254,8 +254,6 @@ void handle_mouse_over(u64 id, double x, double y, u64 method){
   shared_size = saved_size;
 }
 
-
-
 u64 get_unique_number(){
   static u64 * w = NULL;
   if(w == NULL){
@@ -478,6 +476,7 @@ void rect_render2(vec3 color, vec2 offset, vec2 size, i32 tex, vec2 uv_offset, v
 
 
 void render_rectangle(u64 rect_id){
+
   rectangle * rect = find_rectangle(rect_id, false);
   ASSERT(rect != NULL);
 

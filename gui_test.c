@@ -53,6 +53,7 @@ void erase_item(u64 id){
   for(size_t i = 0; i < tables.count; i++)
     tables.infos[i].remove(&id);
 }
+#include <signal.h>
 
 void update_alien_faction(u64 alien_faction, u64 player_faction){
   static u64 move_cmd = 0;
@@ -560,6 +561,43 @@ void test_gui(){
   define_method(ls_cmd, invoke_command_method, (method) do_ls);
   add_available_commands(player, ls_cmd);
 
+  command_state do_look(u64 cmd, u64 id){
+    UNUSED(cmd);
+    u64 idx = 0;
+    u64 items[10];
+    u64 cnt;
+    bool any = false;
+    //
+    while((cnt = iter2_visibility(id, items, array_count(items), &idx)) > 0){
+      logd("Cnt: %i %i %i\n", cnt, id, items[0]);
+
+      if(!any){
+	logd("I see: \n");
+	any = true;
+      }
+      
+      for(u64 j = 0; j < cnt; j++){
+	char name[100];
+	u64 l = get_name(items[j], name, sizeof(name));
+	if(l == 0){
+	  logd(" - Unknown object (%i)\n", items[j]);
+	}else{
+	  logd(" - '%s'\n", name);
+	}
+      }
+    }
+    if(!any){
+      logd("I see nothing.\n");
+    }
+    
+    return CMD_DONE;
+  }
+  
+  u64 look_cmd = intern_string("look");
+  define_subclass(look_cmd, command_class);
+  define_method(look_cmd, invoke_command_method, (method) do_look);
+  add_available_commands(player, look_cmd);
+  
   command_state do_alien_attack(u64 cmd, u64 id){
     command_arg arg;
     if(get_command_args(cmd, &arg, 1) == 0 || arg.type != COMMAND_ARG_ENTITY)
@@ -653,6 +691,7 @@ void test_gui(){
   set_margin(console, (thickness){5,5,5,5});
   set_vertical_alignment(console, VALIGN_BOTTOM);
   set_console_history_cnt(console, 100);
+
   void command_entered(u64 id, char * cmd){
     UNUSED(id);
     bool parse_cmd(u64 id, u64 wielder){
@@ -701,7 +740,7 @@ void test_gui(){
   }
 
   define_method(console, console_command_entered_method, (method)command_entered);
-
+  
   void check_pause(u64 console, int key, int mods, int action){
     if(key == key_space && mods == mod_ctrl && action == key_press){
       _pause_board(0, game_board);
@@ -711,16 +750,25 @@ void test_gui(){
   }
   
   define_method(console, key_handler_method, (method)check_pause);
+
+  auto prev_printer = iron_log_printer;
   
+  //
   void print_console(const char * fmt, va_list lst){
     int l = strlen(fmt);
     if(l == 0) return;
     char buf[200];
+    va_list ap;
+    va_copy(ap, lst);
     vsprintf(buf, fmt, lst);
     push_console_history(console, buf);
+    prev_printer(fmt, ap);
   }
-  //iron_log_printer = print_console;
-  logd("Update2\n");
+  
+  iron_log_printer = print_console;
+  
+  logd("Player: %i\n", player);
+  
   bool should_exit = false;
   while(!(should_exit = get_should_exit(game_board))){
     u64 time_start = timestamp();

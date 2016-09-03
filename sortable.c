@@ -221,9 +221,10 @@ void sorttable_removes(sorttable * table, void * keys, size_t cnt){
 size_t sorttable_iter(sorttable * table, void * keys, size_t keycnt, void * out_keys, u64 * indexes, size_t cnt, size_t * idx){
   u64 orig_cnt = cnt;
   u64 i;
+  
   for(i = 0; i < keycnt; i++){
     void * key = keys + i * table->key_size;
-    void * start = table->key_area->ptr + *idx * table->key_size;
+    void * start = table->key_area->ptr + (*idx + 1) * table->key_size;
     void * end = table->key_area->ptr + table->key_area->size;
     if(start >= end)
       break;
@@ -239,17 +240,19 @@ size_t sorttable_iter(sorttable * table, void * keys, size_t keycnt, void * out_
     if(key_index == NULL)
       continue;
     //logd("IDX: %i, %i\n", *idx, key_index - start);
-    //ASSERT(table->cmp(key_index, key_index - table->key_size) != 0);
+    ASSERT(table->cmp(key_index, key_index - table->key_size) != 0);
     start = key_index;
 
     *idx = (start - table->key_area->ptr) / table->key_size;
+    
     do{
       if(out_keys != NULL){
 	memcpy(out_keys, key, table->key_size);
 	out_keys += table->key_size;
       }
-      //logd("IDX: %i\n", *idx);
+      
       *indexes = *idx;
+      //logd("Found index: %i\n", *indexes);
       indexes += 1;
       cnt -= 1;
       start += table->key_size;

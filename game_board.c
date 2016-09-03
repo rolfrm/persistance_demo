@@ -61,8 +61,8 @@ void remove_board_element(u64 game_board, u64 item){
 
 size_t iter_board_elements2(u64 game_board, u64 * items, size_t item_cnt, u64 * idx){
   sorttable * table = get_sorttable(game_board);
-  void * offset = table->value_area->ptr + *idx * table->value_size;
-  u64 next = MIN(item_cnt, table->value_area->size / table->value_size - *idx);
+  void * offset = table->value_area->ptr + (*idx + 1) * table->value_size;
+  u64 next = MIN(item_cnt, table->value_area->size / table->value_size - *idx - 1);
   memcpy(items, offset, next * table->value_size);
   *idx += next;
   return next;
@@ -165,6 +165,7 @@ typedef struct{
 }mapchunk;
 
 CREATE_TABLE2(map_chunks, u64, mapchunk);
+CREATE_MULTI_TABLE2(visibility, u64, u64);
 
 mapchunk * get_map_chunk_for(int x, int y){
   union{
@@ -222,6 +223,7 @@ void test_walls(){
 }
 
 void update_game_board(u64 id){
+  clear_visibility();
   void handle_commands(u64 entity){
     u64 command = 1;
     while(command != 0){
@@ -290,9 +292,41 @@ void update_game_board(u64 id){
     board_element_cnt = iter_board_elements2(id, bodies, array_count(bodies), &iter);
     for(u64 i = 0; i < board_element_cnt; i++){
       if(get_is_dead(bodies[i])) continue;
+      body b = get_body(bodies[i]);      
+      u64 board_element_cnt2 = 0;
+      u64 bodies2[10];
+      size_t iter2 = 0;
+      while((board_element_cnt2 = iter_board_elements2(id, bodies2, array_count(bodies2), &iter2))){
+	bool vis = true;
+	for(u64 j = 0; j < board_element_cnt2; j++){
+	  if(bodies2[j] == bodies[i]) continue;
+	  if(get_is_dead(bodies2[j])) continue;
+	  body b2 = get_body(bodies2[j]);
+	  vec2 p1 = b.position;
+	  vec2 p2 = b2.position;
+	  vec2 dv = vec2_sub(p2, p1);
+	  float l = vec2_len(dv);
+	  vec2 d = vec2_scale(dv, 1/l);
+	  for(float v1= 0.0; v1 < l; v1+= 1){
+	    vec2 tp = vec2_add(p1, vec2_scale(d, v1));
+	    wall_kind wall = get_wall_at(tp.x, tp.y);
+	    if(wall == WALL_UP || wall == WALL_LEFT){
+	      vis=false;
+	      goto next_elem;
+	    }
+	  }
+	next_elem:;
+	  if(vis){
+	    //logd("visible: %i %i\n", bodies[i], bodies[j]);
+	    set_visibility(bodies[i], bodies2[j]);
+	  }
+	}
+      
+      }
+      
       handle_commands(bodies[i]);
 
-      body b = get_body(bodies[i]);
+
       vec2 target;
       if(try_get_target(bodies[i], &target)){
 	vec2 d = vec2_sub(target, b.position);

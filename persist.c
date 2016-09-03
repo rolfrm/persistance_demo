@@ -121,8 +121,10 @@ void * persist_alloc(const char * name, size_t min_size){
 void mem_area_realloc(persisted_mem_area * area, u64 size){
   ASSERT(area != NULL);
   if(area->size == size) return;
+  
   area->ptr = mremap(area->ptr, area->size, size, MREMAP_MAYMOVE);
   ASSERT(0 == ftruncate(area->fd, size));
+  
   area->size = size;
 }
 

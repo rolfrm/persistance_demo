@@ -29,3 +29,4 @@ CREATE_TABLE_DECL2(is_wall, u64, bool);
 CREATE_TABLE_DECL2(faction, u64, u64);
 CREATE_TABLE_DECL2(camera_position, u64, vec2);
 CREATE_TABLE_DECL2(focused_entity, u64, u64);
+CREATE_TABLE_DECL2(visibility, u64, u64);
