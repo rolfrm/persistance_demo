@@ -597,7 +597,7 @@ void test_gui(){
   define_subclass(look_cmd, command_class);
   define_method(look_cmd, invoke_command_method, (method) do_look);
   add_available_commands(player, look_cmd);
-  
+  set_is_instant(look_cmd, true);
   command_state do_alien_attack(u64 cmd, u64 id){
     command_arg arg;
     if(get_command_args(cmd, &arg, 1) == 0 || arg.type != COMMAND_ARG_ENTITY)

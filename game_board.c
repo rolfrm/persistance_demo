@@ -60,9 +60,11 @@ void remove_board_element(u64 game_board, u64 item){
 }
 
 size_t iter_board_elements2(u64 game_board, u64 * items, size_t item_cnt, u64 * idx){
+  if(*idx == 0)
+    *idx = 1;
   sorttable * table = get_sorttable(game_board);
-  void * offset = table->value_area->ptr + (*idx + 1) * table->value_size;
-  u64 next = MIN(item_cnt, table->value_area->size / table->value_size - *idx - 1);
+  void * offset = table->value_area->ptr + *idx * table->value_size;
+  u64 next = MIN(item_cnt, table->value_area->size / table->value_size - *idx);
   memcpy(items, offset, next * table->value_size);
   *idx += next;
   return next;
@@ -297,7 +299,7 @@ void update_game_board(u64 id){
       u64 bodies2[10];
       size_t iter2 = 0;
       while((board_element_cnt2 = iter_board_elements2(id, bodies2, array_count(bodies2), &iter2))){
-	bool vis = true;
+
 	for(u64 j = 0; j < board_element_cnt2; j++){
 	  if(bodies2[j] == bodies[i]) continue;
 	  if(get_is_dead(bodies2[j])) continue;
@@ -307,19 +309,15 @@ void update_game_board(u64 id){
 	  vec2 dv = vec2_sub(p2, p1);
 	  float l = vec2_len(dv);
 	  vec2 d = vec2_scale(dv, 1/l);
+	  
 	  for(float v1= 0.0; v1 < l; v1+= 1){
 	    vec2 tp = vec2_add(p1, vec2_scale(d, v1));
 	    wall_kind wall = get_wall_at(tp.x, tp.y);
-	    if(wall == WALL_UP || wall == WALL_LEFT){
-	      vis=false;
+	    if(wall == WALL_UP || wall == WALL_LEFT)
 	      goto next_elem;
-	    }
 	  }
+	  set_visibility(bodies[i], bodies2[j]);
 	next_elem:;
-	  if(vis){
-	    //logd("visible: %i %i\n", bodies[i], bodies[j]);
-	    set_visibility(bodies[i], bodies2[j]);
-	  }
 	}
       
       }
