@@ -24,7 +24,7 @@ CREATE_TABLE2(is_wall, u64, bool);
 CREATE_MULTI_TABLE(inventory, u64, u64);
 CREATE_TABLE2(focused_entity, u64, u64);
 CREATE_TABLE2(camera_position, u64, vec2);
-
+CREATE_TABLE2(tile_type, u8, u64);
 
 sorttable * get_sorttable_for(const char * basename, size_t keysize, size_t value_size, u64 id){
     static struct{
@@ -77,6 +77,8 @@ void measure_game_board(u64 id, vec2 * size){
 
 void render_game_board(u64 id){
   UNUSED(id);
+
+
   rect_render(vec3_new(0.1,0.1,0.1), shared_offset, shared_size);
   {
     u64 focused_entity = get_focused_entity(id);
@@ -88,8 +90,30 @@ void render_game_board(u64 id){
     }
   }
   vec2 px_size = vec2_sub(shared_size, vec2_new(0, 300)); // hack. use a vertical stackpanel to fix.
-  
+
+  bool do_render_floor_tiles = false;
   vec2 camera_position = get_camera_position(id);
+  if(do_render_floor_tiles){
+    for(int i = camera_position.x - 51; i < camera_position.x + 50; i += 1){
+      for(int j = camera_position.y - 51; j < camera_position.y + 50; j += 1){
+      
+	u64 tile = *get_tile(i, j);
+      
+	if(tile == 0) continue;
+	//logd("render tile..\n");
+	u64 tileset = get_tileset(tile);
+	vec2 position = vec2_new(i, j);
+	position = vec2_sub(position, vec2_sub(camera_position, vec2_scale(px_size, 0.5 / 7.0)));
+	position = vec2_scale(position, 7);
+	vec2 size = vec2_new(7,7);
+	vec3 color = vec3_new(1,1,1);
+	animation_state anim = {.animation = tileset, .time = 0.1, .frame = 0};
+	continue;
+	render_animated(color, position, size, &anim);
+      }
+    }
+  }
+	
   u64 board_element_cnt = 0;
   u64 bodies[10];
   body bodyobj[array_count(bodies)];
@@ -131,7 +155,7 @@ void render_game_board(u64 id){
       }
       if(animations[i] != NULL){
 	animations[i]->time += 0.01;	
-	render_animated(color, position, size, animations[i]);
+ 	render_animated(color, position, size, animations[i]);
       }else{
 	rect_render(color,position , size);
       }
@@ -166,7 +190,46 @@ typedef struct{
   wall_kind wall_chunks[64]; //8 by 8 wall chunks
 }mapchunk;
 
+typedef struct{
+  u8 floor_type[64];
+}mapchunk2;
+CREATE_TABLE2(map_chunks2, u64, mapchunk2);
+CREATE_TABLE2(tileset, u64, u64);
+u8 * get_tile(int x, int y){
+  int chunk_x = x >> 3;
+  int chunk_y = y >> 3;
+  x = x & 7;
+  y = y & 7;
+  union{
+    struct{
+      i16 head:1;
+      i32 x:31;
+      i32 y:31;
+    };
+   u64 index;
+  }data;
+  data.x = chunk_x;
+  data.y = chunk_y;
+  data.head = 1;
+  static u64 pidx = 0;
+  static mapchunk2 * chunkptr = NULL;
+  if(pidx != data.index){
+    pidx = data.index;
+    get_refs_map_chunks2(&pidx, &chunkptr, 1);
+
+    if(chunkptr == NULL){
+      mapchunk2 m = {};
+      set_map_chunks2(pidx, m);
+    }
+    get_refs_map_chunks2(&pidx, &chunkptr, 1);
+    ASSERT(chunkptr != NULL);
+  }
+  return chunkptr->floor_type + x + y * 8;
+}
+
+
 CREATE_TABLE2(map_chunks, u64, mapchunk);
+
 CREATE_MULTI_TABLE2(visibility, u64, u64);
 
 mapchunk * get_map_chunk_for(int x, int y){
@@ -176,7 +239,7 @@ mapchunk * get_map_chunk_for(int x, int y){
       i32 x:31;
       i32 y:31;
     };
-    u64 index;
+   u64 index;
   }data;
   ASSERT(sizeof(data) == 8);
   data.head = 1;

@@ -4,11 +4,14 @@ typedef struct{
   size_t size;
   char * name;
   int fd;
+  bool only_32bit;
 }persisted_mem_area;
 
 typedef persisted_mem_area mem_area;
 
 persisted_mem_area * create_mem_area(const char * name);
+persisted_mem_area * create_mem_area2(const char * name, bool only32bit);
+
 void mem_area_realloc(persisted_mem_area * area, u64 size);
 
 // Reallocates a already persisted file.

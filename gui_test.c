@@ -141,6 +141,9 @@ void test_gui(){
 
   load_pixel_frame(anim_tex, 0, 24, 9, 29);
   load_pixel_frame(anim_tex, 10, 24, 19, 29);
+  //load_pixel_frame(anim_tex, 0, 53, 12, 61);
+  load_pixel_frame(anim_tex, 0, 53, 6, 58);
+  u64 floor_frame1 = 13;
   
   {
     u64 anim1 = intern_string("PlayerWalk");
@@ -345,6 +348,23 @@ void test_gui(){
       add_board_element(game_board, gun);
     }
   }
+  {
+    u64 floor_tile = intern_string("floor_tile");
+    set_tileset(1, floor_tile);
+    animation_frame frames[] = {{.section = 15, .time = 100}};
+    logd("Floor tile: %i %i\n", floor_tile, floor_frame1);
+
+    insert_animation_frames(&floor_tile, frames, array_count(frames));
+    set_animation_texture(floor_tile, anim_tex);
+    
+    for(int i = -50; i < 50; i++){
+      for(int j = -50; j < 50; j++){
+	*get_tile(i * 2,j * 2) = 1;
+      }
+    }
+  }
+
+  
   clear_available_commands();
   command_class = intern_string("command class");
   invoke_command_method = intern_string("invoke");
@@ -813,10 +833,7 @@ void test_gui(){
       update_alien_faction(alien_faction, player_faction);
     }
     update_game_board(game_board);
-    u64 time_start2 = timestamp();
-    u64 dt = time_start2 - time_start;
-    UNUSED(dt);
-    //logd("DT: %i\n", time_start2 - time_start);
+    
     window w;
     u64 id, j=0;
     bool any_active = false;    
@@ -827,7 +844,10 @@ void test_gui(){
       ASSERT(method != NULL);
       if(method!= NULL) method(id);      
     }
-    
+    u64 time_start2 = timestamp();
+    u64 dt = time_start2 - time_start;
+    UNUSED(dt);
+    //logd("DT: %i\n", time_start2 - time_start);
     if(!any_active){
       logd("Ending program\n");
       break;

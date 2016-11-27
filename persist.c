@@ -33,6 +33,10 @@ persisted_mem_area * get_mem_area_by_ptr(const void * ptr){
 }
 
 persisted_mem_area * create_mem_area(const char * name){
+  return create_mem_area2(name, false);
+}
+
+persisted_mem_area * create_mem_area2(const char * name, bool only_32bit){
   int fd = 0;
   u64 size = 0;
   if(name != NULL){
@@ -72,9 +76,20 @@ persisted_mem_area * create_mem_area(const char * name){
     }
     lseek(fd, 0, SEEK_SET);
   }
-  void * ptr = mmap(NULL, size, PROT_READ | PROT_WRITE , MAP_SHARED, fd, 0);
+  int flags = MAP_SHARED;
+  if(only_32bit)
+    flags |= MAP_32BIT;
+  
+  void * ptr = mmap(NULL, size, PROT_READ | PROT_WRITE, flags, fd, 0);
+  if(flags & MAP_32BIT){
+    logd("32bit: %p\n", ptr);
+  }
   ASSERT(ptr != NULL);
-  persisted_mem_area mema = {.ptr = ptr, .size = size, .name = (char *) name, .fd = fd};
+  persisted_mem_area mema = {
+    .ptr = ptr, .size = size,
+    .name = (char *) name, .fd = fd,
+    .only_32bit = only_32bit
+  };
   return IRON_CLONE(mema);
 }
 
@@ -121,8 +136,14 @@ void * persist_alloc(const char * name, size_t min_size){
 void mem_area_realloc(persisted_mem_area * area, u64 size){
   ASSERT(area != NULL);
   if(area->size == size) return;
+  int flags = MREMAP_MAYMOVE;
+  //if(area->only_32bit)
+    //flags |= MAP_32BIT;
   
-  area->ptr = mremap(area->ptr, area->size, size, MREMAP_MAYMOVE);
+  area->ptr = mremap(area->ptr, area->size, size, flags);
+  if(flags & MAP_32BIT){
+    logd("32bit: %p\n", area->ptr);
+  }
   ASSERT(0 == ftruncate(area->fd, size));
   
   area->size = size;

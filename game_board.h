@@ -9,10 +9,11 @@ u64 get_visible_items(u64 id, u64 * items, u64 items_cnt);
 void add_board_element(u64 game_board, u64 target);
 void remove_board_element(u64 game_board, u64 item);
 size_t iter_board_elements2(u64 game_board, u64 * items, size_t item_cnt, u64 * idx);
+u8 * get_tile(int x, int y);
 //u64 * get_board_elements(u64 game_board, size_t * out_cnt);
 CREATE_TABLE_DECL2(body, u64, body);
 CREATE_TABLE_DECL2(board_elements, u64, u64)
-
+CREATE_TABLE_DECL2(tileset, u64, u64);
 // here?
 CREATE_MULTI_TABLE_DECL(faction_visible_items, u64, u64)
 

@@ -121,7 +121,6 @@ void render_animated(vec3 color, vec2 offset, vec2 size, animation_state * anima
   u64 idx = 0;
   iter_texture_sections(tex, sec, 20, &idx);
   u64 ts = frame[animation->frame].section;
-
   i32 gltex = get_animation_gltexture(tex);
 
   vec2 render_size = vec2_scale(sec[ts].pixel_size, 3);

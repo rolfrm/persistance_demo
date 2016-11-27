@@ -469,10 +469,56 @@ void rect_render2(vec3 color, vec2 offset, vec2 size, i32 tex, vec2 uv_offset, v
   glUniform2f(offset_loc, offset.x, offset.y);
   glUniform2f(size_loc, size.x, size.y);
   glUniform2f(window_size_loc, window_size.x, window_size.y);
-  
-
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 }
+
+/*
+void rect_render3(vec3 * colors, vec2 * offset, float size,
+		  vec2 * uv_offset, vec2 * uv_size, float point_size, i32 tex, u64 cnt){
+static int initialized = false;
+  static int shader = -1;
+  static int color_loc;
+  static int offset_loc;
+  static int size_loc;
+  static int window_size_loc;
+  //static int tex_loc;
+  static int mode_loc;
+  static int uv_offset_loc, uv_size_loc;
+  if(!initialized){
+    char * vs = read_file_to_string("rect_shader2.vs");
+    char * fs = read_file_to_string("rect_shader.fs");
+    shader = load_simple_shader(vs, strlen(vs), fs, strlen(fs));
+    initialized = true;
+    offset_loc = glGetUniformLocation(shader, );
+    glBindAttribLocation(shader, 0, "offset");
+    glBindAttribLocation(shader, 1, "uv_size");
+    glBindAttribLocation(shader, 2, "uv_offset");
+    glBindAttribLocation(shader, 3, "color");
+    window_size_loc = glGetUniformLocation(shader, "window_size");
+    //tex_loc = glGetUniformLocation(shader, "tex");
+    mode_loc = glGetUniformLocation(shader, "mode");
+  }
+  glUseProgram(shader);
+  if(tex != 0){
+    glUniform1i(mode_loc, 1);
+    glUniform2f(uv_offset_loc, uv_offset.x, uv_offset.y);
+    glUniform2f(uv_size_loc, uv_size.x, uv_size.y);
+    //glUniform1i(tex_loc, 0);
+    glBindTexture(GL_TEXTURE_2D, tex);
+  }
+  else
+    glUniform1i(mode_loc, 0);
+  glPointSize(size);
+  
+  glUniform4f(color_loc, color.x, color.y, color.z, 1.0);
+  glUniform2f(offset_loc, offset.x, offset.y);
+  glUniform2f(size_loc, size.x, size.y);
+  glUniform2f(window_size_loc, window_size.x, window_size.y);
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+}
+  
+
+}*/
 
 
 void render_rectangle(u64 rect_id){

@@ -10,6 +10,7 @@ bool sorttable_keys_sorted(sorttable * table, void * keys, u64 cnt);
 u64 sorttable_find(sorttable * table, void * key);
 void sorttable_finds(sorttable * table, void * keys, u64 * indexes, u64 cnt);
 sorttable create_sorttable(size_t key_size, size_t value_size, const char * name);
+sorttable create_sorttable2(size_t key_size, size_t value_size, const char * name, bool only_32bit);
 u64 sorttable_insert_key(sorttable * table, void * key);
 void sorttable_insert(sorttable * table, void * key, void * value);
 void sorttable_insert_keys(sorttable * table, void * keys, u64 * out_indexes, u64 cnt);
@@ -17,6 +18,7 @@ void sorttable_inserts(sorttable * table, void * keys, void * values, size_t cnt
 void sorttable_removes(sorttable * table, void * keys, size_t cnt);
 void sorttable_remove_indexes(sorttable * table, u64 * indexes, size_t index_cnt);
 size_t sorttable_iter(sorttable * table, void * keys, size_t keycnt, void * out_keys, u64 * indexes, size_t cnt, size_t * idx);
+void sorttable_clear(sorttable * table);
 
 #define CREATE_TABLE_DECL2(Name, KeyType, ValueType)	\
   sorttable * Name ## _initialize();		    \
@@ -97,6 +99,7 @@ size_t sorttable_iter(sorttable * table, void * keys, size_t keycnt, void * out_
     sorttable * area = Name ## _initialize();				\
     u64 i;								\
     u64 cnt = area->key_area->size / sizeof(KeyType);			\
+    if(*idx == 0) *idx = 1;						\
     KeyType * k = area->key_area->ptr;					\
     ValueType * v = area->value_area->ptr;				\
     for(i = 0; i < _cnt && *idx < cnt; (*idx)++,i++) {			\
@@ -114,9 +117,8 @@ size_t sorttable_iter(sorttable * table, void * keys, size_t keycnt, void * out_
   }   \
     void clear_ ## Name(){\
     sorttable * area = Name ## _initialize(); \
-    mem_area_realloc(area->key_area, sizeof(KeyType));		\
-    mem_area_realloc(area->value_area, sizeof(ValueType));\
-    }\
+    sorttable_clear(area);		      \
+    }						\
     void unset_ ## Name(KeyType key){		\
     remove_ ## Name(&key, 1);\
     }			     \

@@ -63,6 +63,14 @@ u64 sorttable_find(sorttable * table, void * key){
   return idx;
 }
 
+static int keycmp32(const u32 * k1,const  u32 * k2){
+  if(*k1 > *k2)
+    return 1;
+  else if(*k1 == *k2)
+    return 0;
+  else return -1;
+}
+
 
 static int keycmp(const u64 * k1,const  u64 * k2){
   if(*k1 > *k2)
@@ -80,18 +88,23 @@ static int keycmp128(const u128 * k1,const  u128 * k2){
   else return -1;
 }
 
-
 sorttable create_sorttable(size_t key_size, size_t value_size, const char * name){
+  return create_sorttable2(key_size, value_size, name, false);
+}
+
+sorttable create_sorttable2(size_t key_size, size_t value_size, const char * name, bool only_32bit){
   sorttable table = {};
   char pathbuf[100];
   sprintf(pathbuf, "table/%s.key", name);
   table.key_area = create_mem_area(pathbuf);
   sprintf(pathbuf, "table/%s.value", name);
-  table.value_area = create_mem_area(pathbuf);
+  table.value_area = create_mem_area2(pathbuf, only_32bit);
   table.key_size = key_size;
   table.value_size = value_size;
   if(key_size == sizeof(u128))
     table.cmp = (void *) keycmp128;
+  else if(key_size == sizeof(u32))
+    table.cmp = (void *) keycmp32;
   else
     table.cmp = (void *) keycmp;
   
@@ -220,9 +233,8 @@ void sorttable_removes(sorttable * table, void * keys, size_t cnt){
 
 size_t sorttable_iter(sorttable * table, void * keys, size_t keycnt, void * out_keys, u64 * indexes, size_t cnt, size_t * idx){
   u64 orig_cnt = cnt;
-  u64 i;
   if(*idx == 0) *idx = 1;
-  for(i = 0; i < keycnt; i++){
+  for(u64 i = 0; i < keycnt; i++){
     void * key = keys + i * table->key_size;
     void * start = table->key_area->ptr + *idx * table->key_size;
     void * end = table->key_area->ptr + table->key_area->size;
@@ -236,13 +248,11 @@ size_t sorttable_iter(sorttable * table, void * keys, size_t keycnt, void * out_
     if(firstcmp == 0) 
       key_index = start; // no need to search.
     else
-      key_index = memmem(start, size, key, table->key_size);//bsearch(key, start, size / table->key_size, table->key_size, table->cmp);
+      key_index = memmem(start, size, key, table->key_size);
+    //key_index = bsearch(key, start, size / table->key_size, table->key_size, table->cmp);
     if(key_index == NULL)
       continue;
-    //logd("IDX: %i, %i\n", *idx, key_index - start);
-    ASSERT(table->cmp(key_index, key_index - table->key_size) != 0);
     start = key_index;
-
     *idx = (start - table->key_area->ptr) / table->key_size;
     
     do{
@@ -252,7 +262,6 @@ size_t sorttable_iter(sorttable * table, void * keys, size_t keycnt, void * out_
       }
       
       *indexes = *idx;
-      //logd("Found index: %i\n", *indexes);
       indexes += 1;
       cnt -= 1;
       start += table->key_size;
@@ -261,6 +270,11 @@ size_t sorttable_iter(sorttable * table, void * keys, size_t keycnt, void * out_
 
   }
   return orig_cnt - cnt;
+}
+
+void sorttable_clear(sorttable * area){
+  mem_area_realloc(area->key_area, area->key_size);		
+  mem_area_realloc(area->value_area, area->value_size);     
 }
 
 CREATE_TABLE_DECL2(mtab2, u64, u64);
