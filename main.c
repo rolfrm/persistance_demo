@@ -118,7 +118,7 @@ void gl_render_cube(mat4 cam, float cube_size, vec3 cube_position, u32 color){
     vertex_loc = glGetAttribLocation(shader, "vertex");
     float xyz[] = {0,0,0, 1,0,0, 1,1,0, 0,1,0,
 		   0,0,1, 1,0,1, 1,1,1, 0,1,1};
-    u8 indexes[] = {1,2,3,4, 3,4,8,7, 2,3,8,6, 2,1,5,6, 1,4,7,5, 5,6,7,8};
+    u8 indexes[] = {4,3,2,1, 3,4,8,7, 2,3,7,6, 1,2,6,5, 5,8,4,1, 5,6,7,8};
     for(u32 i = 0; i < array_count(indexes); i++)
       indexes[i] -= 1;
     glGenBuffers(1, &cube_vbo);
@@ -149,7 +149,8 @@ void gl_render_cube(mat4 cam, float cube_size, vec3 cube_position, u32 color){
   glCullFace(GL_BACK);
   //glDrawArrays(GL_QUADS, 0, 8);
   u64 drawn = 0;
-  glDrawElements(GL_QUADS, 8, GL_UNSIGNED_BYTE, (void *)drawn);
+  glDrawElements(GL_QUADS, 24, GL_UNSIGNED_BYTE, (void *)drawn);
+  //glDrawElements(GL_POINTS, 24, GL_UNSIGNED_BYTE, (void *)drawn);
 }
 
 void render_voxel_grid2(u64 id, u32 index, index_table * voxels, index_table * materials){
@@ -224,7 +225,7 @@ bool index_table_test(){
   d[2] = ~black;
   
   //lookup the arrays for x2 x3  
-  //u32 * d1 = lookup_index_table(tab, x2);
+  u32 * d1 = lookup_index_table(tab, x2);
   //u32 * d2 = lookup_index_table(tab, x3);
 
   // put in black and white colors.
@@ -233,7 +234,7 @@ bool index_table_test(){
     //d1[i] = (rand()%2) == 0 ? ~white : ~black;
     //d2[i] = (rand()%2) == 1 ? ~white : ~black;
   }
-  /*d1[7] = x4;
+  d1[7] = x4;
   d1[2] = x4;
   d1[0] = x4;
   u32 * d3 = lookup_index_table(tab, x4);
@@ -242,7 +243,7 @@ bool index_table_test(){
   d3[0] = x5;
   u32 * d4 = lookup_index_table(tab, x5);
   d4[0] = ~white;
-  d4[7] = ~black;*/
+  d4[7] = ~black;
 
   u32 count = iterate_voxel_chunk(tab, x1);
   logd("Count: %i\n", count);
@@ -262,8 +263,9 @@ bool index_table_test(){
   double i = 0;
   while(true){
     mat4 p = mat4_perspective(0.8, 1, 0.1, 10);
-    i += 0.01;
-    mat4 t = mat4_translate(-0.0,1 + sin(i),4 );//mat4_rotate(mat4_translate(-0.0,-1.5,-4 + 0 * sin(i)),0,1,1, 0.0 * i);
+    i += 0.03;
+    mat4 t = mat4_rotate(mat4_translate(0,0,0),1,0.23,0.1,i);//mat4_rotate(mat4_translate(-0.0,-1.5,-4 + 0 * sin(i)),0,1,1, 0.0 * i);
+    t = mat4_mul(t, mat4_translate(0,0,4));
     set_camera_3d_position(voxel_board, mat4_mul(p, mat4_invert(t)));
     iron_sleep(0.01);
     method(win_id);
