@@ -443,6 +443,8 @@ void rect_render2(vec3 color, vec2 offset, vec2 size, i32 tex, vec2 uv_offset, v
     char * vs = read_file_to_string("rect_shader.vs");
     char * fs = read_file_to_string("rect_shader.fs");
     shader = load_simple_shader(vs, strlen(vs), fs, strlen(fs));
+    dealloc(vs);
+    dealloc(fs);
     logd("Shader: %i\n", shader);
     initialized = true;
     color_loc = glGetUniformLocation(shader, "color");
@@ -800,9 +802,9 @@ void render_window(u64 window_id){
   glViewport(0, 0, win.width, win.height);
   window_size = vec2_new(win.width, win.height);
   
-  
-  glClearColor(0.8, 0.8, 1, 1);
-  glClear(GL_COLOR_BUFFER_BIT);
+  vec3 color = get_color(window_id);
+  glClearColor(color.x, color.y, color.z, 1);
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   shared_offset = vec2_new(margin.left, margin.up);
   shared_size = vec2_new(win.width - margin.left - margin.right, win.height - margin.up - margin.down);
   u64 index = 0;
