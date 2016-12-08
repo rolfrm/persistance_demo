@@ -214,6 +214,7 @@ void make_window(u64 id){
 }
 CREATE_TABLE(margin, u64, thickness);
 CREATE_TABLE(corner_roundness, u64, thickness);
+CREATE_TABLE_DECL2(color, u64, vec3);
 CREATE_TABLE2(color, u64, vec3);
 CREATE_TABLE(vertical_alignment, u64, vertical_alignment);
 CREATE_TABLE(horizontal_alignment, u64, horizontal_alignment);

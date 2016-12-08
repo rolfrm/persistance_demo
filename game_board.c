@@ -24,6 +24,7 @@ CREATE_TABLE2(is_wall, u64, bool);
 CREATE_MULTI_TABLE(inventory, u64, u64);
 CREATE_TABLE2(focused_entity, u64, u64);
 CREATE_TABLE2(camera_position, u64, vec2);
+CREATE_TABLE_DECL2(tile_type, u8, u64);
 CREATE_TABLE2(tile_type, u8, u64);
 
 sorttable * get_sorttable_for(const char * basename, size_t keysize, size_t value_size, u64 id){
@@ -193,6 +194,7 @@ typedef struct{
 typedef struct{
   u8 floor_type[64];
 }mapchunk2;
+CREATE_TABLE_DECL2(map_chunks2, u64, mapchunk2);
 CREATE_TABLE2(map_chunks2, u64, mapchunk2);
 CREATE_TABLE2(tileset, u64, u64);
 u8 * get_tile(int x, int y){
@@ -227,7 +229,7 @@ u8 * get_tile(int x, int y){
   return chunkptr->floor_type + x + y * 8;
 }
 
-
+CREATE_TABLE_DECL2(map_chunks, u64, mapchunk);
 CREATE_TABLE2(map_chunks, u64, mapchunk);
 
 CREATE_MULTI_TABLE2(visibility, u64, u64);

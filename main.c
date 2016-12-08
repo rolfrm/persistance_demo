@@ -11,39 +11,14 @@
 
 #include "gui.h"
 #include "gui_test.h"
-
+#include "index_table.h"
 void table2_test();
 void test_walls();
 void test_persist_oop();
 bool test_elf_reader2();
 bool test_elf_reader();
 bool test_type_system();
-
-typedef struct{
-  void * ptr;
-  u32 capacity;
-  u32 count;
-
-  u32 * free_indexes;
-  u32 free_index_count;
-
-  u32 element_size;
-}index_table;
-
-index_table * create_index_table(const char * name, u32 element_size){
-  index_table table = {0};
-  table.element_size = element_size;
-  table.ptr = persist_alloc(name, 0);
-  table.capacity = 0;
-  table.count = 0;
-  
-  char name2[128];
-  sprintf(name2, "%s.free", name);
-  
-  table.free_indexes = persist_alloc(name2, 0);
-  table.free_index_count = 0;
-  return iron_clone(&table, sizeof(table));
-}
+void test_simple_graphics();
 
 u32 alloc_index_table(index_table * table){
   if(table->free_index_count > 0){
@@ -60,6 +35,22 @@ u32 alloc_index_table(index_table * table){
   }
   u32 idx = table->count++;
   return idx;
+}
+
+index_table * create_index_table(const char * name, u32 element_size){
+  index_table table = {0};
+  table.element_size = element_size;
+  table.ptr = persist_alloc(name, 0);
+  table.capacity = 0;
+  table.count = 0;
+  
+  char name2[128];
+  sprintf(name2, "%s.free", name);
+  
+  table.free_indexes = persist_alloc(name2, 0);
+  table.free_index_count = 0;
+  alloc_index_table(&table); // reserve index 0 for null.
+  return iron_clone(&table, sizeof(table));
 }
 
 void * lookup_index_table(index_table * table, u32 index){
@@ -83,19 +74,92 @@ u32 iterate_voxel_chunk(index_table * table, u32 start_index){
   }
   return count;
 }
+CREATE_TABLE_DECL2(camera_3d_position, u64, mat4)
 CREATE_TABLE2(camera_3d_position, u64, mat4);
+
 typedef struct{
   index_table * voxels;
   index_table * materials;
   u32 index;
 }voxel_board_data;
-
+CREATE_TABLE_DECL2(board_data2, u64, voxel_board_data);
 CREATE_TABLE2(board_data2, u64, voxel_board_data);
+
 
 vec4 u32_to_color(u32 colorid){
   vec4 col_255 = vec4_new((colorid >> 24) & 0xFF, (colorid >> 16) & 0xFF, (colorid >> 8) & 0xFF, colorid & 0xFF);
   return vec4_scale(col_255, 1.0 / 255.0);
 }
+
+typedef enum{
+  VOX_X_SURFACE,
+  VOX_Y_SURFACE,
+  VOX_Z_SURFACE
+}vox_surface;
+typedef struct{
+  int x;
+  int y;
+  int z;
+  u8 lod;
+  vox_surface type;
+}voxel_collider_key;
+
+CREATE_TABLE_DECL2(voxel_collider, voxel_collider_key, u32);
+CREATE_TABLE2(voxel_collider, voxel_collider_key, u32);
+
+
+int voxel_collider_key_cmp(const voxel_collider_key * a, const voxel_collider_key * b){
+  return memcmp(a, b, sizeof(voxel_collider_key));
+}
+
+void calc_voxel_surface(index_table * vox, u32 idx){
+  static bool was_initialized = false;
+  sorttable * tab = voxel_collider_initialize();
+  if(!was_initialized){
+    
+    tab->cmp = (void*)voxel_collider_key_cmp;
+    was_initialized = true;
+  }
+  clear_voxel_collider();
+  UNUSED(vox);UNUSED(idx);
+
+  void insert_surface(u32 idx2, int x, int y, int z, int lod){
+    
+    if(idx2 >= vox->count){
+      voxel_collider_key key = {.x = x, .y = y, .z = z, .lod = lod, .type = VOX_X_SURFACE};
+      vox_surface a[] = {VOX_X_SURFACE, VOX_Y_SURFACE, VOX_Z_SURFACE};
+      int * pts[] = {&key.x, &key.y, &key.z};
+      int x[] = {0, 1};
+      
+      for(u32 i = 0; i < array_count(a); i++){
+	for(u32 j = 0; j < array_count(x); j++){
+	  for(u32 k = 0; k < array_count(pts); k++){
+	    key.type = a[i];
+	    *pts[k] += x[j];
+	    u32 value = 0;
+	    logd("%i %i %i %i \n", key.x, key.y, key.z, key.lod);
+	    if(!try_get_voxel_collider(key, &value) || value == 0)
+	      insert_voxel_collider(&key, &idx2, 1);
+	    *pts[k] -= x[j];
+	    if(value != 0)
+	      logd("Collision!");
+	  }
+	}
+      }
+      logd("\n");
+    }else{
+      u32 * k = lookup_index_table(vox, idx2);
+      for(u32 i = 0; i < 8; i++){
+	if(k[i] == 0) continue;
+	insert_surface(k[i], x * 2 + i % 2, y * 2 + (i / 2) % 2, z * 2 + (i / 4) % 2, lod + 1);
+      }
+    }
+  }
+  insert_surface(idx, 0, 0, 0, 0);
+  logd("SIZE: %i %i\n", tab->key_area->size, sizeof(voxel_collider_key));
+  
+}
+
 
 void gl_render_cube(mat4 cam, float cube_size, vec3 cube_position, u32 color){
   static bool initialized = false;
@@ -112,7 +176,6 @@ void gl_render_cube(mat4 cam, float cube_size, vec3 cube_position, u32 color){
     shader = load_simple_shader(vs, strlen(vs), fs, strlen(fs));
     dealloc(vs);
     dealloc(fs);
-    logd("Shader: %i\n", shader);
     camera_loc = glGetUniformLocation(shader, "camera");
     color_loc = glGetUniformLocation(shader, "color");
     vertex_loc = glGetAttribLocation(shader, "vertex");
@@ -189,12 +252,24 @@ void measure_voxel_grid(u64 id, vec2 * size){
   UNUSED(id);
   *size = vec2_new(0, 0);
 }
-
+#include <sys/mman.h>
 bool index_table_test(){
+  test_simple_graphics();
+  {
+    board_data2_table * table = board_data2_table_create();
+    voxel_board_data bd = {.voxels = create_index_table("voxeltable2", sizeof(u32) * 8),
+			   .materials = create_index_table("materials2", sizeof(u32)),
+			   .index = 5};
+    board_data2_set(table, 0xbeef, bd);
+
+    auto bd2 = board_data2_get(table, 0xbeef);
+
+    TEST_ASSERT(bd2.index == 5);
+  }
+  return TEST_SUCCESS;
   // the index table can be used for voxels.
   index_table * tab = create_index_table("voxeltable", sizeof(u32) * 8);
   index_table * colors = create_index_table("colortable", 4);
-  alloc_index_table(colors);  alloc_index_table(colors);  alloc_index_table(colors);
   u32 black = alloc_index_table(colors);
   u32 white = alloc_index_table(colors);
   printf("%p %p\n", black, white);
@@ -202,7 +277,6 @@ bool index_table_test(){
   *((u32 *)lookup_index_table(colors, white)) = 0xFFF00FFF;
 
   // Allocate 5 2x2x2 voxel chunks
-  alloc_index_table(tab); // the null chunk
   u32 x1 = alloc_index_table(tab);
   u32 x2 = alloc_index_table(tab);
   u32 x3 = alloc_index_table(tab);
@@ -223,7 +297,8 @@ bool index_table_test(){
   d[3] = x2;
   d[6] = x2;
   d[2] = ~black;
-  
+  calc_voxel_surface(tab, x1);
+  //  return TEST_SUCCESS;
   //lookup the arrays for x2 x3  
   u32 * d1 = lookup_index_table(tab, x2);
   //u32 * d2 = lookup_index_table(tab, x3);
@@ -264,14 +339,15 @@ bool index_table_test(){
   while(true){
     mat4 p = mat4_perspective(0.8, 1, 0.1, 10);
     i += 0.03;
-    mat4 t = mat4_rotate(mat4_translate(0,0,0),1,0.23,0.1,i);//mat4_rotate(mat4_translate(-0.0,-1.5,-4 + 0 * sin(i)),0,1,1, 0.0 * i);
+    mat4 t = mat4_rotate(mat4_translate(0.5,0.5,0),1,0.23,0.1,i);//mat4_rotate(mat4_translate(-0.0,-1.5,-4 + 0 * sin(i)),0,1,1, 0.0 * i);
     t = mat4_mul(t, mat4_translate(0,0,4));
     set_camera_3d_position(voxel_board, mat4_mul(p, mat4_invert(t)));
-    iron_sleep(0.01);
+    //iron_sleep(0.01);
     method(win_id);
   }
   return TEST_SUCCESS;
 }
+
 int main(){
   //table2_test();
   //test_persist_oop();

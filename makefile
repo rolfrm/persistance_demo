@@ -1,5 +1,5 @@
-OPT = -g3 -O0
-LIB_SOURCES =  iron/mem.c iron/process.c iron/array.c iron/math.c iron/time.c  iron/log.c iron/fileio.c iron/linmath.c iron/test.c iron/error.c iron/image.c iron/gl.c iron/coroutines2.c main.c persist.c shader_utils.c hsv.c gui_test.c persist_oop.c stb_truetype.c gui.c console.c stb_image.c animation.c command.c game_board.c sortable.c #elf_reader.c type_system.c #game.c main2.c
+OPT = -g0 -Os
+LIB_SOURCES =  iron/mem.c iron/process.c iron/array.c iron/math.c iron/time.c  iron/log.c iron/fileio.c iron/linmath.c iron/test.c iron/error.c iron/image.c iron/gl.c iron/coroutines2.c main.c persist.c shader_utils.c hsv.c gui_test.c persist_oop.c stb_truetype.c gui.c console.c stb_image.c animation.c command.c game_board.c sortable.c simple_graphics.c #elf_reader.c type_system.c #game.c main2.c
 CC = gcc
 TARGET = run.exe
 LIB_OBJECTS =$(LIB_SOURCES:.c=.o)

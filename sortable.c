@@ -95,10 +95,15 @@ sorttable create_sorttable(size_t key_size, size_t value_size, const char * name
 sorttable create_sorttable2(size_t key_size, size_t value_size, const char * name, bool only_32bit){
   sorttable table = {};
   char pathbuf[100];
-  sprintf(pathbuf, "table/%s.key", name);
-  table.key_area = create_mem_area(pathbuf);
-  sprintf(pathbuf, "table/%s.value", name);
-  table.value_area = create_mem_area2(pathbuf, only_32bit);
+  if(name == NULL){
+    table.key_area = create_non_persisted_mem_area();
+    table.value_area = create_non_persisted_mem_area();
+  }else{
+    sprintf(pathbuf, "table/%s.key", name);
+    table.key_area = create_mem_area(pathbuf);
+    sprintf(pathbuf, "table/%s.value", name);
+    table.value_area = create_mem_area2(pathbuf, only_32bit);
+  }
   table.key_size = key_size;
   table.value_size = value_size;
   if(key_size == sizeof(u128))
@@ -116,6 +121,13 @@ sorttable create_sorttable2(size_t key_size, size_t value_size, const char * nam
   }
   sorttable_check_sanity(&table);
   return table;
+}
+
+void sorttable_destroy(sorttable * table){
+  mem_area_free(table->key_area);
+  mem_area_free(table->value_area);
+  table->key_area = NULL;
+  table->value_area = NULL;
 }
 
 u64 sorttable_insert_key(sorttable * table, void * key){

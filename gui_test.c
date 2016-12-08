@@ -112,10 +112,15 @@ void update_alien_faction(u64 alien_faction, u64 player_faction){
     insert_command_queue(id, commands, k);
   }
 }
-CREATE_TABLE2(shooting_animation, u64, u64);
-CREATE_TABLE2(idle_animation, u64, u64);
-CREATE_TABLE2(walking_animation, u64, u64);
-CREATE_TABLE2(is_shooting, u64, u64);
+CREATE_TABLE_DECL2(shooting_animation, u64, u64)
+CREATE_TABLE_DECL2(idle_animation, u64, u64)
+CREATE_TABLE_DECL2(walking_animation, u64, u64)
+CREATE_TABLE_DECL2(is_shooting, u64, u64)
+
+CREATE_TABLE_NP(shooting_animation, u64, u64);
+CREATE_TABLE_NP(idle_animation, u64, u64);
+CREATE_TABLE_NP(walking_animation, u64, u64);
+CREATE_TABLE_NP(is_shooting, u64, u64);
 void test_gui(){
   u64 anim_tex = intern_string("Test anim");
 

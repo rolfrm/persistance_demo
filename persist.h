@@ -5,15 +5,17 @@ typedef struct{
   char * name;
   int fd;
   bool only_32bit;
+  bool is_persisted;
 }persisted_mem_area;
 
 typedef persisted_mem_area mem_area;
 
 persisted_mem_area * create_mem_area(const char * name);
 persisted_mem_area * create_mem_area2(const char * name, bool only32bit);
+persisted_mem_area * create_non_persisted_mem_area();
 
 void mem_area_realloc(persisted_mem_area * area, u64 size);
-
+void mem_area_free(persisted_mem_area * area);
 // Reallocates a already persisted file.
 void * persist_realloc(void * ptr, u64 size);
 void * persist_realloc2(void * ptr, u64 size, u64 * out_size);

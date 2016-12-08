@@ -51,7 +51,7 @@ persisted_mem_area * create_mem_area2(const char * name, bool only_32bit){
 	if(slash == NULL) break;
 	if(slash != NULL && slash[-1] != '\\'){
 	  size_t size = slash - name;
-	  char s[20];
+	  char s[100];
 	  strcpy(s, name);
 	  s[size] = 0;
 	  char buf[100];
@@ -88,11 +88,31 @@ persisted_mem_area * create_mem_area2(const char * name, bool only_32bit){
   persisted_mem_area mema = {
     .ptr = ptr, .size = size,
     .name = (char *) name, .fd = fd,
-    .only_32bit = only_32bit
+    .only_32bit = only_32bit,
+    .is_persisted = true
   };
   return IRON_CLONE(mema);
 }
 
+void mem_area_free(persisted_mem_area * area){
+  if(area->is_persisted){
+    if(area->ptr != NULL)
+      dealloc(area->ptr);
+  }else{
+    munmap(area->ptr, area->size);
+  }
+  memset(area, 0, sizeof(*area));
+
+}
+
+persisted_mem_area * create_non_persisted_mem_area(){
+  persisted_mem_area mema = {
+    .ptr = NULL, .size = 0,
+    .name = (char *)"", .fd = 0,
+    .only_32bit = false
+  };
+  return IRON_CLONE(mema);
+}
 
 void * persist_alloc2(const char * name, size_t min_size, size_t * out_size){
   if(min_size == 0)
@@ -134,6 +154,11 @@ void * persist_alloc(const char * name, size_t min_size){
 }
 
 void mem_area_realloc(persisted_mem_area * area, u64 size){
+  if(false == area->is_persisted){
+    area->ptr = realloc(area->ptr, size);
+    area->size = size;
+    return;
+  }
   ASSERT(area != NULL);
   if(area->size == size) return;
   int flags = MREMAP_MAYMOVE;
