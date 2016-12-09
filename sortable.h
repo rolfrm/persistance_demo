@@ -40,7 +40,7 @@ void sorttable_destroy(sorttable * table);
   ValueType * ref_at_ ## Name(u64 index);\
   void remove_at_ ## Name(u64 * index, size_t cnt); \
   typedef struct { sorttable * ptr; } Name ## _table; \
-  Name ## _table * Name ## _table_create();		\
+  Name ## _table * Name ## _table_create(const char * persisted_name);	\
   void Name ## _table_destroy(Name ## _table ** table);			\
   void Name ## _insert(Name ## _table * table, KeyType * keys, ValueType * values, size_t cnt); \
   void Name ## _lookup (Name ## _table * table, KeyType * keys, ValueType * out_values, size_t cnt); \
@@ -71,9 +71,9 @@ void sorttable_destroy(sorttable * table);
     }									\
     return &table;							\
   }									\
-  Name ## _table * Name ## _table_create(){		\
+  Name ## _table * Name ## _table_create(const char * persisted_path){		\
     sorttable table;							\
-    table = create_sorttable(sizeof(KeyType), sizeof(ValueType), IS_PERSISTED ? #Name : NULL); \
+    table = create_sorttable(sizeof(KeyType), sizeof(ValueType), persisted_path); \
     table.is_multi_table = IS_MULTI_TABLE;				\
     Name ## _table _table = {.ptr = IRON_CLONE(table)};			\
     return IRON_CLONE(_table);						\

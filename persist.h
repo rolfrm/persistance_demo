@@ -13,6 +13,9 @@ typedef persisted_mem_area mem_area;
 persisted_mem_area * create_mem_area(const char * name);
 persisted_mem_area * create_mem_area2(const char * name, bool only32bit);
 persisted_mem_area * create_non_persisted_mem_area();
+#define mem_area_create(X) create_mem_area(X)
+#define mem_area_create_non_persisted() create_non_persisted_mem_area()
+
 
 void mem_area_realloc(persisted_mem_area * area, u64 size);
 void mem_area_free(persisted_mem_area * area);

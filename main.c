@@ -20,41 +20,76 @@ bool test_elf_reader();
 bool test_type_system();
 void test_simple_graphics();
 
+u32 index_table_capacity(index_table * table){
+  return table->ptr->size / table->element_size;
+}
+
+u32 index_table_count(index_table * table){
+  return ((u32 *) table->ptr->ptr)[0];
+}
+
+void index_table_count_set(index_table * table, u32 newcount){
+  ((u32 *) table->ptr->ptr)[0] = newcount;
+}
+
+u32 _index_table_free_index_count(index_table * table){
+  return ((u32 *) table->free_indexes->ptr)[0];
+}
+
 u32 alloc_index_table(index_table * table){
-  if(table->free_index_count > 0){
-    u32 idx = table->free_indexes[table->free_index_count -1];
-    table->free_index_count -= 1;
+  u32 freeindexcnt = _index_table_free_index_count(table);
+  if(freeindexcnt > 0){
+    u32 idx = ((u32 *) table->free_indexes->ptr)[freeindexcnt - 1];
+    mem_area_realloc(table->free_indexes, table->free_indexes->size - table->element_size);
     return idx;
   }
-  while(table->capacity <= table->count){
-    u32 prevsize = table->capacity * table->element_size;
-    table->ptr = persist_realloc(table->ptr, MAX(table->capacity * 2, (u32)8) * table->element_size);
-    table->capacity = MAX(table->capacity * 2, (u32)8);
-    u32 newsize = table->capacity * table->element_size;
-    memset(table->ptr + prevsize, 0, newsize - prevsize);
+  while(index_table_capacity(table) <= index_table_count(table)){
+    u32 prevsize = table->ptr->size;
+    mem_area_realloc(table->ptr, MAX(table->ptr->size * 2, 8 * table->element_size));
+    memset(table->ptr + prevsize, 0,  table->ptr->size - prevsize);
   }
-  u32 idx = table->count++;
+  u32 idx = index_table_count(table);
+  index_table_count_set(table,idx + 1);
   return idx;
+}
+
+void index_table_remove(index_table * table, u32 index){
+  u32 cnt = _index_table_free_index_count(table);
+  mem_area_realloc(table->free_indexes, table->free_indexes->size + table->element_size);
+  ((u32 *)table->free_indexes->ptr)[cnt] = index;
+  ((u32 *) table->free_indexes->ptr)[0] += 1;
 }
 
 index_table * create_index_table(const char * name, u32 element_size){
   index_table table = {0};
   table.element_size = element_size;
-  table.ptr = persist_alloc(name, 0);
-  table.capacity = 0;
-  table.count = 0;
+
+  if(name == NULL){
+    table.ptr = mem_area_create(name);
+    char name2[128];
+    sprintf(name2, "%s.free", name);
+    table.free_indexes = mem_area_create(name2);
+  }else{
+    table.ptr = mem_area_create_non_persisted();
+    table.free_indexes = mem_area_create_non_persisted();
+  }
   
-  char name2[128];
-  sprintf(name2, "%s.free", name);
+  if(table.free_indexes->size < sizeof(u32)){
+    mem_area_realloc(table.free_indexes, sizeof(u32));
+    memset(table.free_indexes->ptr, 0, sizeof(u32));
+  }
+
+  if(table.ptr->size < element_size){
+    while(table.ptr->size < sizeof(u32))
+      mem_area_realloc(table.ptr, table.ptr->size + element_size );
+    index_table_count_set(&table, 0);
+  }
   
-  table.free_indexes = persist_alloc(name2, 0);
-  table.free_index_count = 0;
-  alloc_index_table(&table); // reserve index 0 for null.
   return iron_clone(&table, sizeof(table));
 }
 
 void * lookup_index_table(index_table * table, u32 index){
-  ASSERT(index < table->count);
+  ASSERT(index < index_table_count(table));
   return table->ptr + index * table->element_size;
 }
 
@@ -64,7 +99,7 @@ u32 iterate_voxel_chunk(index_table * table, u32 start_index){
   for(u32 i = 0; i < 8; i++){
     u32 data = ref[i];
     if(data == 0) continue;
-    if(data > table->count){
+    if(data > index_table_count(table)){
       u32 color = ~data;
       logd("#%p ", color);
       count++;
@@ -125,7 +160,7 @@ void calc_voxel_surface(index_table * vox, u32 idx){
 
   void insert_surface(u32 idx2, int x, int y, int z, int lod){
     
-    if(idx2 >= vox->count){
+    if(idx2 >= index_table_count(vox)){
       voxel_collider_key key = {.x = x, .y = y, .z = z, .lod = lod, .type = VOX_X_SURFACE};
       vox_surface a[] = {VOX_X_SURFACE, VOX_Y_SURFACE, VOX_Z_SURFACE};
       int * pts[] = {&key.x, &key.y, &key.z};
@@ -229,7 +264,7 @@ void render_voxel_grid2(u64 id, u32 index, index_table * voxels, index_table * m
       u32 index2 = indexes[i];
       if(index2 == 0)
 	continue;
-      if( index2 < ((u32)voxels->count) ){
+      if( index2 < index_table_count(voxels)){
 	render_grid_inner(size2, offset2, index2);
       }else{
 
@@ -256,7 +291,8 @@ void measure_voxel_grid(u64 id, vec2 * size){
 bool index_table_test(){
   test_simple_graphics();
   {
-    board_data2_table * table = board_data2_table_create();
+    board_data2_table * table = board_data2_table_create(NULL);
+    logd("table size: %i\n", table->ptr->key_area->size);
     voxel_board_data bd = {.voxels = create_index_table("voxeltable2", sizeof(u32) * 8),
 			   .materials = create_index_table("materials2", sizeof(u32)),
 			   .index = 5};
