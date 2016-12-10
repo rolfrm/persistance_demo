@@ -80,111 +80,102 @@ typedef struct{
 }loaded_polygon_data;
 
 
+
+
+/*
+typedef index_table polygon_table;
+typedef u32 polygon_id;
+
+polygon_id polygon_create(graphics_context * ctx);
+u32 polygon_add_vertex2f(graphics_context * ctx, polygon_id polygon, vec3 offset);
+void polygon_set_color(graphics_context * ctx, polygon_id polygon, vec4 color);
+void polygon_read(graphics_context * ctx, polygon_id polygon, vec3 ** offsets, u64 count);
+void polygon_render(graphics_context * ctx, polygon_id polygon, mat3 tform, vec4 color);
+
+auto square = polygon_create(ctx);
+polygon_add_vertex(ctx, square, vec2_new(0,0));
+polygon_add_vertex(ctx, square, vec2_new(1,0));
+polygon_add_vertex(ctx, square, vec2_new(1,1));
+polygon_add_vertex(ctx, square, vec2_new(0,1));
+polygon_set_color(ctx, square, vec4_new(154.0 / 255.0, 36.0 / 255.0, 31.0 / 255.0, 1));
+
+polygon_render(ctx, square, tform);
+
+*/
+
+
+
 CREATE_TABLE_DECL2(active_entities, u32, bool);
 CREATE_TABLE_NP(active_entities, u32, bool);
 CREATE_TABLE_DECL2(loaded_polygon, u32, loaded_polygon_data);
 CREATE_TABLE_NP(loaded_polygon, u32, loaded_polygon_data);
+CREATE_TABLE_DECL2(polygon_color, u32, vec4);
+CREATE_TABLE2(polygon_color, u32, vec4);
 
-typedef index_table polygon_table;
-/*
-u32 polygon_create(polygon_table * table);
-u32 polygon_add_vertex(polygon_table * table, u32 polygon, vec3 offset);
-void polygon_read(polygon_table * table, u32 polygon, vec3 ** offsets, u64 count);
-void polygon_render(polygon_table * polygon, u32 polygon, mat3 offset, vec4 color);
-*/
 typedef struct{
   index_table * entities;
   index_table * models;
   index_table * polygon;
   index_table * vertex;
   loaded_polygon_table * gpu_poly;
+  polygon_color_table * poly_color;
   active_entities_table * active_entities;
-}graphics_data;
-void simple_graphics_load_test(graphics_data * result){
+}graphics_context;
+
+typedef u32 polygon_id;
+
+polygon_id polygon_create(graphics_context * ctx){
+  return index_table_alloc(ctx->polygon);
+}
+
+void polygon_add_vertex2f(graphics_context * ctx, polygon_id polygon, vec2 offset){
+  u32 t1 = index_table_alloc(ctx->vertex);
+  vertex_data * v = index_table_lookup(ctx->vertex, t1);
+  v->position = offset;
+  polygon_id p1 = polygon_create(ctx);
+  polygon_data * pd = index_table_lookup(ctx->polygon, polygon);
+  pd->next_index = p1;
+  pd = index_table_lookup(ctx->polygon, p1);
+  pd->vertex = t1;
+}
+
+void graphics_context_load(graphics_context * ctx){
+  ctx->models = index_table_create(NULL/*"simple/models"*/, sizeof(model_data));
+  ctx->polygon = index_table_create(NULL/*"simple/polygon"*/, sizeof(polygon_data));
+  ctx->vertex = index_table_create(NULL/*"simple/vertex"*/, sizeof(vertex_data));
+  ctx->entities = index_table_create(NULL/*"simple/entities"*/, sizeof(entity_data));
+  ctx->gpu_poly = loaded_polygon_table_create(NULL);
+  ctx->poly_color = polygon_color_table_create(NULL);
+  ctx->active_entities = active_entities_table_create(NULL);
+}
+
+void simple_graphics_load_test(graphics_context * ctx){
   logd("Load test\n");
-  index_table * models = index_table_create(NULL/*"simple/models"*/, sizeof(model_data));
-  index_table * polygon = index_table_create(NULL/*"simple/polygon"*/, sizeof(polygon_data));
-  index_table * vertex = index_table_create(NULL/*"simple/vertex"*/, sizeof(vertex_data));
-  index_table * entities = index_table_create(NULL/*"simple/entities"*/, sizeof(entity_data));
-  result->active_entities = active_entities_table_create(NULL);
+  index_table * models = ctx->models;
+  index_table * entities = ctx->entities;
+  ctx->active_entities = active_entities_table_create(NULL);
   u32 i1 = index_table_alloc(models);
   
   model_data * m1 = index_table_lookup(models, i1);
   m1->type = KIND_POLYGON;
   {
-
-    u32 p1 = index_table_alloc(polygon);
-
-    index_table_remove(polygon, p1);
-    p1 = index_table_alloc(polygon);
-    u32 p2 = index_table_alloc(polygon);
-    u32 p3 = index_table_alloc(polygon);
-
-    index_table_remove(polygon, p2);
-    index_table_remove(polygon, p3);
-    p2 = index_table_alloc(polygon);
-    p3 = index_table_alloc(polygon);
-    p1 = index_table_alloc(polygon);
-    u32 p4 = index_table_alloc(polygon);
-    
-    u32 t1 = index_table_alloc(vertex);
-    u32 t2 = index_table_alloc(vertex);
-    u32 t3 = index_table_alloc(vertex);
-    u32 t4 = index_table_alloc(vertex);
-
-    m1->index = p1;
-    vertex_data * v = index_table_lookup(vertex, t1);
-    v->color = 0xFFFFFFFF;
-    v->position = vec2_new(1,0);
-    v = index_table_lookup(vertex, t2);
-    v->color = 0xFFFFFFFF;
-    v->position = vec2_new(0.8, 0.8);
-    v = index_table_lookup(vertex, t3);
-    v->color = 0xFFFFFFFF;
-    v->position = vec2_new(0,1);
-    
-    v = index_table_lookup(vertex, t4);
-    v->color = 0xFFFFFFFF;
-    v->position = vec2_new(0.2,0.2);
-    polygon_data * pd = index_table_lookup(polygon, p1);
-    pd->next_index = p2;
-    pd->vertex = t1;
-    pd = index_table_lookup(polygon, p2);
-    pd->next_index = p3;
-    pd->vertex = t2;
-
-    pd = index_table_lookup(polygon, p3);
-    pd->next_index = p4;
-    pd->vertex = t3;
-    
-    pd = index_table_lookup(polygon, p4);
-    pd->next_index = 0;
-    pd->vertex = t4;
+    polygon_id p1 = polygon_create(ctx);
+    polygon_add_vertex2f(ctx, p1, vec2_new(1,0));
+    polygon_add_vertex2f(ctx, p1, vec2_new(0.8,0.8));
+    polygon_add_vertex2f(ctx, p1, vec2_new(0,1));
+    polygon_add_vertex2f(ctx, p1, vec2_new(0.2,0.2));
   }
   u32 player = index_table_alloc(entities);
   entity_data * ed = index_table_lookup(entities, player);
   ed->position = vec3_new(0,0,0);
   ed->model = i1;
 
-  //print_model_data(i1, models, polygon, vertex);
-  result->entities = entities;
-  result->models = models;
-  result->vertex = vertex;
-  result->polygon = polygon;
-  active_entities_set(result->active_entities, player, true);
+  active_entities_set(ctx->active_entities, player, true);
 }
 
 
-
-
-void simple_graphics_test(){
-  graphics_data gd;
-  simple_graphics_load_test(&gd);
-  logd("DONE\n");
-
-}
-CREATE_TABLE_DECL2(graphics_data, u64, graphics_data);
-CREATE_TABLE2(graphics_data, u64, graphics_data);
+CREATE_TABLE_DECL2(graphics_context, u64, graphics_context);
+CREATE_TABLE2(graphics_context, u64, graphics_context);
 u32 simple_grid_polygon_load(vec2 * vertexes, u32 count){
   u32 vbo;
   glGenBuffers(1, &vbo);
@@ -221,7 +212,7 @@ void simple_grid_render_gl(loaded_polygon_data * loaded, mat4 camera){
 }
 
 
-void simple_grid_render_internal(u32 model_id, vec3 offset, graphics_data gd){
+void simple_grid_render_internal(u32 model_id, vec3 offset, graphics_context gd){
   
   model_data * model = index_table_lookup(gd.models, model_id);
   switch(model->type){
@@ -261,7 +252,7 @@ void simple_grid_render_internal(u32 model_id, vec3 offset, graphics_data gd){
 
 
 void simple_grid_render(u64 id){
-  graphics_data gd = get_graphics_data(id);
+  graphics_context gd = get_graphics_context(id);
   u32 entities[10];
   bool unused[10];
   u64 idx = 0;
@@ -277,11 +268,12 @@ void simple_grid_render(u64 id){
 }
 
 void simple_grid_renderer_create(u64 id){
-  graphics_data gd;
+  graphics_context gd;
   gd.gpu_poly = loaded_polygon_table_create(NULL);
+  graphics_context_load(&gd);
   simple_graphics_load_test(&gd);
   logd("Created gd %i\n", gd.models->area->size);
-  set_graphics_data(id, gd);
+  set_graphics_context(id, gd);
 }
 
 void simple_grid_measure(u64 id, vec2 * size){

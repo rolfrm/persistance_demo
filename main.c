@@ -18,7 +18,6 @@ void test_persist_oop();
 bool test_elf_reader2();
 bool test_elf_reader();
 bool test_type_system();
-void simple_graphics_test();
 void simple_grid_renderer_create(u64 id);
 void simple_grid_initialize(u64 id);
 u32 index_table_capacity(index_table * table){
@@ -311,7 +310,6 @@ void measure_voxel_grid(u64 id, vec2 * size){
 
 #include <sys/mman.h>
 bool index_table_test(){
-  simple_graphics_test();
   {
     
     board_data2_table * table = board_data2_table_create(NULL);
