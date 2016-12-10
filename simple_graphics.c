@@ -79,24 +79,34 @@ typedef struct{
   u32 count;
 }loaded_polygon_data;
 
+
 CREATE_TABLE_DECL2(active_entities, u32, bool);
 CREATE_TABLE_NP(active_entities, u32, bool);
 CREATE_TABLE_DECL2(loaded_polygon, u32, loaded_polygon_data);
 CREATE_TABLE_NP(loaded_polygon, u32, loaded_polygon_data);
 
+typedef index_table polygon_table;
+/*
+u32 polygon_create(polygon_table * table);
+u32 polygon_add_vertex(polygon_table * table, u32 polygon, vec3 offset);
+void polygon_read(polygon_table * table, u32 polygon, vec3 ** offsets, u64 count);
+void polygon_render(polygon_table * polygon, u32 polygon, mat3 offset, vec4 color);
+*/
 typedef struct{
   index_table * entities;
   index_table * models;
   index_table * polygon;
   index_table * vertex;
   loaded_polygon_table * gpu_poly;
+  active_entities_table * active_entities;
 }graphics_data;
 void simple_graphics_load_test(graphics_data * result){
-  
-  index_table * models = index_table_create("simple/models", sizeof(model_data));
-  index_table * polygon = index_table_create("simple/polygon", sizeof(polygon_data));
-  index_table * vertex = index_table_create("simple/vertex", sizeof(vertex_data));
-  index_table * entities = index_table_create("simple/entities", sizeof(entity_data));  
+  logd("Load test\n");
+  index_table * models = index_table_create(NULL/*"simple/models"*/, sizeof(model_data));
+  index_table * polygon = index_table_create(NULL/*"simple/polygon"*/, sizeof(polygon_data));
+  index_table * vertex = index_table_create(NULL/*"simple/vertex"*/, sizeof(vertex_data));
+  index_table * entities = index_table_create(NULL/*"simple/entities"*/, sizeof(entity_data));
+  result->active_entities = active_entities_table_create(NULL);
   u32 i1 = index_table_alloc(models);
   
   model_data * m1 = index_table_lookup(models, i1);
@@ -104,22 +114,23 @@ void simple_graphics_load_test(graphics_data * result){
   {
 
     u32 p1 = index_table_alloc(polygon);
+
     index_table_remove(polygon, p1);
     p1 = index_table_alloc(polygon);
     u32 p2 = index_table_alloc(polygon);
     u32 p3 = index_table_alloc(polygon);
+
     index_table_remove(polygon, p2);
     index_table_remove(polygon, p3);
     p2 = index_table_alloc(polygon);
     p3 = index_table_alloc(polygon);
     p1 = index_table_alloc(polygon);
-    index_table_alloc(polygon);
-    index_table_alloc(polygon);
-    index_table_alloc(polygon);
+    u32 p4 = index_table_alloc(polygon);
     
     u32 t1 = index_table_alloc(vertex);
     u32 t2 = index_table_alloc(vertex);
     u32 t3 = index_table_alloc(vertex);
+    u32 t4 = index_table_alloc(vertex);
 
     m1->index = p1;
     vertex_data * v = index_table_lookup(vertex, t1);
@@ -127,10 +138,14 @@ void simple_graphics_load_test(graphics_data * result){
     v->position = vec2_new(1,0);
     v = index_table_lookup(vertex, t2);
     v->color = 0xFFFFFFFF;
-    v->position = vec2_new(1,1);
+    v->position = vec2_new(0.8, 0.8);
     v = index_table_lookup(vertex, t3);
     v->color = 0xFFFFFFFF;
     v->position = vec2_new(0,1);
+    
+    v = index_table_lookup(vertex, t4);
+    v->color = 0xFFFFFFFF;
+    v->position = vec2_new(0.2,0.2);
     polygon_data * pd = index_table_lookup(polygon, p1);
     pd->next_index = p2;
     pd->vertex = t1;
@@ -139,8 +154,12 @@ void simple_graphics_load_test(graphics_data * result){
     pd->vertex = t2;
 
     pd = index_table_lookup(polygon, p3);
-    pd->next_index = 0;
+    pd->next_index = p4;
     pd->vertex = t3;
+    
+    pd = index_table_lookup(polygon, p4);
+    pd->next_index = 0;
+    pd->vertex = t4;
   }
   u32 player = index_table_alloc(entities);
   entity_data * ed = index_table_lookup(entities, player);
@@ -152,7 +171,10 @@ void simple_graphics_load_test(graphics_data * result){
   result->models = models;
   result->vertex = vertex;
   result->polygon = polygon;
+  active_entities_set(result->active_entities, player, true);
 }
+
+
 
 
 void simple_graphics_test(){
@@ -191,23 +213,21 @@ void simple_grid_render_gl(loaded_polygon_data * loaded, mat4 camera){
   
   glUseProgram(shader);
   glUniformMatrix4fv(camera_loc,1,false, &(camera.data[0][0]));
-  glUniform4f(color_loc, 1, 1, 1, 1);
+  glUniform4f(color_loc, 154.0 / 255.0, 36.0 / 255.0, 31.0 / 255.0, 1);
   glEnableVertexAttribArray(vertex_loc);
   glVertexAttribPointer(vertex_loc, 2, GL_FLOAT, false, 0, 0);
   glBindBuffer(GL_ARRAY_BUFFER, loaded->gl_ref);
-  glDrawArrays(GL_POINTS, 0, loaded->count);
+  glDrawArrays(GL_TRIANGLE_FAN, 0, loaded->count);
 }
 
 
 void simple_grid_render_internal(u32 model_id, vec3 offset, graphics_data gd){
-
+  
   model_data * model = index_table_lookup(gd.models, model_id);
   switch(model->type){
   case KIND_POLYGON:{
     loaded_polygon_data loaded;
-    
-    if(false == try_get_loaded_polygon(model->index, &loaded)) {
-      
+    if(false == loaded_polygon_try_get(gd.gpu_poly, model->index, &loaded)) {
       u32 index = model->index;
       u32 count = 0;
       for(u32 index = model->index; index != 0; index = ((polygon_data *)index_table_lookup(gd.polygon, index))->next_index)
@@ -222,10 +242,13 @@ void simple_grid_render_internal(u32 model_id, vec3 offset, graphics_data gd){
 	*p = vd->position;
 	p += 1;
       }
+      ASSERT(count > 0);
       loaded.gl_ref = simple_grid_polygon_load(positions, count);
+      ASSERT(loaded.gl_ref > 0);
       loaded.count = count;
       set_loaded_polygon(model->index, loaded);
     }
+    simple_grid_render_gl(&loaded, mat4_identity());
     
 
   }
@@ -236,13 +259,14 @@ void simple_grid_render_internal(u32 model_id, vec3 offset, graphics_data gd){
   UNUSED(model);UNUSED(offset);
 }
 
+
 void simple_grid_render(u64 id){
   graphics_data gd = get_graphics_data(id);
   u32 entities[10];
   bool unused[10];
   u64 idx = 0;
   u64 cnt = 0;
-  while(0 != (cnt = iter_all_active_entities(entities,unused, array_count(unused), &idx))){
+  while(0 != (cnt = active_entities_iter_all(gd.active_entities, entities,unused, array_count(unused), &idx))){
     for(u64 i = 0; i < cnt; i++){
       u32 entity = entities[i];
       entity_data * ed = index_table_lookup(gd.entities, entity);
@@ -252,10 +276,22 @@ void simple_grid_render(u64 id){
   }
 }
 
-
-graphics_data simple_grid_renderer_init(){
+void simple_grid_renderer_create(u64 id){
   graphics_data gd;
   gd.gpu_poly = loaded_polygon_table_create(NULL);
-  return gd;
+  simple_graphics_load_test(&gd);
+  logd("Created gd %i\n", gd.models->area->size);
+  set_graphics_data(id, gd);
+}
 
+void simple_grid_measure(u64 id, vec2 * size){
+  UNUSED(id);
+  *size = vec2_new(0, 0);
+  
+}
+
+
+void simple_grid_initialize(u64 id){
+  define_method(id, render_control_method, (method)simple_grid_render);
+  define_method(id, measure_control_method, (method)simple_grid_measure);
 }

@@ -19,7 +19,8 @@ bool test_elf_reader2();
 bool test_elf_reader();
 bool test_type_system();
 void simple_graphics_test();
-
+void simple_grid_renderer_create(u64 id);
+void simple_grid_initialize(u64 id);
 u32 index_table_capacity(index_table * table){
   return table->area->size / table->element_size;
 }
@@ -64,7 +65,8 @@ void index_table_remove(index_table * table, u32 index){
   ASSERT(index < index_table_count(table));
   ASSERT(index > 0);
   u32 cnt = _index_table_free_index_count(table);
-  mem_area_realloc(table->free_indexes, table->free_indexes->size + table->element_size);
+  mem_area_realloc(table->free_indexes, table->free_indexes->size + sizeof(u32));
+  ((u32 *)table->free_indexes->ptr)[cnt + 1] = 0;
   ASSERT(memmem(table->free_indexes->ptr + sizeof(u32), table->free_indexes->size - sizeof(u32), &index, sizeof(index)) == NULL);
   ((u32 *)table->free_indexes->ptr)[cnt + 1] = index;
   ((u32 *) table->free_indexes->ptr)[0] += 1;
@@ -306,6 +308,7 @@ void measure_voxel_grid(u64 id, vec2 * size){
   UNUSED(id);
   *size = vec2_new(0, 0);
 }
+
 #include <sys/mman.h>
 bool index_table_test(){
   simple_graphics_test();
@@ -381,11 +384,13 @@ bool index_table_test(){
   set_board_data2(voxel_board, vboard);
 
   mat4_print(get_camera_3d_position(voxel_board));
-  define_method(voxel_board, render_control_method, (method)render_voxel_grid);
-  define_method(voxel_board, measure_control_method, (method)measure_voxel_grid);
+  //define_method(voxel_board, render_control_method, (method)render_voxel_grid);
+  //define_method(voxel_board, measure_control_method, (method)measure_voxel_grid);
 
+  simple_grid_initialize(voxel_board);
+  simple_grid_renderer_create(voxel_board);
   u64 win_id = intern_string("voxel window");
-  set_color(win_id, vec3_new(0.1, 0.1, 0.1));
+  set_color(win_id, vec3_new(1, 1, 1));
   make_window(win_id); 
   add_control(win_id, voxel_board);
   auto method = get_method(win_id, render_control_method);
