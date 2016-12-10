@@ -18,18 +18,18 @@ void test_persist_oop();
 bool test_elf_reader2();
 bool test_elf_reader();
 bool test_type_system();
-void test_simple_graphics();
+void simple_graphics_test();
 
 u32 index_table_capacity(index_table * table){
-  return table->ptr->size / table->element_size;
+  return table->area->size / table->element_size;
 }
 
 u32 index_table_count(index_table * table){
-  return ((u32 *) table->ptr->ptr)[0];
+  return ((u32 *) table->area->ptr)[0];
 }
 
 void index_table_count_set(index_table * table, u32 newcount){
-  ((u32 *) table->ptr->ptr)[0] = newcount;
+  ((u32 *) table->area->ptr)[0] = newcount;
 }
 
 u32 _index_table_free_index_count(index_table * table){
@@ -49,11 +49,11 @@ u32 index_table_alloc(index_table * table){
     return idx;
   }
   while(index_table_capacity(table) <= index_table_count(table)){
-    u32 prevsize = table->ptr->size;
+    u32 prevsize = table->area->size;
     ASSERT((prevsize % table->element_size) == 0);
     u32 newsize = MAX(prevsize * 2, 8 * table->element_size);
-    mem_area_realloc(table->ptr, newsize);
-    memset(table->ptr->ptr + prevsize, 0,  newsize - prevsize);
+    mem_area_realloc(table->area, newsize);
+    memset(table->area->ptr + prevsize, 0,  newsize - prevsize);
   }
   u32 idx = index_table_count(table);
   index_table_count_set(table,idx + 1);
@@ -76,12 +76,12 @@ index_table * index_table_create(const char * name, u32 element_size){
   table.element_size = element_size;
   if(name != NULL){
 
-    table.ptr = mem_area_create(name);
+    table.area = mem_area_create(name);
     char name2[128] = {0};
     sprintf(name2, "%s.free", name);
     table.free_indexes = mem_area_create(name2);
   }else{
-    table.ptr = mem_area_create_non_persisted();
+    table.area = mem_area_create_non_persisted();
     table.free_indexes = mem_area_create_non_persisted();
   }
   
@@ -90,14 +90,14 @@ index_table * index_table_create(const char * name, u32 element_size){
     ((u32 *)table.free_indexes->ptr)[0] = 0;
   }
 
-  if(table.ptr->size < element_size){
-    mem_area_realloc(table.ptr, element_size);
-    while(table.ptr->size < sizeof(u32))
-      mem_area_realloc(table.ptr, table.ptr->size + element_size);
-    index_table_count_set(&table, 0);
+  if(table.area->size < element_size){
+    mem_area_realloc(table.area, element_size);
+    while(table.area->size < sizeof(u32))
+      mem_area_realloc(table.area, table.area->size + element_size);
+    memset(table.area->ptr, 0, table.area->size);
   }
   index_table_alloc(&table);
-  ASSERT((table.ptr->size % table.element_size) == 0);
+  ASSERT((table.area->size % table.element_size) == 0);
   ASSERT(index_table_count(&table) > 0);
   return iron_clone(&table, sizeof(table));
 }
@@ -106,7 +106,7 @@ void * index_table_lookup(index_table * table, u32 index){
   ASSERT(index < index_table_count(table));
   ASSERT(index > 0);
   u32 offset = (1 + sizeof(u32) / table->element_size);
-  return table->ptr + (offset + index) * table->element_size;
+  return table->area->ptr + (offset + index) * table->element_size;
 }
 
 u32 iterate_voxel_chunk(index_table * table, u32 start_index){
@@ -272,7 +272,10 @@ void render_voxel_grid2(u64 id, u32 index, index_table * voxels, index_table * m
   mat4 cam = get_camera_3d_position(id);
   
   void render_grid_inner(float size, vec3 offset, u32 index){
-    //gl_render_cube(cam, size* 0.8, vec3_add(vec3_new1(size * 0.1), offset), 0xFF5555FF);
+    //gl_render_cube(cam, size* 0.8, vec3_add(vec3_new1(size * 0.1),
+//offset), 0xFF5555FF);
+    if(index == 0)
+      return;
     u32 * indexes = index_table_lookup(voxels, index);
     float size2 = size * 0.5;
     for(int i = 0; i < 8; i++){
@@ -305,7 +308,7 @@ void measure_voxel_grid(u64 id, vec2 * size){
 }
 #include <sys/mman.h>
 bool index_table_test(){
-  test_simple_graphics();
+  simple_graphics_test();
   {
     
     board_data2_table * table = board_data2_table_create(NULL);
@@ -318,13 +321,12 @@ bool index_table_test(){
 
     TEST_ASSERT(bd2.index == 5);
   }
-  return TEST_SUCCESS;
+  //return TEST_SUCCESS;
   // the index table can be used for voxels.
   index_table * tab = index_table_create("voxeltable", sizeof(u32) * 8);
   index_table * colors = index_table_create("colortable", 4);
   u32 black = index_table_alloc(colors);
   u32 white = index_table_alloc(colors);
-  printf("%p %p\n", black, white);
   *((u32 *) index_table_lookup(colors, black)) = 0x00FF00FF;
   *((u32 *)index_table_lookup(colors, white)) = 0xFFF00FFF;
 
@@ -334,7 +336,7 @@ bool index_table_test(){
   u32 x3 = index_table_alloc(tab);
   u32 x4 = index_table_alloc(tab);
   u32 x5 = index_table_alloc(tab);
-
+  
   voxel_board_data vboard = {
     .index = x1,
     .materials = colors,

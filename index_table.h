@@ -1,5 +1,5 @@
 typedef struct{
-  mem_area * ptr;
+  mem_area * area;
   mem_area * free_indexes;
   u32 element_size;
 }index_table;

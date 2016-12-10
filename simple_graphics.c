@@ -74,16 +74,31 @@ typedef struct{
   u32 model;
 }entity_data;
 
-void test_simple_graphics(){
+typedef struct{
+  u32 gl_ref;
+  u32 count;
+}loaded_polygon_data;
+
+CREATE_TABLE_DECL2(active_entities, u32, bool);
+CREATE_TABLE_NP(active_entities, u32, bool);
+CREATE_TABLE_DECL2(loaded_polygon, u32, loaded_polygon_data);
+CREATE_TABLE_NP(loaded_polygon, u32, loaded_polygon_data);
+
+typedef struct{
+  index_table * entities;
+  index_table * models;
+  index_table * polygon;
+  index_table * vertex;
+  loaded_polygon_table * gpu_poly;
+}graphics_data;
+void simple_graphics_load_test(graphics_data * result){
   
   index_table * models = index_table_create("simple/models", sizeof(model_data));
   index_table * polygon = index_table_create("simple/polygon", sizeof(polygon_data));
   index_table * vertex = index_table_create("simple/vertex", sizeof(vertex_data));
   index_table * entities = index_table_create("simple/entities", sizeof(entity_data));  
-  logd("%i \n", models->ptr->size);
   u32 i1 = index_table_alloc(models);
   
-  logd("%i %p %p\n", i1, polygon->ptr->ptr, vertex->ptr->ptr);
   model_data * m1 = index_table_lookup(models, i1);
   m1->type = KIND_POLYGON;
   {
@@ -105,7 +120,6 @@ void test_simple_graphics(){
     u32 t1 = index_table_alloc(vertex);
     u32 t2 = index_table_alloc(vertex);
     u32 t3 = index_table_alloc(vertex);
-    logd("%p %p\n", polygon->ptr->ptr, vertex->ptr->ptr);    
 
     m1->index = p1;
     vertex_data * v = index_table_lookup(vertex, t1);
@@ -133,25 +147,20 @@ void test_simple_graphics(){
   ed->position = vec3_new(0,0,0);
   ed->model = i1;
 
-  print_model_data(i1, models, polygon, vertex);
+  //print_model_data(i1, models, polygon, vertex);
+  result->entities = entities;
+  result->models = models;
+  result->vertex = vertex;
+  result->polygon = polygon;
 }
-typedef struct{
-  u32 gl_ref;
-  u32 count;
-}loaded_polygon_data;
 
-CREATE_TABLE_DECL2(active_entities, u32, bool);
-CREATE_TABLE_NP(active_entities, u32, bool);
-CREATE_TABLE_DECL2(loaded_polygon, u32, loaded_polygon_data);
-CREATE_TABLE_NP(loaded_polygon, u32, loaded_polygon_data);
 
-typedef struct{
-  index_table * entities;
-  index_table * models;
-  index_table * polygon;
-  index_table * vertex;
-  loaded_polygon_table * gpu_poly;
-}graphics_data;
+void simple_graphics_test(){
+  graphics_data gd;
+  simple_graphics_load_test(&gd);
+  logd("DONE\n");
+
+}
 CREATE_TABLE_DECL2(graphics_data, u64, graphics_data);
 CREATE_TABLE2(graphics_data, u64, graphics_data);
 u32 simple_grid_polygon_load(vec2 * vertexes, u32 count){
