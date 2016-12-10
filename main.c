@@ -45,8 +45,10 @@ u32 alloc_index_table(index_table * table){
   }
   while(index_table_capacity(table) <= index_table_count(table)){
     u32 prevsize = table->ptr->size;
-    mem_area_realloc(table->ptr, MAX(table->ptr->size * 2, 8 * table->element_size));
-    memset(table->ptr + prevsize, 0,  table->ptr->size - prevsize);
+    ASSERT((prevsize % table->element_size) == 0);
+    u32 newsize = MAX(prevsize * 2, 8 * table->element_size);
+    mem_area_realloc(table->ptr, newsize);
+    memset(table->ptr->ptr + prevsize, 0,  newsize - prevsize);
   }
   u32 idx = index_table_count(table);
   index_table_count_set(table,idx + 1);
@@ -63,10 +65,10 @@ void index_table_remove(index_table * table, u32 index){
 index_table * create_index_table(const char * name, u32 element_size){
   index_table table = {0};
   table.element_size = element_size;
+  if(name != NULL){
 
-  if(name == NULL){
     table.ptr = mem_area_create(name);
-    char name2[128];
+    char name2[128] = {0};
     sprintf(name2, "%s.free", name);
     table.free_indexes = mem_area_create(name2);
   }else{
@@ -76,21 +78,26 @@ index_table * create_index_table(const char * name, u32 element_size){
   
   if(table.free_indexes->size < sizeof(u32)){
     mem_area_realloc(table.free_indexes, sizeof(u32));
-    memset(table.free_indexes->ptr, 0, sizeof(u32));
+    ((u32 *)table.free_indexes->ptr)[0] = 0;
   }
 
   if(table.ptr->size < element_size){
+    mem_area_realloc(table.ptr, element_size);
     while(table.ptr->size < sizeof(u32))
-      mem_area_realloc(table.ptr, table.ptr->size + element_size );
+      mem_area_realloc(table.ptr, table.ptr->size + element_size);
     index_table_count_set(&table, 0);
   }
-  
+  alloc_index_table(&table);
+  ASSERT((table.ptr->size % table.element_size) == 0);
+  ASSERT(index_table_count(&table) > 0);
   return iron_clone(&table, sizeof(table));
 }
 
 void * lookup_index_table(index_table * table, u32 index){
   ASSERT(index < index_table_count(table));
-  return table->ptr + index * table->element_size;
+  ASSERT(index > 0);
+  u32 offset = (1 + sizeof(u32) / table->element_size);
+  return table->ptr + (offset + index) * table->element_size;
 }
 
 u32 iterate_voxel_chunk(index_table * table, u32 start_index){
@@ -291,8 +298,8 @@ void measure_voxel_grid(u64 id, vec2 * size){
 bool index_table_test(){
   test_simple_graphics();
   {
+    
     board_data2_table * table = board_data2_table_create(NULL);
-    logd("table size: %i\n", table->ptr->key_area->size);
     voxel_board_data bd = {.voxels = create_index_table("voxeltable2", sizeof(u32) * 8),
 			   .materials = create_index_table("materials2", sizeof(u32)),
 			   .index = 5};

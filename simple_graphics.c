@@ -59,7 +59,8 @@ void print_model_data(u32 index, index_table * models, index_table * polygon, in
 	  }
 	  
 	  index = pd->next_index;
-	  pd = lookup_index_table(polygon, index);
+	  if(index != 0)
+	    pd = lookup_index_table(polygon, index);
 	}
       }
 	
@@ -78,14 +79,27 @@ void test_simple_graphics(){
   index_table * models = create_index_table("simple/models", sizeof(model_data));
   index_table * polygon = create_index_table("simple/polygon", sizeof(polygon_data));
   index_table * vertex = create_index_table("simple/vertex", sizeof(vertex_data));
-  index_table * entities = create_index_table("simple/entities", sizeof(entity_data));
+  index_table * entities = create_index_table("simple/entities", sizeof(entity_data));  
+  logd("%i \n", models->ptr->size);
   u32 i1 = alloc_index_table(models);
+  
+  logd("%i %p %p\n", i1, polygon->ptr->ptr, vertex->ptr->ptr);
   model_data * m1 = lookup_index_table(models, i1);
   m1->type = KIND_POLYGON;
-
   {
-    u32 t1 = alloc_index_table(vertex), t2 = alloc_index_table(vertex), t3 = alloc_index_table(vertex);
-    u32 p1 = alloc_index_table(polygon), p2 = alloc_index_table(polygon), p3 = alloc_index_table(polygon);
+
+    u32 p1 = alloc_index_table(polygon);
+    u32 p2 = alloc_index_table(polygon);
+    u32 p3 = alloc_index_table(polygon);
+    alloc_index_table(polygon);
+    alloc_index_table(polygon);
+    alloc_index_table(polygon);
+    
+    u32 t1 = alloc_index_table(vertex);
+    u32 t2 = alloc_index_table(vertex);
+    u32 t3 = alloc_index_table(vertex);
+    logd("%p %p\n", polygon->ptr->ptr, vertex->ptr->ptr);    
+
     m1->index = p1;
     vertex_data * v = lookup_index_table(vertex, t1);
     v->color = 0xFFFFFFFF;
@@ -99,7 +113,6 @@ void test_simple_graphics(){
     polygon_data * pd = lookup_index_table(polygon, p1);
     pd->next_index = p2;
     pd->vertex = t1;
-    
     pd = lookup_index_table(polygon, p2);
     pd->next_index = p3;
     pd->vertex = t2;
@@ -108,7 +121,6 @@ void test_simple_graphics(){
     pd->next_index = 0;
     pd->vertex = t3;
   }
-
   u32 player = alloc_index_table(entities);
   entity_data * ed = lookup_index_table(entities, player);
   ed->position = vec3_new(0,0,0);
