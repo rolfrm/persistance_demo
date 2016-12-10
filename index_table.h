@@ -4,6 +4,7 @@ typedef struct{
   u32 element_size;
 }index_table;
 
-index_table * create_index_table(const char * name, u32 element_size);
-u32 alloc_index_table(index_table * table);
-void * lookup_index_table(index_table * table, u32 index);
+index_table * index_table_create(const char * name, u32 element_size);
+u32 index_table_alloc(index_table * table);
+void * index_table_lookup(index_table * table, u32 index);
+void index_table_remove(index_table * table, u32 index);

@@ -39,7 +39,7 @@ typedef struct{
 
 void print_model_data(u32 index, index_table * models, index_table * polygon, index_table * vertex){
   while(index != 0){
-    model_data * m2 = lookup_index_table(models, index);
+    model_data * m2 = index_table_lookup(models, index);
     index = m2->index;
 
     switch(m2->type){
@@ -49,10 +49,10 @@ void print_model_data(u32 index, index_table * models, index_table * polygon, in
     case KIND_POLYGON:
       {
 	logd("POLYGON:\n");
-	polygon_data * pd = lookup_index_table(polygon, index);
+	polygon_data * pd = index_table_lookup(polygon, index);
 	while(index != 0){
 	  if(pd->vertex != 0){
-	    vertex_data * vd = lookup_index_table(vertex, pd->vertex);
+	    vertex_data * vd = index_table_lookup(vertex, pd->vertex);
 	    logd("  Vertex: %p ", vd->color);
 	    vec2_print(vd->position);
 	    logd("\n");
@@ -60,7 +60,7 @@ void print_model_data(u32 index, index_table * models, index_table * polygon, in
 	  
 	  index = pd->next_index;
 	  if(index != 0)
-	    pd = lookup_index_table(polygon, index);
+	    pd = index_table_lookup(polygon, index);
 	}
       }
 	
@@ -76,53 +76,60 @@ typedef struct{
 
 void test_simple_graphics(){
   
-  index_table * models = create_index_table("simple/models", sizeof(model_data));
-  index_table * polygon = create_index_table("simple/polygon", sizeof(polygon_data));
-  index_table * vertex = create_index_table("simple/vertex", sizeof(vertex_data));
-  index_table * entities = create_index_table("simple/entities", sizeof(entity_data));  
+  index_table * models = index_table_create("simple/models", sizeof(model_data));
+  index_table * polygon = index_table_create("simple/polygon", sizeof(polygon_data));
+  index_table * vertex = index_table_create("simple/vertex", sizeof(vertex_data));
+  index_table * entities = index_table_create("simple/entities", sizeof(entity_data));  
   logd("%i \n", models->ptr->size);
-  u32 i1 = alloc_index_table(models);
+  u32 i1 = index_table_alloc(models);
   
   logd("%i %p %p\n", i1, polygon->ptr->ptr, vertex->ptr->ptr);
-  model_data * m1 = lookup_index_table(models, i1);
+  model_data * m1 = index_table_lookup(models, i1);
   m1->type = KIND_POLYGON;
   {
 
-    u32 p1 = alloc_index_table(polygon);
-    u32 p2 = alloc_index_table(polygon);
-    u32 p3 = alloc_index_table(polygon);
-    alloc_index_table(polygon);
-    alloc_index_table(polygon);
-    alloc_index_table(polygon);
+    u32 p1 = index_table_alloc(polygon);
+    index_table_remove(polygon, p1);
+    p1 = index_table_alloc(polygon);
+    u32 p2 = index_table_alloc(polygon);
+    u32 p3 = index_table_alloc(polygon);
+    index_table_remove(polygon, p2);
+    index_table_remove(polygon, p3);
+    p2 = index_table_alloc(polygon);
+    p3 = index_table_alloc(polygon);
+    p1 = index_table_alloc(polygon);
+    index_table_alloc(polygon);
+    index_table_alloc(polygon);
+    index_table_alloc(polygon);
     
-    u32 t1 = alloc_index_table(vertex);
-    u32 t2 = alloc_index_table(vertex);
-    u32 t3 = alloc_index_table(vertex);
+    u32 t1 = index_table_alloc(vertex);
+    u32 t2 = index_table_alloc(vertex);
+    u32 t3 = index_table_alloc(vertex);
     logd("%p %p\n", polygon->ptr->ptr, vertex->ptr->ptr);    
 
     m1->index = p1;
-    vertex_data * v = lookup_index_table(vertex, t1);
+    vertex_data * v = index_table_lookup(vertex, t1);
     v->color = 0xFFFFFFFF;
     v->position = vec2_new(1,0);
-    v = lookup_index_table(vertex, t2);
+    v = index_table_lookup(vertex, t2);
     v->color = 0xFFFFFFFF;
     v->position = vec2_new(1,1);
-    v = lookup_index_table(vertex, t3);
+    v = index_table_lookup(vertex, t3);
     v->color = 0xFFFFFFFF;
     v->position = vec2_new(0,1);
-    polygon_data * pd = lookup_index_table(polygon, p1);
+    polygon_data * pd = index_table_lookup(polygon, p1);
     pd->next_index = p2;
     pd->vertex = t1;
-    pd = lookup_index_table(polygon, p2);
+    pd = index_table_lookup(polygon, p2);
     pd->next_index = p3;
     pd->vertex = t2;
 
-    pd = lookup_index_table(polygon, p3);
+    pd = index_table_lookup(polygon, p3);
     pd->next_index = 0;
     pd->vertex = t3;
   }
-  u32 player = alloc_index_table(entities);
-  entity_data * ed = lookup_index_table(entities, player);
+  u32 player = index_table_alloc(entities);
+  entity_data * ed = index_table_lookup(entities, player);
   ed->position = vec3_new(0,0,0);
   ed->model = i1;
 
@@ -185,7 +192,7 @@ void simple_grid_render_gl(loaded_polygon_data * loaded, mat4 camera){
 
 void simple_grid_render_internal(u32 model_id, vec3 offset, graphics_data gd){
 
-  model_data * model = lookup_index_table(gd.models, model_id);
+  model_data * model = index_table_lookup(gd.models, model_id);
   switch(model->type){
   case KIND_POLYGON:{
     loaded_polygon_data loaded;
@@ -194,15 +201,15 @@ void simple_grid_render_internal(u32 model_id, vec3 offset, graphics_data gd){
       
       u32 index = model->index;
       u32 count = 0;
-      for(u32 index = model->index; index != 0; index = ((polygon_data *)lookup_index_table(gd.polygon, index))->next_index)
+      for(u32 index = model->index; index != 0; index = ((polygon_data *)index_table_lookup(gd.polygon, index))->next_index)
 	count += 1;
       
       vec2 positions[count];
       vec2 * p = &positions[0];
       while(index != 0){
-	polygon_data * pd = lookup_index_table(gd.polygon, index);
+	polygon_data * pd = index_table_lookup(gd.polygon, index);
 	index = pd->next_index;
-	vertex_data * vd = lookup_index_table(gd.vertex, pd->vertex);
+	vertex_data * vd = index_table_lookup(gd.vertex, pd->vertex);
 	*p = vd->position;
 	p += 1;
       }
@@ -229,7 +236,7 @@ void simple_grid_render(u64 id){
   while(0 != (cnt = iter_all_active_entities(entities,unused, array_count(unused), &idx))){
     for(u64 i = 0; i < cnt; i++){
       u32 entity = entities[i];
-      entity_data * ed = lookup_index_table(gd.entities, entity);
+      entity_data * ed = index_table_lookup(gd.entities, entity);
       if(ed->model != 0)
 	simple_grid_render_internal(ed->model, ed->position, gd);
     }

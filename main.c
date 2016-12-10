@@ -36,11 +36,16 @@ u32 _index_table_free_index_count(index_table * table){
   return ((u32 *) table->free_indexes->ptr)[0];
 }
 
-u32 alloc_index_table(index_table * table){
+void _index_table_free_index_count_set(index_table * table, u32 idx){
+  ((u32 *) table->free_indexes->ptr)[0] = idx;
+}
+
+u32 index_table_alloc(index_table * table){
   u32 freeindexcnt = _index_table_free_index_count(table);
   if(freeindexcnt > 0){
     u32 idx = ((u32 *) table->free_indexes->ptr)[freeindexcnt - 1];
-    mem_area_realloc(table->free_indexes, table->free_indexes->size - table->element_size);
+    _index_table_free_index_count_set(table, freeindexcnt - 1);
+    ASSERT(idx != 0);
     return idx;
   }
   while(index_table_capacity(table) <= index_table_count(table)){
@@ -56,13 +61,17 @@ u32 alloc_index_table(index_table * table){
 }
 
 void index_table_remove(index_table * table, u32 index){
+  ASSERT(index < index_table_count(table));
+  ASSERT(index > 0);
   u32 cnt = _index_table_free_index_count(table);
   mem_area_realloc(table->free_indexes, table->free_indexes->size + table->element_size);
-  ((u32 *)table->free_indexes->ptr)[cnt] = index;
+  ASSERT(memmem(table->free_indexes->ptr + sizeof(u32), table->free_indexes->size - sizeof(u32), &index, sizeof(index)) == NULL);
+  ((u32 *)table->free_indexes->ptr)[cnt + 1] = index;
   ((u32 *) table->free_indexes->ptr)[0] += 1;
+  
 }
 
-index_table * create_index_table(const char * name, u32 element_size){
+index_table * index_table_create(const char * name, u32 element_size){
   index_table table = {0};
   table.element_size = element_size;
   if(name != NULL){
@@ -87,13 +96,13 @@ index_table * create_index_table(const char * name, u32 element_size){
       mem_area_realloc(table.ptr, table.ptr->size + element_size);
     index_table_count_set(&table, 0);
   }
-  alloc_index_table(&table);
+  index_table_alloc(&table);
   ASSERT((table.ptr->size % table.element_size) == 0);
   ASSERT(index_table_count(&table) > 0);
   return iron_clone(&table, sizeof(table));
 }
 
-void * lookup_index_table(index_table * table, u32 index){
+void * index_table_lookup(index_table * table, u32 index){
   ASSERT(index < index_table_count(table));
   ASSERT(index > 0);
   u32 offset = (1 + sizeof(u32) / table->element_size);
@@ -102,7 +111,7 @@ void * lookup_index_table(index_table * table, u32 index){
 
 u32 iterate_voxel_chunk(index_table * table, u32 start_index){
   u32 count = 0;
-  u32 * ref = lookup_index_table(table, start_index);
+  u32 * ref = index_table_lookup(table, start_index);
   for(u32 i = 0; i < 8; i++){
     u32 data = ref[i];
     if(data == 0) continue;
@@ -190,7 +199,7 @@ void calc_voxel_surface(index_table * vox, u32 idx){
       }
       logd("\n");
     }else{
-      u32 * k = lookup_index_table(vox, idx2);
+      u32 * k = index_table_lookup(vox, idx2);
       for(u32 i = 0; i < 8; i++){
 	if(k[i] == 0) continue;
 	insert_surface(k[i], x * 2 + i % 2, y * 2 + (i / 2) % 2, z * 2 + (i / 4) % 2, lod + 1);
@@ -264,7 +273,7 @@ void render_voxel_grid2(u64 id, u32 index, index_table * voxels, index_table * m
   
   void render_grid_inner(float size, vec3 offset, u32 index){
     //gl_render_cube(cam, size* 0.8, vec3_add(vec3_new1(size * 0.1), offset), 0xFF5555FF);
-    u32 * indexes = lookup_index_table(voxels, index);
+    u32 * indexes = index_table_lookup(voxels, index);
     float size2 = size * 0.5;
     for(int i = 0; i < 8; i++){
       vec3 offset2 = vec3_add(offset, vec3_mul(vec3_new1(size2), vec3_new(i % 2, (i / 2) % 2, (i / 4) % 2)));
@@ -275,7 +284,7 @@ void render_voxel_grid2(u64 id, u32 index, index_table * voxels, index_table * m
 	render_grid_inner(size2, offset2, index2);
       }else{
 
-	u32 color = *((u32 *)lookup_index_table(materials, ~index2));
+	u32 color = *((u32 *)index_table_lookup(materials, ~index2));
 	gl_render_cube(cam, size2 * 0.8, vec3_add(vec3_new1(size2 * 0.1), offset2), color);
       }
     }
@@ -300,8 +309,8 @@ bool index_table_test(){
   {
     
     board_data2_table * table = board_data2_table_create(NULL);
-    voxel_board_data bd = {.voxels = create_index_table("voxeltable2", sizeof(u32) * 8),
-			   .materials = create_index_table("materials2", sizeof(u32)),
+    voxel_board_data bd = {.voxels = index_table_create("voxeltable2", sizeof(u32) * 8),
+			   .materials = index_table_create("materials2", sizeof(u32)),
 			   .index = 5};
     board_data2_set(table, 0xbeef, bd);
 
@@ -311,20 +320,20 @@ bool index_table_test(){
   }
   return TEST_SUCCESS;
   // the index table can be used for voxels.
-  index_table * tab = create_index_table("voxeltable", sizeof(u32) * 8);
-  index_table * colors = create_index_table("colortable", 4);
-  u32 black = alloc_index_table(colors);
-  u32 white = alloc_index_table(colors);
+  index_table * tab = index_table_create("voxeltable", sizeof(u32) * 8);
+  index_table * colors = index_table_create("colortable", 4);
+  u32 black = index_table_alloc(colors);
+  u32 white = index_table_alloc(colors);
   printf("%p %p\n", black, white);
-  *((u32 *) lookup_index_table(colors, black)) = 0x00FF00FF;
-  *((u32 *)lookup_index_table(colors, white)) = 0xFFF00FFF;
+  *((u32 *) index_table_lookup(colors, black)) = 0x00FF00FF;
+  *((u32 *)index_table_lookup(colors, white)) = 0xFFF00FFF;
 
   // Allocate 5 2x2x2 voxel chunks
-  u32 x1 = alloc_index_table(tab);
-  u32 x2 = alloc_index_table(tab);
-  u32 x3 = alloc_index_table(tab);
-  u32 x4 = alloc_index_table(tab);
-  u32 x5 = alloc_index_table(tab);
+  u32 x1 = index_table_alloc(tab);
+  u32 x2 = index_table_alloc(tab);
+  u32 x3 = index_table_alloc(tab);
+  u32 x4 = index_table_alloc(tab);
+  u32 x5 = index_table_alloc(tab);
 
   voxel_board_data vboard = {
     .index = x1,
@@ -333,7 +342,7 @@ bool index_table_test(){
   };
 
   UNUSED(x4), UNUSED(x5);
-  u32 * d = lookup_index_table(tab, x1);
+  u32 * d = index_table_lookup(tab, x1);
   // insert the IDs.
   d[0] = x2;
   d[1] = x3;
@@ -343,8 +352,8 @@ bool index_table_test(){
   calc_voxel_surface(tab, x1);
   //  return TEST_SUCCESS;
   //lookup the arrays for x2 x3  
-  u32 * d1 = lookup_index_table(tab, x2);
-  //u32 * d2 = lookup_index_table(tab, x3);
+  u32 * d1 = index_table_lookup(tab, x2);
+  //u32 * d2 = index_table_lookup(tab, x3);
 
   // put in black and white colors.
   for(int i = 0; i < 8; i++){
@@ -355,11 +364,11 @@ bool index_table_test(){
   d1[7] = x4;
   d1[2] = x4;
   d1[0] = x4;
-  u32 * d3 = lookup_index_table(tab, x4);
+  u32 * d3 = index_table_lookup(tab, x4);
   d3[7] = x5;
   d3[2] = x5;
   d3[0] = x5;
-  u32 * d4 = lookup_index_table(tab, x5);
+  u32 * d4 = index_table_lookup(tab, x5);
   d4[0] = ~white;
   d4[7] = ~black;
 
