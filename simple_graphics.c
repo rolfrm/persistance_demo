@@ -132,8 +132,19 @@ void polygon_add_vertex2f(graphics_context * ctx, polygon_id polygon, vec2 offse
   u32 t1 = index_table_alloc(ctx->vertex);
   vertex_data * v = index_table_lookup(ctx->vertex, t1);
   v->position = offset;
-  polygon_id p1 = polygon_create(ctx);
+  
   polygon_data * pd = index_table_lookup(ctx->polygon, polygon);
+  if(pd->vertex == 0){
+    pd->vertex = t1;
+    return;
+  }
+  while(pd->next_index != 0){
+    polygon = pd->next_index;
+    pd = index_table_lookup(ctx->polygon, polygon);
+  }
+  logd("pd: %i %i\n", pd->next_index, polygon);
+  
+  polygon_id p1 = polygon_create(ctx);
   pd->next_index = p1;
   pd = index_table_lookup(ctx->polygon, p1);
   pd->vertex = t1;
@@ -164,6 +175,8 @@ void simple_graphics_load_test(graphics_context * ctx){
     polygon_add_vertex2f(ctx, p1, vec2_new(0.8,0.8));
     polygon_add_vertex2f(ctx, p1, vec2_new(0,1));
     polygon_add_vertex2f(ctx, p1, vec2_new(0.2,0.2));
+    polygon_add_vertex2f(ctx, p1, vec2_new(-0.5,-0.5));
+    m1->index = p1;
   }
   u32 player = index_table_alloc(entities);
   entity_data * ed = index_table_lookup(entities, player);
@@ -237,11 +250,9 @@ void simple_grid_render_internal(u32 model_id, vec3 offset, graphics_context gd)
       loaded.gl_ref = simple_grid_polygon_load(positions, count);
       ASSERT(loaded.gl_ref > 0);
       loaded.count = count;
-      set_loaded_polygon(model->index, loaded);
+      loaded_polygon_set(gd.gpu_poly, model->index, loaded);
     }
-    simple_grid_render_gl(&loaded, mat4_identity());
-    
-
+    simple_grid_render_gl(&loaded, mat4_scaled(0.5, 0.5, 0.5));
   }
   default:
     break;
