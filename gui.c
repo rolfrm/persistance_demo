@@ -855,6 +855,7 @@ void ui_element_mouse_over(u64 control, double x, double y, u64 method){
   auto evt = get_method(control, method);
   if(evt != NULL)
     evt(control, x, y);
+  
   u64 index = 0;
   control_pair * child_control = NULL;
   while((child_control = get_control_pair_parent(control, &index))){

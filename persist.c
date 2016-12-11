@@ -111,7 +111,7 @@ persisted_mem_area * create_non_persisted_mem_area(){
     .name = (char *)"", .fd = 0,
     .only_32bit = false
   };
-  return IRON_CLONE(mema);
+  return iron_clone(&mema, sizeof(mema));
 }
 
 void * persist_alloc2(const char * name, size_t min_size, size_t * out_size){
@@ -154,13 +154,15 @@ void * persist_alloc(const char * name, size_t min_size){
 }
 
 void mem_area_realloc(persisted_mem_area * area, u64 size){
+  ASSERT(area != NULL);
+  if(area->size == size) return;
+  
   if(false == area->is_persisted){
-    area->ptr = realloc(area->ptr, size);
+    area->ptr = ralloc(area->ptr, size);
     area->size = size;
     return;
   }
-  ASSERT(area != NULL);
-  if(area->size == size) return;
+
   int flags = MREMAP_MAYMOVE;
   //if(area->only_32bit)
     //flags |= MAP_32BIT;

@@ -31,10 +31,14 @@ static bool indexes_unique_and_sorted(u64 * indexes, u64 cnt){
 void sorttable_finds(sorttable * table, void * keys, u64 * indexes, u64 cnt){
   ASSERT(sorttable_keys_sorted(table, keys, cnt));
   sorttable_check_sanity(table);
-  void * start = table->key_area->ptr + table->key_size;
-  void * end = table->key_area->ptr + table->key_area->size;
   memset(indexes, 0, cnt * sizeof(u64));
+  if(table->key_area->size <= table->key_size)
+    return;
+  void * start = table->key_area->ptr + table->key_size;
+  void * end = table->key_area->ptr + table->key_area->size;// - table->key_size;
+
   for(u64 i = 0; i < cnt; i++){
+    //if(end < start) break;
     u64 size = end - start;
     void * key_index = NULL;
     void * key = keys + i * table->key_size;
@@ -234,6 +238,7 @@ void sorttable_remove_indexes(sorttable * table, u64 * indexes, size_t cnt){
 void sorttable_removes(sorttable * table, void * keys, size_t cnt){
   ASSERT(sorttable_keys_sorted(table, keys, cnt));
   u64 indexes[cnt];
+  memset(indexes, 0, sizeof(indexes));
   sorttable_finds(table, keys, indexes, cnt);
   u64 j = 0;
   for(u64 i = 0; i < cnt; i++){
@@ -241,6 +246,11 @@ void sorttable_removes(sorttable * table, void * keys, size_t cnt){
     indexes[j++] = indexes[i];
   }
   sorttable_remove_indexes(table, indexes, j);
+  memset(indexes, 0, sizeof(indexes));
+  sorttable_finds(table, keys, indexes, cnt);
+  for(u64 i = 0; i < cnt; i++){
+    ASSERT(indexes[i] == 0);
+  }
 }
 
 size_t sorttable_iter(sorttable * table, void * keys, size_t keycnt, void * out_keys, u64 * indexes, size_t cnt, size_t * idx){

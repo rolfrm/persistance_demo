@@ -36,16 +36,19 @@ u32 _index_table_free_index_count(index_table * table){
   return ((u32 *) table->free_indexes->ptr)[0];
 }
 
-void _index_table_free_index_count_set(index_table * table, u32 idx){
-  ((u32 *) table->free_indexes->ptr)[0] = idx;
+void _index_table_free_index_count_set(index_table * table, u32 cnt){
+  ((u32 *) table->free_indexes->ptr)[0] = cnt;
 }
 
 u32 index_table_alloc(index_table * table){
   u32 freeindexcnt = _index_table_free_index_count(table);
-  if(freeindexcnt > 0){
-    u32 idx = ((u32 *) table->free_indexes->ptr)[freeindexcnt - 1];
+  if(freeindexcnt > 0 && false){
+  
+    u32 idx = ((u32 *) table->free_indexes->ptr)[freeindexcnt];
     _index_table_free_index_count_set(table, freeindexcnt - 1);
     ASSERT(idx != 0);
+    void * p = index_table_lookup(table, idx);
+    memset(p, 0, table->element_size);
     return idx;
   }
   while(index_table_capacity(table) <= index_table_count(table)){
@@ -66,7 +69,7 @@ void index_table_remove(index_table * table, u32 index){
   u32 cnt = _index_table_free_index_count(table);
   mem_area_realloc(table->free_indexes, table->free_indexes->size + sizeof(u32));
   ((u32 *)table->free_indexes->ptr)[cnt + 1] = 0;
-  ASSERT(memmem(table->free_indexes->ptr + sizeof(u32), table->free_indexes->size - sizeof(u32), &index, sizeof(index)) == NULL);
+  ASSERT(memmem(table->free_indexes->ptr + sizeof(u32), (cnt + 1) * sizeof(u32), &index, sizeof(index)) == NULL);
   ((u32 *)table->free_indexes->ptr)[cnt + 1] = index;
   ((u32 *) table->free_indexes->ptr)[0] += 1;
   
@@ -310,6 +313,20 @@ void measure_voxel_grid(u64 id, vec2 * size){
 
 #include <sys/mman.h>
 bool index_table_test(){
+
+  {// first test.
+    index_table * t = index_table_create(NULL, 64);
+    u32 idxes[100];
+    for(u32 j = 1; j < 4; j++){
+      for(u32 i = 0; i < j * 10; i++)
+	idxes[i] = index_table_alloc(t);
+      for(u32 i = 0; i < j * 10; i++)
+      	index_table_remove(t, idxes[i]);
+      
+    }
+    //return TEST_SUCCESS;
+  }
+  
   {
     
     board_data2_table * table = board_data2_table_create(NULL);
@@ -401,13 +418,14 @@ bool index_table_test(){
     set_camera_3d_position(voxel_board, mat4_mul(p, mat4_invert(t)));
     //iron_sleep(0.01);
     method(win_id);
+    glfwPollEvents();
   }
   return TEST_SUCCESS;
 }
 
 int main(){
-  //table2_test();
-  //test_persist_oop();
+  table2_test();
+  test_persist_oop();
   //test_walls();
   //TEST(test_elf_reader2);
   //TEST(test_elf_reader);
