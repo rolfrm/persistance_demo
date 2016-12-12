@@ -130,10 +130,14 @@ polygon_id polygon_create(graphics_context * ctx){
 }
 
 void polygon_add_vertex2f(graphics_context * ctx, polygon_id polygon, vec2 offset){
+
   u32 t1 = index_table_alloc(ctx->vertex);
   vertex_data * v = index_table_lookup(ctx->vertex, t1);
+  logd("T1: %i\n", t1);
+  logd("==== %i %i\n", v, ctx->vertex->area->ptr);
   v->position = offset;
-  
+  UNUSED(offset);
+  UNUSED(v);
   polygon_data * pd = index_table_lookup(ctx->polygon, polygon);
   if(pd->vertex == 0){
     pd->vertex = t1;
@@ -151,43 +155,27 @@ void polygon_add_vertex2f(graphics_context * ctx, polygon_id polygon, vec2 offse
 }
 
 void graphics_context_load(graphics_context * ctx){
+  memset(ctx, 0, sizeof(*ctx));
   ctx->models = index_table_create(NULL/*"simple/models"*/, sizeof(model_data));
   ctx->polygon = index_table_create(NULL/*"simple/polygon"*/, sizeof(polygon_data));
-  logd("=== %p\n", ctx->polygon->area->ptr);
+
   ctx->vertex = index_table_create(NULL/*"simple/vertex"*/, sizeof(vertex_data));
   ctx->entities = index_table_create(NULL/*"simple/entities"*/, sizeof(entity_data));
   ctx->gpu_poly = loaded_polygon_table_create(NULL);
   ctx->poly_color = polygon_color_table_create(NULL);
   ctx->active_entities = active_entities_table_create(NULL);
-  logd("=== %p\n", ctx->polygon->area->ptr);
+
 }
 
 void simple_graphics_load_test(graphics_context * ctx){
-  logd("Load test\n");
-  ctx->active_entities = active_entities_table_create(NULL);
   u32 i1 = index_table_alloc(ctx->models);
   
   model_data * m1 = index_table_lookup(ctx->models, i1);
   m1->type = KIND_POLYGON;
   {
-    logd("=== %p\n", ctx->polygon->area->ptr);
     polygon_id p1 = polygon_create(ctx);
-    logd("=== %p\n", ctx->polygon->area->ptr);
-    polygon_add_vertex2f(ctx, p1, vec2_new(1,0));
-    polygon_add_vertex2f(ctx, p1, vec2_new(0.8,0.8));
-    polygon_add_vertex2f(ctx, p1, vec2_new(0,1));
-    polygon_add_vertex2f(ctx, p1, vec2_new(0,1));
-    polygon_add_vertex2f(ctx, p1, vec2_new(0,1));
-    logd("=== 1 %p\n", ctx->polygon->area->ptr);
-    polygon_add_vertex2f(ctx, p1, vec2_new(0,1));
-    polygon_add_vertex2f(ctx, p1, vec2_new(0,1));
-    logd("=== 2 %p\n", ctx->vertex->area->ptr);
-    polygon_add_vertex2f(ctx, p1, vec2_new(0,1));
-    logd("=== 3 %p\n", ctx->polygon->area->ptr);
-    polygon_add_vertex2f(ctx, p1, vec2_new(0,1));
-    logd("=== 4 %p\n", ctx->polygon->area->ptr);
-    //polygon_add_vertex2f(ctx, p1, vec2_new(0.2,0.2));
-    //polygon_add_vertex2f(ctx, p1, vec2_new(-0.5,-0.5));
+    polygon_add_vertex2f(ctx, p1, vec2_new(0,0));
+    //polygon_add_vertex2f(ctx, p1, vec2_new(0.8,0.8));
     polygon_color_set(ctx->poly_color, p1, vec4_new(0.5, 1.0, 0.5, 1.0));
     m1->index = p1;
   }
@@ -301,7 +289,6 @@ void simple_grid_render(u64 id){
 
 void simple_grid_renderer_create(u64 id){
   graphics_context gd;
-  gd.gpu_poly = loaded_polygon_table_create(NULL);
   graphics_context_load(&gd);
   simple_graphics_load_test(&gd);
   logd("Created gd %i\n", gd.models->area->size);

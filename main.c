@@ -21,7 +21,7 @@ bool test_type_system();
 void simple_grid_renderer_create(u64 id);
 void simple_grid_initialize(u64 id);
 u32 index_table_capacity(index_table * table){
-  return table->area->size / table->element_size;
+  return table->area->size / table->element_size - 4;
 }
 
 u32 index_table_count(index_table * table){
@@ -42,7 +42,7 @@ void _index_table_free_index_count_set(index_table * table, u32 cnt){
 
 u32 index_table_alloc(index_table * table){
   u32 freeindexcnt = _index_table_free_index_count(table);
-  if(freeindexcnt > 0 && false){
+  if(freeindexcnt > 0){
   
     u32 idx = ((u32 *) table->free_indexes->ptr)[freeindexcnt];
     _index_table_free_index_count_set(table, freeindexcnt - 1);
@@ -69,13 +69,14 @@ void index_table_remove(index_table * table, u32 index){
   u32 cnt = _index_table_free_index_count(table);
   mem_area_realloc(table->free_indexes, table->free_indexes->size + sizeof(u32));
   ((u32 *)table->free_indexes->ptr)[cnt + 1] = 0;
-  ASSERT(memmem(table->free_indexes->ptr + sizeof(u32), (cnt + 1) * sizeof(u32), &index, sizeof(index)) == NULL);
+  //ASSERT(memmem(table->free_indexes->ptr + sizeof(u32), (cnt + 1) * sizeof(u32), &index, sizeof(index)) == NULL);
   ((u32 *)table->free_indexes->ptr)[cnt + 1] = index;
   ((u32 *) table->free_indexes->ptr)[0] += 1;
   
 }
 
 index_table * index_table_create(const char * name, u32 element_size){
+  ASSERT(element_size > 0);
   index_table table = {0};
   table.element_size = element_size;
   if(name != NULL){
@@ -95,9 +96,7 @@ index_table * index_table_create(const char * name, u32 element_size){
   }
 
   if(table.area->size < element_size){
-    mem_area_realloc(table.area, element_size);
-    while(table.area->size < sizeof(u32))
-      mem_area_realloc(table.area, table.area->size + element_size);
+    mem_area_realloc(table.area, element_size * 4);
     memset(table.area->ptr, 0, table.area->size);
   }
   index_table_alloc(&table);
@@ -106,12 +105,21 @@ index_table * index_table_create(const char * name, u32 element_size){
   return iron_clone(&table, sizeof(table));
 }
 
+
+void index_table_destroy(index_table ** _table){
+  index_table * table = *_table;
+  *_table = NULL;
+  mem_area_free(table->area);
+  mem_area_free(table->free_indexes);
+}
+
 void * index_table_lookup(index_table * table, u32 index){
   ASSERT(index < index_table_count(table));
   ASSERT(index > 0);
   u32 offset = (1 + sizeof(u32) / table->element_size);
   return table->area->ptr + (offset + index) * table->element_size;
 }
+
 
 u32 iterate_voxel_chunk(index_table * table, u32 start_index){
   u32 count = 0;
@@ -315,14 +323,23 @@ void measure_voxel_grid(u64 id, vec2 * size){
 bool index_table_test(){
 
   {// first test.
-    index_table * t = index_table_create(NULL, 64);
-    u32 idxes[100];
-    for(u32 j = 1; j < 4; j++){
-      for(u32 i = 0; i < j * 10; i++)
-	idxes[i] = index_table_alloc(t);
-      for(u32 i = 0; i < j * 10; i++)
-      	index_table_remove(t, idxes[i]);
-      
+    for(int k = 1; k < 5;k++){
+      index_table * t = index_table_create(NULL, 16 * k);
+      u32 idxes[200];
+      for(u32 j = 1; j < 20; j++){
+	
+	for(u32 i = 0; i < j * 10; i++)
+	  idxes[i] = index_table_alloc(t);
+	for(u32 i = 0; i < j * 10; i++)
+	  ((u32 *) index_table_lookup(t, idxes[i]))[0] = 0xFFDDCCAA * k;
+	for(u32 i = 0; i < j * 10; i++)
+	  ASSERT(((u32 *) index_table_lookup(t, idxes[i]))[0] == 0xFFDDCCAA * k);
+	ASSERT(_index_table_free_index_count(t) == 0);
+	for(u32 i = 0; i < j * 10; i++)
+	  index_table_remove(t, idxes[i]);
+	
+      }
+      index_table_destroy(&t);
     }
     //return TEST_SUCCESS;
   }
@@ -410,6 +427,13 @@ bool index_table_test(){
   add_control(win_id, voxel_board);
   auto method = get_method(win_id, render_control_method);
   double i = 0;
+  {
+    void * ptrs[10];
+    for(u32 j = 0; j < array_count(ptrs); j++)
+      ptrs[j] = alloc((j + 1) * 100);
+    for(u32 j = 0; j < array_count(ptrs); j++)
+      dealloc(ptrs[j]);
+  }
   while(true){
     mat4 p = mat4_perspective(0.8, 1, 0.1, 10);
     i += 0.03;
@@ -424,8 +448,8 @@ bool index_table_test(){
 }
 
 int main(){
-  table2_test();
-  test_persist_oop();
+  //table2_test();
+  //test_persist_oop();
   //test_walls();
   //TEST(test_elf_reader2);
   //TEST(test_elf_reader);
