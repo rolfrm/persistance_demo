@@ -16,7 +16,7 @@ CREATE_TABLE2(body, u64, body);
 
 CREATE_TABLE2(target, u64, vec2);
 CREATE_TABLE(is_paused, u64, bool);
-CREATE_TABLE(should_exit, u64, bool);
+CREATE_TABLE2(should_exit, u64, bool);
 CREATE_TABLE(is_instant, u64, bool);
 CREATE_TABLE(wielded_item, u64, u64);
 CREATE_TABLE(item_command_item, u64, u64);

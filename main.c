@@ -12,6 +12,8 @@
 #include "gui.h"
 #include "gui_test.h"
 #include "index_table.h"
+#include "simple_graphics.h"
+#include "game_board.h"
 void table2_test();
 void test_walls();
 void test_persist_oop();
@@ -20,6 +22,7 @@ bool test_elf_reader();
 bool test_type_system();
 void simple_grid_renderer_create(u64 id);
 void simple_grid_initialize(u64 id);
+bool copy_nth(const char * _str, u32 index, char * buffer, u32 buffer_size);
 u32 index_table_capacity(index_table * table){
   return table->area->size / table->element_size - 4;
 }
@@ -39,8 +42,17 @@ u32 _index_table_free_index_count(index_table * table){
 void _index_table_free_index_count_set(index_table * table, u32 cnt){
   ((u32 *) table->free_indexes->ptr)[0] = cnt;
 }
+void * index_table_all(index_table * table, u64 * cnt){
+  // return count -1 and a pointer from the placeholder element.
+  *cnt = index_table_count(table) - 1;
+  return table->area->ptr + table->element_size * 5;
+}
+void index_table_clear(index_table * table){
+  index_table_count_set(table, 1);
+  _index_table_free_index_count_set(table, 0);
+}
 
-u32 index_table_alloc(index_table * table){
+u32 _index_table_alloc(index_table * table){
   u32 freeindexcnt = _index_table_free_index_count(table);
   if(freeindexcnt > 0){
   
@@ -62,6 +74,13 @@ u32 index_table_alloc(index_table * table){
   index_table_count_set(table,idx + 1);
   return idx;
 }
+
+u32 index_table_alloc(index_table * table){
+  auto index = _index_table_alloc(table);
+  ASSERT(index > 0);
+  return index;
+}
+
 
 void index_table_remove(index_table * table, u32 index){
   ASSERT(index < index_table_count(table));
@@ -98,8 +117,8 @@ index_table * index_table_create(const char * name, u32 element_size){
   if(table.area->size < element_size){
     mem_area_realloc(table.area, element_size * 4);
     memset(table.area->ptr, 0, table.area->size);
+    _index_table_alloc(&table);
   }
-  index_table_alloc(&table);
   ASSERT((table.area->size % table.element_size) == 0);
   ASSERT(index_table_count(&table) > 0);
   return iron_clone(&table, sizeof(table));
@@ -116,8 +135,7 @@ void index_table_destroy(index_table ** _table){
 void * index_table_lookup(index_table * table, u32 index){
   ASSERT(index < index_table_count(table));
   ASSERT(index > 0);
-  u32 offset = (1 + sizeof(u32) / table->element_size);
-  return table->area->ptr + (offset + index) * table->element_size;
+  return table->area->ptr + (4 + index) * table->element_size;
 }
 
 
@@ -321,7 +339,18 @@ void measure_voxel_grid(u64 id, vec2 * size){
 
 #include <sys/mman.h>
 bool index_table_test(){
+  { // copy nth
+    //bool copy_nth(string str, u32 index, char * buffer, u32 buffer_size)
+    const char * teststr = "  hello   world   2";
+    const char * cmp[] = {"hello", "world", "2"};
+    char buffer[10];
+    for(int i = 0; i < 3; i++){
+      copy_nth(teststr, i, buffer, array_count(buffer));
+      ASSERT(strcmp(buffer, cmp[i]) == 0);
+    }
 
+  }
+  
   {// first test.
     for(int k = 1; k < 5;k++){
       index_table * t = index_table_create(NULL, 16 * k);
@@ -418,10 +447,11 @@ bool index_table_test(){
   mat4_print(get_camera_3d_position(voxel_board));
   //define_method(voxel_board, render_control_method, (method)render_voxel_grid);
   //define_method(voxel_board, measure_control_method, (method)measure_voxel_grid);
-
-  simple_grid_initialize(voxel_board);
-  simple_grid_renderer_create(voxel_board);
   u64 win_id = intern_string("voxel window");
+  //simple_grid_initialize(voxel_board);
+  simple_graphics_editor_load(voxel_board, win_id);
+  simple_grid_renderer_create(voxel_board);
+
   set_color(win_id, vec3_new(1, 1, 1));
   make_window(win_id); 
   add_control(win_id, voxel_board);
@@ -434,27 +464,29 @@ bool index_table_test(){
     for(u32 j = 0; j < array_count(ptrs); j++)
       dealloc(ptrs[j]);
   }
-  while(true){
+  while(!get_should_exit(voxel_board)){
     mat4 p = mat4_perspective(0.8, 1, 0.1, 10);
     i += 0.03;
     mat4 t = mat4_rotate(mat4_translate(0.5,0.5,0),1,0.23,0.1,i);//mat4_rotate(mat4_translate(-0.0,-1.5,-4 + 0 * sin(i)),0,1,1, 0.0 * i);
     t = mat4_mul(t, mat4_translate(0,0,4));
     set_camera_3d_position(voxel_board, mat4_mul(p, mat4_invert(t)));
     //iron_sleep(0.01);
-    method(win_id);
     glfwPollEvents();
+    method(win_id);
   }
+  unset_should_exit(voxel_board);
   return TEST_SUCCESS;
 }
 
 int main(){
+  
   //table2_test();
   //test_persist_oop();
   //test_walls();
   //TEST(test_elf_reader2);
   //TEST(test_elf_reader);
   
-
+  
   
   if (!glfwInit())
     return -1;

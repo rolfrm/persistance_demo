@@ -219,6 +219,9 @@ CREATE_TABLE2(color, u64, vec3);
 CREATE_TABLE(vertical_alignment, u64, vertical_alignment);
 CREATE_TABLE(horizontal_alignment, u64, horizontal_alignment);
 
+
+CREATE_TABLE2(mouse_hidden, u64, bool);
+
 __thread vec2 shared_offset, shared_size, window_size;
 vec2 measure_sub(u64 item);
 

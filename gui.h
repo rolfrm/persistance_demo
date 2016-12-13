@@ -68,6 +68,7 @@ CREATE_STRING_TABLE_DECL(text, u64);
 CREATE_STRING_TABLE_DECL(name, u64);
 CREATE_MULTI_TABLE_DECL(inventory, u64, u64);
 CREATE_TABLE_DECL2(window_state, u64, window);
+CREATE_TABLE_DECL2(mouse_hidden, u64, bool);
 u64 get_unique_number();
 u64 intern_string(const char * name);
 control_pair * add_control(u64 id, u64 other_id);

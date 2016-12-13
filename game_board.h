@@ -22,7 +22,7 @@ CREATE_MULTI_TABLE_DECL(inventory, u64, u64);
 
 CREATE_TABLE_DECL2(target, u64, vec2);
 CREATE_TABLE_DECL(is_paused, u64, bool);
-CREATE_TABLE_DECL(should_exit, u64, bool);
+CREATE_TABLE_DECL2(should_exit, u64, bool);
 CREATE_TABLE_DECL(is_instant, u64, bool);
 CREATE_TABLE_DECL(wielded_item, u64, u64);
 CREATE_TABLE_DECL(item_command_item, u64, u64);
