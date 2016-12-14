@@ -216,3 +216,14 @@ void create_console(u64 id){
   define_subclass(id, console_class);
   set_console_history_cnt(id, 50);
 }
+
+bool console_get_history(u64 id, u64 index, char * buffer, u64 buffer_size){
+  u64 histcnt = get_console_history_cnt(id);
+  if(histcnt <= index)
+    return false;
+  u64 history[histcnt];
+  u64 history_cnt = get_console_history(id, history, array_count(history));
+  get_strings(history[history_cnt - index - 1], buffer, buffer_size);
+  return true;
+  
+}

@@ -256,7 +256,10 @@ void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 came
       vec2 * p = &positions[0];
       while(index != 0){
 	polygon_data * pd = index_table_lookup(ctx.polygon, index);
+	if(pd->vertex == 0)
+	  break;
 	index = pd->next_index;
+	
 	vertex_data * vd = index_table_lookup(ctx.vertex, pd->vertex);
 	*p = vd->position;
 	p += 1;
@@ -367,25 +370,6 @@ void simple_grid_mouse_over_func(u64 grid_id, double x, double y, u64 method){
   }
 }
 
-void simple_grid_mouse_down_func(u64 grid_id, double x, double y, u64 method){
-  UNUSED(method);
-  if(mouse_button_action != 1) return;
-  graphics_context ctx = get_graphics_context(grid_id);
-  vec2 p = graphics_context_pixel_to_screen(ctx, vec2_new(x, y));
-  vec2_print(p);logd("\n");
-  u32 first_entity = 0;
-  bool unused = false;
-  u64 idx = 0;
-  ASSERT(active_entities_iter_all(ctx.active_entities, &first_entity, &unused, 1, &idx) == 1);
-  model_data * m1 = index_table_lookup(ctx.models, first_entity);
-  polygon_add_vertex2f(&ctx, m1->index, p);
-  loaded_polygon_data loaded;
-  if(loaded_polygon_try_get(ctx.gpu_poly, m1->index, &loaded)){
-    u32 idx = index_table_alloc(ctx.polygons_to_delete);
-    u32 * ptr = index_table_lookup(ctx.polygons_to_delete, idx);
-    ptr[0] = m1->index;
-  }
-}
 
 
 void simple_grid_initialize(u64 id){
@@ -405,8 +389,25 @@ typedef struct{
   u32 selected_index;
 }editor_context;
 
+
 CREATE_TABLE_DECL2(simple_graphics_editor_context, u64, editor_context);
 CREATE_TABLE_NP(simple_graphics_editor_context, u64, editor_context);
+
+void simple_grid_mouse_down_func(u64 grid_id, double x, double y, u64 method){
+  UNUSED(method);
+  if(mouse_button_action != 1) return;
+  graphics_context ctx = get_graphics_context(grid_id);
+  editor_context editor = get_simple_graphics_editor_context(grid_id);
+  vec2 p = graphics_context_pixel_to_screen(ctx, vec2_new(x, y));
+  vec2_print(p);logd("\n");
+  polygon_add_vertex2f(&ctx, editor.selected_index, p);
+  loaded_polygon_data loaded;
+  if(loaded_polygon_try_get(ctx.gpu_poly, editor.selected_index, &loaded)){
+    u32 idx = index_table_alloc(ctx.polygons_to_delete);
+    u32 * ptr = index_table_lookup(ctx.polygons_to_delete, idx);
+    ptr[0] = editor.selected_index;
+  }
+}
 
 
 void simple_graphics_editor_render(u64 id){
@@ -546,6 +547,8 @@ static void command_entered(u64 id, char * command){
 	u32 i1 = index_table_alloc(ctx.entities);
 	editor.selection_kind = SELECTED_ENTITY;
 	editor.selected_index = i1;
+	active_entities_set(ctx.active_entities, i1, true);
+
 	logd("Created entity: %i\n", i1);
       }else if(snd("model") && editor.selection_kind == SELECTED_ENTITY){
 	u32 i1 = index_table_alloc(ctx.models);
@@ -556,15 +559,48 @@ static void command_entered(u64 id, char * command){
       }else if(snd("polygon") && editor.selection_kind == SELECTED_MODEL){
 	logd("creating polygon..\n");
 	polygon_id p1 = polygon_create(&ctx);
+	model_data * entity = index_table_lookup(ctx.models, editor.selected_index);
+	
 	editor.selection_kind = SELECTED_POLYGON;
 	editor.selected_index = p1;
-	model_data * entity = index_table_lookup(ctx.models, editor.selected_index);
 	entity->type = KIND_POLYGON;
 	entity->index = p1;
+      }else if(snd("vertex") && editor.selection_kind == SELECTED_POLYGON){
+	vec2 p = vec2_zero;
+	char buf[20];
+	for(u32 i = 0 ; i < array_count(p.data); i++){
+	  if(false == copy_nth(command, 2 + i, buf, array_count(buf)))
+	    goto skip;
+	  sscanf(buf,"%f", p.data + i);
+	}
+	logd("@ ");vec2_print(p);logd("\n");
+	polygon_add_vertex2f(&ctx, editor.selected_index, p);
+	u32 idx = index_table_alloc(ctx.polygons_to_delete);
+	u32 * ptr = index_table_lookup(ctx.polygons_to_delete, idx);
+	ptr[0] = editor.selected_index;
+
+      skip:;
+	
       }
+
       set_simple_graphics_editor_context(control, editor);
       logd("%i %i\n", editor.selection_kind, editor.selected_index);
-    }else{
+    }else if(first("set")){
+	copy_nth(command, 1, snd_part, array_count(snd_part));
+	if(snd("color") && editor.selection_kind == SELECTED_POLYGON) {
+	  vec4 p = vec4_zero;
+	  char buf[20];
+	  for(u32 i = 0 ; i < array_count(p.data); i++){
+	    if(false == copy_nth(command, 2 + i, buf, array_count(buf)))
+	      goto skip;
+	    sscanf(buf,"%f", p.data + i);
+	  }
+	  logd("Set color: ");vec4_print(p);logd("\n");
+	  polygon_color_set(ctx.poly_color, editor.selected_index, p);
+	}
+      }
+
+    else{
       logd("Unkown command!\n");
     }
   }
@@ -587,7 +623,7 @@ void simple_graphics_editor_load(u64 id, u64 win_id){
   define_method(id, mouse_over_method, (method)simple_grid_mouse_over_func);
   define_method(id, mouse_down_method, (method) simple_grid_mouse_down_func);
   
-  u64 console = intern_string("console");
+  u64 console = get_unique_number();
   set_simple_graphics_control(console, id);
   set_focused_element(win_id, console);
   set_console_height(console, 300);
@@ -597,5 +633,37 @@ void simple_graphics_editor_load(u64 id, u64 win_id){
   set_vertical_alignment(console, VALIGN_BOTTOM);
   set_console_history_cnt(console, 100);
   define_method(console, console_command_entered_method, (method)command_entered);
-  
 }
+
+
+bool simple_graphics_editor_test(){
+  u64 item = get_unique_number();
+  u64 win_id = intern_string("board");
+  simple_grid_renderer_create(item);
+  simple_graphics_editor_load(item, win_id);
+  u64 console_id = 0;
+  {
+    u64 keys[100];
+    u64 values[100];
+    u64 idx = 0;
+    iter_all_simple_graphics_control(keys, values, array_count(keys), &idx);
+    for(u64 i = 0; i < array_count(keys); i++){
+      if(values[i] == item){
+	console_id = keys[i];
+	break;
+      }
+    }
+  }
+  TEST_ASSERT(console_id != 0);
+				     
+  command_entered(console_id, (char *)"create entity");
+  command_entered(console_id, (char *)"create model");
+  command_entered(console_id, (char *)"create polygon");
+  command_entered(console_id, (char *)"create vertex 0 0");
+  command_entered(console_id, (char *)"create vertex 0 1");
+  command_entered(console_id, (char *)"create vertex 1 0");
+  command_entered(console_id, (char *)"create vertex 1 1");
+  return TEST_SUCCESS;
+}
+
+

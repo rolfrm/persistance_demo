@@ -385,6 +385,9 @@ bool index_table_test(){
 
     TEST_ASSERT(bd2.index == 5);
   }
+
+
+  
   //return TEST_SUCCESS;
   // the index table can be used for voxels.
   index_table * tab = index_table_create("voxeltable", sizeof(u32) * 8);
@@ -441,6 +444,7 @@ bool index_table_test(){
   u32 count = iterate_voxel_chunk(tab, x1);
   logd("Count: %i\n", count);
   init_gui();
+  TEST(simple_graphics_editor_test);
   u64 voxel_board = intern_string("voxel board");
   set_board_data2(voxel_board, vboard);
 
