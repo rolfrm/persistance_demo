@@ -400,12 +400,35 @@ void simple_grid_mouse_down_func(u64 grid_id, double x, double y, u64 method){
   editor_context editor = get_simple_graphics_editor_context(grid_id);
   vec2 p = graphics_context_pixel_to_screen(ctx, vec2_new(x, y));
   vec2_print(p);logd("\n");
-  polygon_add_vertex2f(&ctx, editor.selected_index, p);
-  loaded_polygon_data loaded;
-  if(loaded_polygon_try_get(ctx.gpu_poly, editor.selected_index, &loaded)){
-    u32 idx = index_table_alloc(ctx.polygons_to_delete);
-    u32 * ptr = index_table_lookup(ctx.polygons_to_delete, idx);
-    ptr[0] = editor.selected_index;
+  if(editor.selection_kind == SELECTED_VERTEX){
+    vertex_data * vd = index_table_lookup(ctx.vertex, editor.selected_index);
+    vd->position = p;
+    u64 polycnt = 0;
+    u32 polygon = 0;
+    polygon_data * pd = index_table_all(ctx.polygon, &polycnt);
+    for(u64 i = 0; i < polycnt; i++){
+      if(pd[i].vertex == editor.selected_index){
+	polygon = i + 1;
+	break;
+      }
+    }
+    logd(" FOUND POLYGON %i\n", polygon);
+    
+    loaded_polygon_data loaded;
+    if(loaded_polygon_try_get(ctx.gpu_poly, polygon, &loaded)){
+      u32 idx = index_table_alloc(ctx.polygons_to_delete);
+      u32 * ptr = index_table_lookup(ctx.polygons_to_delete, idx);
+      ptr[0] = polygon;
+    }
+    
+  }else if(editor.selection_kind == SELECTED_POLYGON){
+    polygon_add_vertex2f(&ctx, editor.selected_index, p);
+    loaded_polygon_data loaded;
+    if(loaded_polygon_try_get(ctx.gpu_poly, editor.selected_index, &loaded)){
+      u32 idx = index_table_alloc(ctx.polygons_to_delete);
+      u32 * ptr = index_table_lookup(ctx.polygons_to_delete, idx);
+      ptr[0] = editor.selected_index;
+    }
   }
 }
 
@@ -621,7 +644,6 @@ static void command_entered(u64 id, char * command){
 	  if(index_table_contains(ctx.entities, i1)){
 	    editor.selection_kind = SELECTED_ENTITY;
 	    editor.selected_index = i1;
-	    logd("Selected entity\n");
 	  }
 	  
 	}else if(snd("model")){
@@ -633,14 +655,12 @@ static void command_entered(u64 id, char * command){
 	  if(index_table_contains(ctx.polygon, i1)){
 	    editor.selection_kind = SELECTED_POLYGON;
 	    editor.selected_index = i1;
-	    logd("Selected polygon!");
 	  }
 	  
 	}else if(snd("vertex")){
 	  if(index_table_contains(ctx.vertex, i1)){
 	    editor.selection_kind = SELECTED_VERTEX;
 	    editor.selected_index = i1;
-	    logd("Selected vertex!");
 	  }
 	}
       }
@@ -652,14 +672,6 @@ static void command_entered(u64 id, char * command){
       logd("Unkown command!\n");
     }
   }
-  /*u64 editor = get_parent(id);
-  if(starts_with(command, "create ")){
-    char buffer[100];
-    if(copy_nth(command, 1, buffer, array_count(buffer))){
-
-
-    }
-    }*/
   logd("COMMAND ENTERED %i %s\n", id, command);
 
 }
@@ -701,7 +713,16 @@ void simple_graphics_editor_load(u64 id, u64 win_id){
     command_entered(console, (char *)"create vertex -0.3 0");
     command_entered(console, (char *)"create vertex -0.3 -0.3");
     command_entered(console, (char *)"set color 0.5 0.8 0.3 1.0");
-    command_entered(console, (char *)"select entity 2");
+
+    command_entered(console, (char *)"create entity");
+    command_entered(console, (char *)"create model");
+    command_entered(console, (char *)"create polygon");
+    command_entered(console, (char *)"create vertex 0 0.6");
+    command_entered(console, (char *)"create vertex 0 0.3");
+    command_entered(console, (char *)"create vertex -0.3 0.6");
+    command_entered(console, (char *)"create vertex -0.3 0.3");
+    command_entered(console, (char *)"set color 0.7 0.7 0.3 1.0");
+    
   }
   
 }
