@@ -536,6 +536,16 @@ static void command_entered(u64 id, char * command){
 	    polygon_data * pd = index_table_lookup(ctx.polygon, polygon_id);
 	    logd("P: %p\n", pd);
 	    // fix data structure
+	    u32 polyid = polygon_id;
+	    while(polyid != 0){
+
+	      polygon_data * pd = index_table_lookup(ctx.polygon, polyid);
+	      if(pd->vertex != 0){
+		vertex_data * vd = index_table_lookup(ctx.vertex, pd->vertex);
+		logd("Vertex %i: ", pd->vertex);vec2_print(vd->position);logd("\n");
+	      }
+	      polyid = pd->next_index;
+	    }
 	    
 	  }
 	}
@@ -599,6 +609,44 @@ static void command_entered(u64 id, char * command){
 	  polygon_color_set(ctx.poly_color, editor.selected_index, p);
 	}
       }
+    else if(first("select")){
+      char id_buffer[100] = {0};
+      if(copy_nth(command, 1, snd_part, array_count(snd_part))
+	 && copy_nth(command, 2, id_buffer, array_count(id_buffer))){
+	u32 i1 = 0;
+	sscanf(id_buffer, "%i", &i1);
+	logd("SELECT: %s %s id_buffer %i\n", snd_part, id_buffer, id);
+	if(snd("entity")){
+	  logd("Entity?\n");
+	  if(index_table_contains(ctx.entities, i1)){
+	    editor.selection_kind = SELECTED_ENTITY;
+	    editor.selected_index = i1;
+	    logd("Selected entity\n");
+	  }
+	  
+	}else if(snd("model")){
+	  if(index_table_contains(ctx.models, i1)){
+	    editor.selection_kind = SELECTED_MODEL;
+	    editor.selected_index = i1;
+	  }
+	}else if(snd("polygon")){
+	  if(index_table_contains(ctx.polygon, i1)){
+	    editor.selection_kind = SELECTED_POLYGON;
+	    editor.selected_index = i1;
+	    logd("Selected polygon!");
+	  }
+	  
+	}else if(snd("vertex")){
+	  if(index_table_contains(ctx.vertex, i1)){
+	    editor.selection_kind = SELECTED_VERTEX;
+	    editor.selected_index = i1;
+	    logd("Selected vertex!");
+	  }
+	}
+      }
+      set_simple_graphics_editor_context(control, editor);
+	
+    }
 
     else{
       logd("Unkown command!\n");
@@ -633,6 +681,29 @@ void simple_graphics_editor_load(u64 id, u64 win_id){
   set_vertical_alignment(console, VALIGN_BOTTOM);
   set_console_history_cnt(console, 100);
   define_method(console, console_command_entered_method, (method)command_entered);
+
+  bool test = true;
+  if(test){
+    command_entered(console, (char *)"create entity");
+    command_entered(console, (char *)"create model");
+    command_entered(console, (char *)"create polygon");
+    command_entered(console, (char *)"create vertex 0 0");
+    command_entered(console, (char *)"create vertex 0 0.3");
+    command_entered(console, (char *)"create vertex 0.3 0");
+    command_entered(console, (char *)"create vertex 0.3 0.3");
+    command_entered(console, (char *)"set color 0.3 0.3 0.9 1.0");
+    
+    command_entered(console, (char *)"create entity");
+    command_entered(console, (char *)"create model");
+    command_entered(console, (char *)"create polygon");
+    command_entered(console, (char *)"create vertex 0 0");
+    command_entered(console, (char *)"create vertex 0 -0.3");
+    command_entered(console, (char *)"create vertex -0.3 0");
+    command_entered(console, (char *)"create vertex -0.3 -0.3");
+    command_entered(console, (char *)"set color 0.5 0.8 0.3 1.0");
+    command_entered(console, (char *)"select entity 2");
+  }
+  
 }
 
 

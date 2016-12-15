@@ -55,7 +55,6 @@ void index_table_clear(index_table * table){
 u32 _index_table_alloc(index_table * table){
   u32 freeindexcnt = _index_table_free_index_count(table);
   if(freeindexcnt > 0){
-  
     u32 idx = ((u32 *) table->free_indexes->ptr)[freeindexcnt];
     _index_table_free_index_count_set(table, freeindexcnt - 1);
     ASSERT(idx != 0);
@@ -63,6 +62,7 @@ u32 _index_table_alloc(index_table * table){
     memset(p, 0, table->element_size);
     return idx;
   }
+  
   while(index_table_capacity(table) <= index_table_count(table)){
     u32 prevsize = table->area->size;
     ASSERT((prevsize % table->element_size) == 0);
@@ -136,6 +136,20 @@ void * index_table_lookup(index_table * table, u32 index){
   ASSERT(index < index_table_count(table));
   ASSERT(index > 0);
   return table->area->ptr + (4 + index) * table->element_size;
+}
+
+bool index_table_contains(index_table * table, u32 index){
+  if(index == 0)
+    return false;
+  if (index >= index_table_count(table))
+    return false;
+  u32 freecnt = _index_table_free_index_count(table);
+  u32 * start = table->free_indexes->ptr + sizeof(u32);
+  for(u32 i = 0; i < freecnt; i++){
+    if(start[i] == index)
+      return false;
+  }
+  return true;
 }
 
 
@@ -453,8 +467,8 @@ bool index_table_test(){
   //define_method(voxel_board, measure_control_method, (method)measure_voxel_grid);
   u64 win_id = intern_string("voxel window");
   //simple_grid_initialize(voxel_board);
-  simple_graphics_editor_load(voxel_board, win_id);
   simple_grid_renderer_create(voxel_board);
+  simple_graphics_editor_load(voxel_board, win_id);
 
   set_color(win_id, vec3_new(1, 1, 1));
   make_window(win_id); 
