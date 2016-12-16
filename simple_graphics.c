@@ -29,9 +29,7 @@ typedef struct{
 }model_data;
 
 typedef struct{
-  u32 next_index;
-  u32 vertex;
-
+  index_table_sequence vertexes;
 }polygon_data;
 
 typedef struct{
@@ -53,18 +51,13 @@ void print_model_data(u32 index, index_table * models, index_table * polygon, in
       {
 	logd("POLYGON:\n");
 	polygon_data * pd = index_table_lookup(polygon, index);
-	while(index != 0){
-	  if(pd->vertex != 0){
-	    vertex_data * vd = index_table_lookup(vertex, pd->vertex);
-	    logd("  Vertex: %p ", vd->color);
-	    vec2_print(vd->position);
-	    logd("\n");
-	  }
+	vertex_data * vd = index_table_lookup_sequence(vertex, pd->vertexes);
+	logd("  Vertex: %p ", vd->color);
+	vec2_print(vd->position);
+	logd("\n");
 	  
-	  index = pd->next_index;
-	  if(index != 0)
-	    pd = index_table_lookup(polygon, index);
-	}
+	  
+	
       }
 	
     }
@@ -147,25 +140,12 @@ polygon_id polygon_create(graphics_context * ctx){
 
 void polygon_add_vertex2f(graphics_context * ctx, polygon_id polygon, vec2 offset){
 
-  u32 t1 = index_table_alloc(ctx->vertex);
-  vertex_data * v = index_table_lookup(ctx->vertex, t1);
-  v->position = offset;
-  UNUSED(offset);
-  UNUSED(v);
   polygon_data * pd = index_table_lookup(ctx->polygon, polygon);
-  if(pd->vertex == 0){
-    pd->vertex = t1;
-    return;
-  }
-  while(pd->next_index != 0){
-    polygon = pd->next_index;
-    pd = index_table_lookup(ctx->polygon, polygon);
-  }
+  u32 pcnt = pd->vertexes.count;
+  index_table_resize_sequence(ctx->vertex, &(pd->vertexes), pcnt + 1);
   
-  polygon_id p1 = polygon_create(ctx);
-  pd->next_index = p1;
-  pd = index_table_lookup(ctx->polygon, p1);
-  pd->vertex = t1;
+  vertex_data * v = index_table_lookup_sequence(ctx->vertex, pd->vertexes);
+  v[pcnt].position = offset;
 }
 
 
@@ -245,30 +225,20 @@ vec2 graphics_context_pixel_to_screen(const graphics_context ctx, vec2 pixel_coo
 void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 camera){
   loaded_polygon_data loaded;
   if(false == loaded_polygon_try_get(ctx.gpu_poly, polygon_id, &loaded)) {
-
-    u32 index = polygon_id;
-    u32 count = 0;
-    for(u32 index = polygon_id; index != 0; index = ((polygon_data *)index_table_lookup(ctx.polygon, index))->next_index)
-      count += 1;
-    
-    
+    polygon_data * pd = index_table_lookup(ctx.polygon, polygon_id);
+    u32 count = pd->vertexes.count;
     vec2 positions[count];
-      vec2 * p = &positions[0];
-      while(index != 0){
-	polygon_data * pd = index_table_lookup(ctx.polygon, index);
-	if(pd->vertex == 0)
-	  break;
-	index = pd->next_index;
-	
-	vertex_data * vd = index_table_lookup(ctx.vertex, pd->vertex);
-	*p = vd->position;
-	p += 1;
-      }
-      ASSERT(count > 0);
-      loaded.gl_ref = simple_grid_polygon_load(positions, count);
-      ASSERT(loaded.gl_ref > 0);
-      loaded.count = count;
-      loaded_polygon_set(ctx.gpu_poly, polygon_id, loaded);
+    
+
+    vertex_data * vd = index_table_lookup_sequence(ctx.vertex, pd->vertexes);
+    for(u32 i = 0; i < count; i++)
+      positions[i] = vd[i].position;
+    
+    ASSERT(count > 0);
+    loaded.gl_ref = simple_grid_polygon_load(positions, count);
+    ASSERT(loaded.gl_ref > 0);
+    loaded.count = count;
+    loaded_polygon_set(ctx.gpu_poly, polygon_id, loaded);
   }
 
   glBindBuffer(GL_ARRAY_BUFFER, loaded.gl_ref);  
@@ -399,7 +369,6 @@ void simple_grid_mouse_down_func(u64 grid_id, double x, double y, u64 method){
   graphics_context ctx = get_graphics_context(grid_id);
   editor_context editor = get_simple_graphics_editor_context(grid_id);
   vec2 p = graphics_context_pixel_to_screen(ctx, vec2_new(x, y));
-  vec2_print(p);logd("\n");
   if(editor.selection_kind == SELECTED_VERTEX){
     vertex_data * vd = index_table_lookup(ctx.vertex, editor.selected_index);
     vd->position = p;
@@ -407,7 +376,9 @@ void simple_grid_mouse_down_func(u64 grid_id, double x, double y, u64 method){
     u32 polygon = 0;
     polygon_data * pd = index_table_all(ctx.polygon, &polycnt);
     for(u64 i = 0; i < polycnt; i++){
-      if(pd[i].vertex == editor.selected_index){
+      u32 offset = pd[i].vertexes.index;
+      u32 count = pd[i].vertexes.count;
+      if(offset >= editor.selected_index && editor.selected_index < offset + count){
 	polygon = i + 1;
 	break;
       }
@@ -559,17 +530,10 @@ static void command_entered(u64 id, char * command){
 	    polygon_data * pd = index_table_lookup(ctx.polygon, polygon_id);
 	    logd("P: %p\n", pd);
 	    // fix data structure
-	    u32 polyid = polygon_id;
-	    while(polyid != 0){
-
-	      polygon_data * pd = index_table_lookup(ctx.polygon, polyid);
-	      if(pd->vertex != 0){
-		vertex_data * vd = index_table_lookup(ctx.vertex, pd->vertex);
-		logd("Vertex %i: ", pd->vertex);vec2_print(vd->position);logd("\n");
-	      }
-	      polyid = pd->next_index;
+	    for(u32 i = 0; i < pd->vertexes.count; i++){
+	      vertex_data * vd = index_table_lookup(ctx.vertex, pd->vertexes.index + i);
+	      logd("Vertex %i: ", pd->vertexes.index + i);vec2_print(vd->position);logd("\n");
 	    }
-	    
 	  }
 	}
       }
@@ -666,6 +630,35 @@ static void command_entered(u64 id, char * command){
       }
       set_simple_graphics_editor_context(control, editor);
 	
+    }else if(first("remove")){
+      char id_buffer[100] = {0};
+      if(copy_nth(command, 1, snd_part, array_count(snd_part))){
+	u32 i1 = 0;
+	if(copy_nth(command, 2, id_buffer, array_count(id_buffer))){
+	  sscanf(id_buffer, "%i", &i1);
+	}else{
+	  i1 = editor.selected_index;
+	}
+	index_table * table = NULL;
+	logd("Remove: %s, %i\n", snd_part, i1);
+	if(snd("entity")){
+	  table = ctx.entities;
+	  
+	}else if(snd("model")){
+	  table = ctx.models;
+	}else if(snd("polygon")){
+	  table = ctx.polygon;
+	}else if(snd("vertex")){
+	  table = ctx.vertex;
+	}
+	if(table != NULL){
+	  if(index_table_contains(table, i1))
+	    index_table_remove(table, i1);
+	}
+	
+      }
+      set_simple_graphics_editor_context(control, editor);
+
     }
 
     else{
@@ -699,26 +692,26 @@ void simple_graphics_editor_load(u64 id, u64 win_id){
     command_entered(console, (char *)"create entity");
     command_entered(console, (char *)"create model");
     command_entered(console, (char *)"create polygon");
-    command_entered(console, (char *)"create vertex 0 0");
-    command_entered(console, (char *)"create vertex 0 0.3");
-    command_entered(console, (char *)"create vertex 0.3 0");
+    command_entered(console, (char *)"create vertex 0.1 0.1");
+    command_entered(console, (char *)"create vertex 0.1 0.3");
+    command_entered(console, (char *)"create vertex 0.3 0.1");
     command_entered(console, (char *)"create vertex 0.3 0.3");
     command_entered(console, (char *)"set color 0.3 0.3 0.9 1.0");
     
     command_entered(console, (char *)"create entity");
     command_entered(console, (char *)"create model");
     command_entered(console, (char *)"create polygon");
-    command_entered(console, (char *)"create vertex 0 0");
-    command_entered(console, (char *)"create vertex 0 -0.3");
-    command_entered(console, (char *)"create vertex -0.3 0");
+    command_entered(console, (char *)"create vertex 0.1 0.1");
+    command_entered(console, (char *)"create vertex 0.1 -0.3");
+    command_entered(console, (char *)"create vertex -0.3 0.1");
     command_entered(console, (char *)"create vertex -0.3 -0.3");
     command_entered(console, (char *)"set color 0.5 0.8 0.3 1.0");
 
     command_entered(console, (char *)"create entity");
     command_entered(console, (char *)"create model");
     command_entered(console, (char *)"create polygon");
-    command_entered(console, (char *)"create vertex 0 0.6");
-    command_entered(console, (char *)"create vertex 0 0.3");
+    command_entered(console, (char *)"create vertex 0.1 0.6");
+    command_entered(console, (char *)"create vertex 0.1 0.3");
     command_entered(console, (char *)"create vertex -0.3 0.6");
     command_entered(console, (char *)"create vertex -0.3 0.3");
     command_entered(console, (char *)"set color 0.7 0.7 0.3 1.0");
@@ -751,9 +744,9 @@ bool simple_graphics_editor_test(){
   command_entered(console_id, (char *)"create entity");
   command_entered(console_id, (char *)"create model");
   command_entered(console_id, (char *)"create polygon");
-  command_entered(console_id, (char *)"create vertex 0 0");
-  command_entered(console_id, (char *)"create vertex 0 1");
-  command_entered(console_id, (char *)"create vertex 1 0");
+  command_entered(console_id, (char *)"create vertex 0.1 0.1");
+  command_entered(console_id, (char *)"create vertex 0.1 1");
+  command_entered(console_id, (char *)"create vertex 1 0.1");
   command_entered(console_id, (char *)"create vertex 1 1");
   return TEST_SUCCESS;
 }

@@ -91,8 +91,79 @@ void index_table_remove(index_table * table, u32 index){
   //ASSERT(memmem(table->free_indexes->ptr + sizeof(u32), (cnt + 1) * sizeof(u32), &index, sizeof(index)) == NULL);
   ((u32 *)table->free_indexes->ptr)[cnt + 1] = index;
   ((u32 *) table->free_indexes->ptr)[0] += 1;
-  
 }
+
+void index_table_resize_sequence(index_table * table, index_table_sequence * seq,  u32 new_count){
+  index_table_sequence nseq = index_table_alloc_sequence(table, new_count);
+  if(seq->index != 0){
+    void * src = index_table_lookup_sequence(table, *seq);
+    void * dst = index_table_lookup_sequence(table, nseq);
+    memmove(dst, src, seq->count * table->element_size);
+    index_table_remove_sequence(table, seq);
+  }
+  *seq = nseq;
+}
+
+index_table_sequence index_table_alloc_sequence(index_table * table, u32 count){
+  u32 freeindexcnt = _index_table_free_index_count(table);
+  if(freeindexcnt > 0){
+      u32 start = 0;
+      u32 cnt = 0;
+      for(u32 i = 0; i < freeindexcnt; i++){
+	u32 idx = ((u32 *) table->free_indexes->ptr)[i + 1];
+	if(start == 0){
+	  start = idx;
+	  cnt = 1;
+	}else if(idx == start + cnt){
+	  cnt += 1;
+	}else{
+	  start = idx;
+	  cnt = 1;
+	}
+	if(cnt == count){
+	  // pop it from the indexex.
+	  _index_table_free_index_count_set(table, freeindexcnt - cnt);
+	  u32 * ptr = table->free_indexes->ptr;
+	  for(u32 j = i - cnt; j<freeindexcnt - cnt; j++)
+	    ptr[j] = ptr[j + cnt];
+	  
+	  //memmove(&(ptr[i - cnt + 1]), &(ptr[i]), (freeindexcnt - i - 1) * sizeof(u32));
+	  ASSERT(start != 0);
+	  //void * p = index_table_lookup(table, start);
+	  //memset(p, 0, cnt * table->element_size);
+	  return (index_table_sequence){.index = start, .count = cnt};
+	}
+      }
+    }
+  
+  while(index_table_capacity(table) <= (index_table_count(table) + count)){
+    u32 prevsize = table->area->size;
+    ASSERT((prevsize % table->element_size) == 0);
+    u32 newsize = MAX(prevsize * 2, 8 * table->element_size);
+    mem_area_realloc(table->area, newsize);
+    memset(table->area->ptr + prevsize, 0,  newsize - prevsize);
+  }
+  u32 idx = index_table_count(table);
+  index_table_count_set(table,idx + count);
+  return (index_table_sequence){.index = idx, .count = count};
+}
+
+void index_table_remove_sequence(index_table * table, index_table_sequence * seq){
+  u32 cnt = _index_table_free_index_count(table);
+  mem_area_realloc(table->free_indexes, table->free_indexes->size + seq->count * sizeof(u32));
+  //ASSERT(memmem(table->free_indexes->ptr + sizeof(u32), (cnt + 1) * sizeof(u32), &index, sizeof(index)) == NULL);
+  for(u32 i = 0; i < seq->count; i++)
+    ((u32 *)table->free_indexes->ptr)[cnt + i + 1] = seq->index + i;
+  ((u32 *) table->free_indexes->ptr)[0] += seq->count;
+  memset(seq, 0, sizeof(*seq));
+}
+
+void * index_table_lookup_sequence(index_table * table, index_table_sequence seq){
+  if(seq.index == 0)
+    return NULL;
+  return index_table_lookup(table, seq.index);
+}
+
 
 index_table * index_table_create(const char * name, u32 element_size){
   ASSERT(element_size > 0);
@@ -150,6 +221,26 @@ bool index_table_contains(index_table * table, u32 index){
       return false;
   }
   return true;
+}
+
+void index_table_optimize(index_table * table){
+  int cmpfunc (const u32 * a, const u32 * b)
+  {
+    return ( *(int*)a - *(int*)b );
+  }
+  u32 cnt = _index_table_free_index_count(table);
+  u32 * p = table->free_indexes->ptr;
+  qsort(p + 1,cnt , sizeof(u32), (void *) cmpfunc);
+  u32 icnt = index_table_count(table);
+
+
+  while(icnt > 0 && p[cnt] == icnt - 1){
+    icnt -= 1;
+    cnt -= 1;
+  }
+
+  _index_table_free_index_count_set(table, cnt);
+  index_table_count_set(table, icnt);
 }
 
 
@@ -365,11 +456,40 @@ bool index_table_test(){
 
   }
   
-  {// first test.
+  if(false){// first test.
     for(int k = 1; k < 5;k++){
-      index_table * t = index_table_create(NULL, 16 * k);
+      index_table * t = index_table_create(NULL, sizeof(i64));
+      index_table_sequence seq = index_table_alloc_sequence(t, 20);
+
+      u32 i1 = seq.index;
+      ASSERT(seq.count == 20);
+      ASSERT(seq.index > 0);
+      i64 * pts = index_table_lookup_sequence(t, seq);
+      for(int i = 0; i < 20; i++)
+	pts[i] = i;
+      index_table_resize_sequence(t, &seq, 21);
+
+      index_table_sequence seq3 = index_table_alloc_sequence(t, 10);
+      index_table_sequence seq4 = index_table_alloc_sequence(t, 40);
+      ASSERT(seq.count == 21);
+      pts = index_table_lookup_sequence(t, seq);
+      for(int i = 0; i < 20; i++){
+	ASSERT(pts[i] == i);
+      }
+     
+      memset(pts,255, sizeof(i64) * 20);
+      index_table_remove_sequence(t, &seq);
+      logd("Free count: %i\n", _index_table_free_index_count(t));
+      index_table_sequence seq2 = index_table_alloc_sequence(t, 20);
+      ASSERT(seq2.index == i1);
+      index_table_remove_sequence(t, &seq2);
+      index_table_remove_sequence(t, &seq3);
+      index_table_remove_sequence(t, &seq4); 
+      index_table_optimize(t);
+      logd("Free count: %i\n", _index_table_free_index_count(t));
+      ASSERT(_index_table_free_index_count(t) == 0);
       u32 idxes[200];
-      for(u32 j = 1; j < 20; j++){
+      for(u32 j = 3; j < 20; j++){
 	
 	for(u32 i = 0; i < j * 10; i++)
 	  idxes[i] = index_table_alloc(t);
@@ -380,11 +500,11 @@ bool index_table_test(){
 	ASSERT(_index_table_free_index_count(t) == 0);
 	for(u32 i = 0; i < j * 10; i++)
 	  index_table_remove(t, idxes[i]);
-	
       }
+      index_table_optimize(t);
+      ASSERT(index_table_count(t) == 1);
       index_table_destroy(&t);
     }
-    //return TEST_SUCCESS;
   }
   
   {
