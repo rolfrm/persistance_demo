@@ -24,8 +24,7 @@ typedef enum{
 }model_kind;
 
 typedef struct{
-  model_kind type;
-  u32 index;
+  index_table_sequence polygons;
 }model_data;
 
 typedef struct{
@@ -39,29 +38,15 @@ typedef struct{
 
 
 void print_model_data(u32 index, index_table * models, index_table * polygon, index_table * vertex){
-  while(index != 0){
-    model_data * m2 = index_table_lookup(models, index);
-    index = m2->index;
-
-    switch(m2->type){
-    case KIND_MODEL:
-      print_model_data(m2->index, models, polygon, vertex);
-      break;
-    case KIND_POLYGON:
-      {
-	logd("POLYGON:\n");
-	polygon_data * pd = index_table_lookup(polygon, index);
-	vertex_data * vd = index_table_lookup_sequence(vertex, pd->vertexes);
-	logd("  Vertex: %p ", vd->color);
-	vec2_print(vd->position);
-	logd("\n");
-	  
-	  
-	
-      }
-	
-    }
-    
+  model_data * m2 = index_table_lookup(models, index);
+  for(u32 i = 0; i < m2->polygons.count; i++){
+    u32 index = i + m2->polygons.index;
+    logd("POLYGON:\n");
+    polygon_data * pd = index_table_lookup(polygon, index);
+    vertex_data * vd = index_table_lookup_sequence(vertex, pd->vertexes);
+    logd("  Vertex: %p ", vd->color);
+    vec2_print(vd->position);
+    logd("\n"); 
   }
 }
 
@@ -69,28 +54,6 @@ typedef struct{
   u32 gl_ref;
   u32 count;
 }loaded_polygon_data;
-
-/*
-typedef index_table polygon_table;
-typedef u32 polygon_id;
-
-polygon_id polygon_create(graphics__context * ctx);
-u32 polygon_add_vertex2f(graphics__context * ctx, polygon_id polygon, vec3 offset);
-void polygon_set_color(graphics__context * ctx, polygon_id polygon, vec4 color);
-void polygon_read(graphics__context * ctx, polygon_id polygon, vec3 ** offsets, u64 count);
-void polygon_render(graphics__context * ctx, polygon_id polygon, mat3 tform, vec4 color);
-
-auto square = polygon_create(ctx);
-polygon_add_vertex(ctx, square, vec2_new(0,0));
-polygon_add_vertex(ctx, square, vec2_new(1,0));
-polygon_add_vertex(ctx, square, vec2_new(1,1));
-polygon_add_vertex(ctx, square, vec2_new(0,1));
-polygon_set_color(ctx, square, vec4_new(154.0 / 255.0, 36.0 / 255.0, 31.0 / 255.0, 1));
-
-polygon_render(ctx, square, tform);
-
-*/
-
 
 CREATE_TABLE_DECL2(active_entities, u32, bool);
 CREATE_TABLE_NP(active_entities, u32, bool);
@@ -148,18 +111,31 @@ void polygon_add_vertex2f(graphics_context * ctx, polygon_id polygon, vec2 offse
   v[pcnt].position = offset;
 }
 
+u32 vertex_get_polygon(graphics_context ctx, u32 vertex){
+  u64 polycnt = 0;
+  polygon_data * pd = index_table_all(ctx.polygon, &polycnt);
+  for(u64 i = 0; i < polycnt; i++){
+    u32 offset = pd[i].vertexes.index;
+    u32 count = pd[i].vertexes.count;
+    logd("cmp: %i %i   %i\n", offset, count, vertex);
+    if(offset <= vertex && vertex < offset + count){
+      return i + 1;
+    }
+  }
+  return 0;
+}
+
 
 void simple_graphics_load_test(graphics_context * ctx){
   u32 i1 = index_table_alloc(ctx->models);
   
   model_data * m1 = index_table_lookup(ctx->models, i1);
-  m1->type = KIND_POLYGON;
   {
     polygon_id p1 = polygon_create(ctx);
     polygon_add_vertex2f(ctx, p1, vec2_new(0,0));
     //polygon_add_vertex2f(ctx, p1, vec2_new(0.8,0.8));
     polygon_color_set(ctx->poly_color, p1, vec4_new(0.5, 1.0, 0.5, 1.0));
-    m1->index = p1;
+    m1->polygons = (index_table_sequence){.index = p1, .count = 1};
   }
   u32 player = index_table_alloc(ctx->entities);
   entity_data * ed = index_table_lookup(ctx->entities, player);
@@ -224,9 +200,12 @@ vec2 graphics_context_pixel_to_screen(const graphics_context ctx, vec2 pixel_coo
 
 void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 camera){
   loaded_polygon_data loaded;
+  ASSERT(polygon_id != 0);
   if(false == loaded_polygon_try_get(ctx.gpu_poly, polygon_id, &loaded)) {
     polygon_data * pd = index_table_lookup(ctx.polygon, polygon_id);
     u32 count = pd->vertexes.count;
+    if(count == 0)
+      return;
     vec2 positions[count];
     
 
@@ -293,16 +272,10 @@ void simple_grid_render(u64 id){
       entity_data * ed = index_table_lookup(gd.entities, entity);
       if(ed->model != 0){
 	model_data * model = index_table_lookup(gd.models, ed->model);
-	switch(model->type){
-	case KIND_POLYGON:{
-	  
-	  simple_grid_render_gl(gd, model->index, mat4_identity());
+	for(u32 j = 0; j < model->polygons.count; j++){
+	  u32 index = j + model->polygons.index;	
+	  simple_grid_render_gl(gd, index, mat4_identity());
 	}
-	default:
-	  break;
-	  
-	}
-
       }
     }
   }
@@ -372,17 +345,8 @@ void simple_grid_mouse_down_func(u64 grid_id, double x, double y, u64 method){
   if(editor.selection_kind == SELECTED_VERTEX){
     vertex_data * vd = index_table_lookup(ctx.vertex, editor.selected_index);
     vd->position = p;
-    u64 polycnt = 0;
-    u32 polygon = 0;
-    polygon_data * pd = index_table_all(ctx.polygon, &polycnt);
-    for(u64 i = 0; i < polycnt; i++){
-      u32 offset = pd[i].vertexes.index;
-      u32 count = pd[i].vertexes.count;
-      if(offset >= editor.selected_index && editor.selected_index < offset + count){
-	polygon = i + 1;
-	break;
-      }
-    }
+    u32 polygon = vertex_get_polygon(ctx, editor.selected_index);
+    
     logd(" FOUND POLYGON %i\n", polygon);
     
     loaded_polygon_data loaded;
@@ -439,16 +403,10 @@ void simple_graphics_editor_render(u64 id){
       entity_data * ed = index_table_lookup(gd.entities, entity);
       if(ed->model != 0){
 	model_data * model = index_table_lookup(gd.models, ed->model);
-	switch(model->type){
-	case KIND_POLYGON:{
-	  
-	  simple_grid_render_gl(gd, model->index, mat4_identity());
+	for(u32 j = 0; j < model->polygons.count; j++){
+	  u32 index = j + model->polygons.index;
+	  simple_grid_render_gl(gd, index, mat4_identity());
 	}
-	default:
-	  break;
-	  
-	}
-
       }
     }
   }
@@ -524,12 +482,11 @@ static void command_entered(u64 id, char * command){
 	if(model_id != 0){
 	  logd("Model: %i\n", model_id);
 	  model_data * md = index_table_lookup(ctx.models, model_id);
-	  u32 polygon_id = md->index;
-	  if(md->type == KIND_POLYGON && polygon_id != 0){
+	  for(u32 j = 0; j < md->polygons.count; j++){
+	    u32 polygon_id = j + md->polygons.index;
 	    logd("Polygon: %i\n", polygon_id);
 	    polygon_data * pd = index_table_lookup(ctx.polygon, polygon_id);
 	    logd("P: %p\n", pd);
-	    // fix data structure
 	    for(u32 i = 0; i < pd->vertexes.count; i++){
 	      vertex_data * vd = index_table_lookup(ctx.vertex, pd->vertexes.index + i);
 	      logd("Vertex %i: ", pd->vertexes.index + i);vec2_print(vd->position);logd("\n");
@@ -554,14 +511,15 @@ static void command_entered(u64 id, char * command){
 	editor.selected_index = i1;
 	entity->model = i1;
       }else if(snd("polygon") && editor.selection_kind == SELECTED_MODEL){
-	logd("creating polygon..\n");
-	polygon_id p1 = polygon_create(&ctx);
+
 	model_data * entity = index_table_lookup(ctx.models, editor.selected_index);
-	
-	editor.selection_kind = SELECTED_POLYGON;
-	editor.selected_index = p1;
-	entity->type = KIND_POLYGON;
-	entity->index = p1;
+	u32 pcnt = entity->polygons.count;
+
+	index_table_resize_sequence(ctx.polygon, &(entity->polygons), pcnt + 1);
+	editor.selection_kind = SELECTED_MODEL;
+	editor.selected_index = entity->polygons.index + entity->polygons.count - 1;
+	//logd("creating polygon.. %i %i\n", pcnt, entity->polygons.count);
+	//polygon_data * pd = index_table_lookup_sequence(ctx.polygon, entity->polygons);
       }else if(snd("vertex") && editor.selection_kind == SELECTED_POLYGON){
 	vec2 p = vec2_zero;
 	char buf[20];
@@ -650,11 +608,24 @@ static void command_entered(u64 id, char * command){
 	  table = ctx.polygon;
 	}else if(snd("vertex")){
 	  table = ctx.vertex;
+
+	  u32 polygon = vertex_get_polygon(ctx, i1);
+	  polygon_data * pd = index_table_lookup(ctx.polygon, polygon);
+	  vertex_data * vd = index_table_lookup_sequence(ctx.vertex, pd->vertexes);
+	  u32 offset = i1 - pd->vertexes.index;
+	  for(u32 i = offset; i < pd->vertexes.count - 1; i++)
+	    vd[i] = vd[i + 1];
+	  index_table_resize_sequence(ctx.vertex, &(pd->vertexes), pd->vertexes.count - 1);
+	  u32 idx = index_table_alloc(ctx.polygons_to_delete);
+	  u32 * ptr = index_table_lookup(ctx.polygons_to_delete, idx);
+	  ptr[0] = polygon;
+	    
 	}
-	if(table != NULL){
+	UNUSED(table);
+	/*if(table != NULL){
 	  if(index_table_contains(table, i1))
 	    index_table_remove(table, i1);
-	}
+	    }*/
 	
       }
       set_simple_graphics_editor_context(control, editor);
