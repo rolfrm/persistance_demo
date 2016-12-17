@@ -118,7 +118,6 @@ u32 vertex_get_polygon(graphics_context ctx, u32 vertex){
   for(u64 i = 0; i < polycnt; i++){
     u32 offset = pd[i].vertexes.index;
     u32 count = pd[i].vertexes.count;
-    logd("cmp: %i %i   %i\n", offset, count, vertex);
     if(offset <= vertex && vertex < offset + count){
       return i + 1;
     }
@@ -134,8 +133,6 @@ void simple_graphics_load_test(graphics_context * ctx){
   {
     polygon_id p1 = polygon_create(ctx);
     polygon_add_vertex2f(ctx, p1, vec2_new(0,0));
-    //polygon_add_vertex2f(ctx, p1, vec2_new(0.8,0.8));
-    //polygon_color_set(ctx->poly_color, p1, vec4_new(0.5, 1.0, 0.5, 1.0));
     m1->polygons = (index_table_sequence){.index = p1, .count = 1};
   }
   u32 player = index_table_alloc(ctx->entities);
@@ -603,18 +600,9 @@ static void command_entered(u64 id, char * command){
 	}else{
 	  i1 = editor.selected_index;
 	}
-	index_table * table = NULL;
 	logd("Remove: %s, %i\n", snd_part, i1);
-	if(snd("entity")){
-	  table = ctx.entities;
-	  
-	}else if(snd("model")){
-	  table = ctx.models;
-	}else if(snd("polygon")){
-	  table = ctx.polygon;
-	}else if(snd("vertex")){
-	  table = ctx.vertex;
-
+	if(snd("vertex")){
+	
 	  u32 polygon = vertex_get_polygon(ctx, i1);
 	  polygon_data * pd = index_table_lookup(ctx.polygon, polygon);
 	  vertex_data * vd = index_table_lookup_sequence(ctx.vertex, pd->vertexes);
@@ -627,18 +615,16 @@ static void command_entered(u64 id, char * command){
 	  ptr[0] = polygon;
 	    
 	}
-	UNUSED(table);
-	/*if(table != NULL){
-	  if(index_table_contains(table, i1))
-	    index_table_remove(table, i1);
-	    }*/
-	
       }
       set_simple_graphics_editor_context(control, editor);
 
-    }
-
-    else{
+    }else if(first("optimize")){
+      index_table_optimize(ctx.polygon);
+      index_table_optimize(ctx.vertex);
+      index_table_optimize(ctx.entities);
+      index_table_optimize(ctx.models);
+      logd("Optimized!");
+    }else{
       logd("Unkown command!\n");
     }
   }
