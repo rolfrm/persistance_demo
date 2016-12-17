@@ -29,6 +29,7 @@ typedef struct{
 
 typedef struct{
   index_table_sequence vertexes;
+  u32 material;
 }polygon_data;
 
 typedef struct{
@@ -134,7 +135,7 @@ void simple_graphics_load_test(graphics_context * ctx){
     polygon_id p1 = polygon_create(ctx);
     polygon_add_vertex2f(ctx, p1, vec2_new(0,0));
     //polygon_add_vertex2f(ctx, p1, vec2_new(0.8,0.8));
-    polygon_color_set(ctx->poly_color, p1, vec4_new(0.5, 1.0, 0.5, 1.0));
+    //polygon_color_set(ctx->poly_color, p1, vec4_new(0.5, 1.0, 0.5, 1.0));
     m1->polygons = (index_table_sequence){.index = p1, .count = 1};
   }
   u32 player = index_table_alloc(ctx->entities);
@@ -201,8 +202,8 @@ vec2 graphics_context_pixel_to_screen(const graphics_context ctx, vec2 pixel_coo
 void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 camera){
   loaded_polygon_data loaded;
   ASSERT(polygon_id != 0);
+  polygon_data * pd = index_table_lookup(ctx.polygon, polygon_id);
   if(false == loaded_polygon_try_get(ctx.gpu_poly, polygon_id, &loaded)) {
-    polygon_data * pd = index_table_lookup(ctx.polygon, polygon_id);
     u32 count = pd->vertexes.count;
     if(count == 0)
       return;
@@ -224,7 +225,7 @@ void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 came
   simple_grid_shader shader = simple_grid_shader_get();
   
   vec4 color = vec4_zero;
-  polygon_color_try_get(ctx.poly_color, polygon_id, &color);
+  polygon_color_try_get(ctx.poly_color, pd->material, &color);
   glUseProgram(shader.shader);
   glUniformMatrix4fv(shader.camera_loc,1,false, &(camera.data[0][0]));
   glUniform4f(shader.color_loc, color.x, color.y, color.z, color.w);
@@ -516,7 +517,7 @@ static void command_entered(u64 id, char * command){
 	u32 pcnt = entity->polygons.count;
 
 	index_table_resize_sequence(ctx.polygon, &(entity->polygons), pcnt + 1);
-	editor.selection_kind = SELECTED_MODEL;
+	editor.selection_kind = SELECTED_POLYGON;
 	editor.selected_index = entity->polygons.index + entity->polygons.count - 1;
 	//logd("creating polygon.. %i %i\n", pcnt, entity->polygons.count);
 	//polygon_data * pd = index_table_lookup_sequence(ctx.polygon, entity->polygons);
@@ -550,8 +551,12 @@ static void command_entered(u64 id, char * command){
 	      goto skip;
 	    sscanf(buf,"%f", p.data + i);
 	  }
-	  logd("Set color: ");vec4_print(p);logd("\n");
-	  polygon_color_set(ctx.poly_color, editor.selected_index, p);
+
+	  polygon_data * pd = index_table_lookup(ctx.polygon, editor.selected_index);
+	  if(pd->material == 0)
+	    pd->material = get_unique_number();
+	  logd("Set color: %i", pd->material);vec4_print(p);logd("\n");	  
+	  polygon_color_set(ctx.poly_color, pd->material, p);
 	}
       }
     else if(first("select")){

@@ -608,7 +608,7 @@ bool index_table_test(){
     mat4 t = mat4_rotate(mat4_translate(0.5,0.5,0),1,0.23,0.1,i);//mat4_rotate(mat4_translate(-0.0,-1.5,-4 + 0 * sin(i)),0,1,1, 0.0 * i);
     t = mat4_mul(t, mat4_translate(0,0,4));
     set_camera_3d_position(voxel_board, mat4_mul(p, mat4_invert(t)));
-    //iron_sleep(0.01);
+    iron_sleep(0.03);
     glfwPollEvents();
     method(win_id);
   }
