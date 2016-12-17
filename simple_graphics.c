@@ -83,15 +83,15 @@ void polygon_add_vertex2f(graphics_context * ctx, polygon_id polygon, vec2 offse
 
 void graphics_context_load(graphics_context * ctx){
   memset(ctx, 0, sizeof(*ctx));
-  ctx->models = index_table_create(NULL/*"simple/models"*/, sizeof(model_data));
-  ctx->polygon = index_table_create(NULL/*"simple/polygon"*/, sizeof(polygon_data));
+  ctx->models = index_table_create("simple/models", sizeof(model_data));
+  ctx->polygon = index_table_create("simple/polygon", sizeof(polygon_data));
 
-  ctx->vertex = index_table_create(NULL/*"simple/vertex"*/, sizeof(vertex_data));
-  ctx->entities = index_table_create(NULL/*"simple/entities"*/, sizeof(entity_data));
+  ctx->vertex = index_table_create("simple/vertex", sizeof(vertex_data));
+  ctx->entities = index_table_create("simple/entities", sizeof(entity_data));
   ctx->polygons_to_delete = index_table_create(NULL, sizeof(u32));
   ctx->gpu_poly = loaded_polygon_table_create(NULL);
-  ctx->poly_color = polygon_color_table_create(NULL);
-  ctx->active_entities = active_entities_table_create(NULL);
+  ctx->poly_color = polygon_color_table_create("simple/polygon_color");
+  ctx->active_entities = active_entities_table_create("simple/active_entities");
   polygon_id p1 = polygon_create(ctx);
   ctx->pointer_index = p1;
   polygon_add_vertex2f(ctx, p1, vec2_new(0, 0));
@@ -586,6 +586,7 @@ static void command_entered(u64 id, char * command){
 	  
 	}else if(snd("vertex")){
 	  if(index_table_contains(ctx.vertex, i1)){
+	    logd("VERTEX! %i\n", i1);
 	    editor.selection_kind = SELECTED_VERTEX;
 	    editor.selected_index = i1;
 	  }
@@ -652,7 +653,7 @@ void simple_graphics_editor_load(u64 id, u64 win_id){
   define_method(id, mouse_over_method, (method)simple_grid_mouse_over_func);
   define_method(id, mouse_down_method, (method) simple_grid_mouse_down_func);
   
-  u64 console = get_unique_number();
+  u64 console = intern_string("ccconsole!");
   set_simple_graphics_control(console, id);
   set_focused_element(win_id, console);
   set_console_height(console, 300);
@@ -663,8 +664,7 @@ void simple_graphics_editor_load(u64 id, u64 win_id){
   set_console_history_cnt(console, 100);
   define_method(console, console_command_entered_method, (method)command_entered);
 
-  bool test = true;
-  if(test){
+  if(once(console)){
     command_entered(console, (char *)"create entity");
     command_entered(console, (char *)"create model");
     command_entered(console, (char *)"create polygon");

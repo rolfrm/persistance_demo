@@ -578,7 +578,7 @@ bool index_table_test(){
   u32 count = iterate_voxel_chunk(tab, x1);
   logd("Count: %i\n", count);
   init_gui();
-  TEST(simple_graphics_editor_test);
+  //TEST(simple_graphics_editor_test);
   u64 voxel_board = intern_string("voxel board");
   set_board_data2(voxel_board, vboard);
 
