@@ -137,7 +137,8 @@ void key_callback(GLFWwindow* glwindow, int key, int scancode, int action, int m
   u64 focused = get_focused_element(win_id);
   if(focused == 0) return;
   method m = get_method(focused, key_handler_method);
-  m(focused, key, mods, action);
+  if(m != NULL)
+    m(focused, key, mods, action);
 }
 
 void char_callback(GLFWwindow * glwindow, u32 codepoint){
@@ -406,6 +407,19 @@ control_pair * get_control_pair_parent(u64 parent_id, u64 * index){
     }
   }
   return NULL;
+}
+
+u64 control_pair_get_parent(u64 child_id){
+  control_pair * w = persist_alloc("control_pairs", sizeof(control_pair));
+  u32 cnt = persist_size(w) / sizeof(control_pair);
+  
+  for(u64 index = 0; index < cnt; (index)++){
+    if(w[index].parent_id != 0 && w[index].child_id == child_id){
+      return w[index].parent_id;
+    }
+  }
+  return 0;
+
 }
 
 // #Rectangles
@@ -905,16 +919,16 @@ void init_gui(){
   define_method(rectangle_class, mouse_over_method, (method) rectangle_mouse_over);
 }
 
-int key_backspace = 259;
-int key_enter = 257;
-int key_space = 32;
-int key_release = 0;
-int key_press = 1;
-int key_repeat = 2;
-int mod_ctrl= 2;
-int key_up = 265;
-int key_down = 264;
-int key_right = 262;
-int key_left = 263;
-
+const int key_backspace = 259;
+const int key_enter = 257;
+const int key_space = 32;
+const int key_release = 0;
+const int key_press = 1;
+const int key_repeat = 2;
+const int mod_ctrl= 2;
+const int key_up = 265;
+const int key_down = 264;
+const int key_right = 262;
+const int key_left = 263;
+const int key_tab = 258;
 
