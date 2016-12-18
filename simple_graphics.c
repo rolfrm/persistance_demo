@@ -460,15 +460,13 @@ static void command_entered(u64 id, char * command){
   }
   
   if(copy_nth(command, 0, first_part, array_count(first_part))){
-    logd("At least one arg: %s\n", first_part);
     if(first("exit")){
-	logd("EXIT!\n");
 	set_should_exit(control, true);
     }else if(first("list")){
-      logd("Listing.. \n");
+      logd("Listing: \n");
       u64 cnt = 0;
       entity_data * entities = index_table_all(ctx.entities, &cnt);
-      logd("Entity CNT:%i\n", cnt);
+      logd("Entities: %i items.\n", cnt);
       for(u64 i = 0; i < cnt; i++){
 	u32 entity_id = i + 1;
 
@@ -482,7 +480,6 @@ static void command_entered(u64 id, char * command){
 	    u32 polygon_id = j + md->polygons.index;
 	    logd("Polygon: %i\n", polygon_id);
 	    polygon_data * pd = index_table_lookup(ctx.polygon, polygon_id);
-	    logd("P: %p\n", pd);
 	    for(u32 i = 0; i < pd->vertexes.count; i++){
 	      vertex_data * vd = index_table_lookup(ctx.vertex, pd->vertexes.index + i);
 	      logd("Vertex %i: ", pd->vertexes.index + i);vec2_print(vd->position);logd("\n");
@@ -560,9 +557,7 @@ static void command_entered(u64 id, char * command){
 	 && copy_nth(command, 2, id_buffer, array_count(id_buffer))){
 	u32 i1 = 0;
 	sscanf(id_buffer, "%i", &i1);
-	logd("SELECT: %s %s id_buffer %i\n", snd_part, id_buffer, id);
 	if(snd("entity")){
-	  logd("Entity?\n");
 	  if(index_table_contains(ctx.entities, i1)){
 	    editor.selection_kind = SELECTED_ENTITY;
 	    editor.selected_index = i1;
@@ -626,7 +621,7 @@ static void command_entered(u64 id, char * command){
       logd("Unkown command!\n");
     }
   }
-  logd("COMMAND ENTERED %i %s\n", id, command);
+  //logd("COMMAND ENTERED %i %s\n", id, command);
 }
 
 CREATE_TABLE_DECL2(console_history_index, u64, u32);
@@ -635,7 +630,7 @@ CREATE_TABLE2(console_history_index, u64, u32);
 static void console_handle_history(u64 console, int key, int mods, int action){
   if(action == key_release)
     return;
-  logd("%i %i %i\n", console, key, mods);
+  //logd("%i %i %i\n", console, key, mods);
   u64 histcnt = get_console_history_cnt(console);
   u64 history[histcnt + 1];
   u64 history_cnt = get_console_history(console, history, array_count(history));
@@ -661,12 +656,12 @@ static void console_handle_history(u64 console, int key, int mods, int action){
   if(idx > 0){
     char buffer[200] = {0};
     if(console_get_history(console, idx - 1, buffer, array_count(buffer))){
-      logd("SETTING TEXT TO '%s'\n", buffer);
+      //logd("SETTING TEXT TO '%s'\n", buffer);
       remove_text(console);
       set_text(console, buffer);
     }
   }
-  logd("HIST IDX: %i\n", idx);
+  //logd("HIST IDX: %i\n", idx);
   
  skip:;
   CALL_BASE_METHOD(console, key_handler_method, key, mods, action);

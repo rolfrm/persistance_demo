@@ -98,7 +98,8 @@ void render_console(u64 id){
       if(index > (u64)(l - offset))
 	index = l - offset;
       if((l - offset - index - 1) < sizeof(strbuf)){
-	memmove(strbuf + offset + index + 1, strbuf +  offset + index, l - offset - index - 1);
+	memmove(strbuf + offset + index + 1, strbuf +  offset + index, l - offset - index);
+	strbuf[l + 1] = 0;
       }else{
 	strbuf[index + offset + 1]  = 0;
       }
@@ -182,7 +183,7 @@ void key_handler_console(u64 id, int key, int mods, int action){
 	buffer[i] = 0;
 	break;
       }
-    logd("Exec buffer: '%s'\n", buffer);
+    //logd("Exec buffer: '%s'\n", buffer);
     if(buffer[0] == 0){
       set_text(id, "");
       return;
@@ -214,7 +215,6 @@ void key_handler_console(u64 id, int key, int mods, int action){
 	if(l == 0) l = 1;
 	i += l;
       }
-      logd("Lastlen: %i\n", lastlen);
       memmove(buffer + index - lastlen , buffer + index, len - index - 1);
       remove_text(id);
       set_text(id, buffer);
