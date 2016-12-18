@@ -345,8 +345,6 @@ void simple_grid_mouse_down_func(u64 grid_id, double x, double y, u64 method){
     vd->position = p;
     u32 polygon = vertex_get_polygon(ctx, editor.selected_index);
     
-    logd(" FOUND POLYGON %i\n", polygon);
-    
     loaded_polygon_data loaded;
     if(loaded_polygon_try_get(ctx.gpu_poly, polygon, &loaded)){
       u32 idx = index_table_alloc(ctx.polygons_to_delete);

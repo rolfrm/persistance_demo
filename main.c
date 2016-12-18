@@ -106,12 +106,12 @@ void index_table_resize_sequence(index_table * table, index_table_sequence * seq
 
 index_table_sequence index_table_alloc_sequence(index_table * table, u32 count){
   u32 freeindexcnt = _index_table_free_index_count(table);
+  
   if(freeindexcnt > 0){
       u32 start = 0;
       u32 cnt = 0;
       for(u32 i = 0; i < freeindexcnt; i++){
 	u32 idx = ((u32 *) table->free_indexes->ptr)[i + 1];
-	logd("idx:%i %i %i\n", idx, start, cnt);
 	if(start == 0){
 	  start = idx;
 	  cnt = 1;
@@ -127,8 +127,8 @@ index_table_sequence index_table_alloc_sequence(index_table * table, u32 count){
 	  // pop it from the indexex.
 	  _index_table_free_index_count_set(table, freeindexcnt - cnt);
 	  u32 * ptr = table->free_indexes->ptr;
-	  for(u32 j = i - cnt; j<freeindexcnt - cnt; j++)
-	    ptr[j] = ptr[j + cnt];
+	  for(u32 j = i - cnt + 1; j < freeindexcnt - cnt; j++)
+	    ptr[j + 1] = ptr[j + cnt + 1];
 	  
 	  //memmove(&(ptr[i - cnt + 1]), &(ptr[i]), (freeindexcnt - i - 1) * sizeof(u32));
 	  ASSERT(start != 0);
@@ -154,7 +154,7 @@ index_table_sequence index_table_alloc_sequence(index_table * table, u32 count){
 void index_table_remove_sequence(index_table * table, index_table_sequence * seq){
   u32 cnt = _index_table_free_index_count(table);
   mem_area_realloc(table->free_indexes, table->free_indexes->size + seq->count * sizeof(u32));
-  //ASSERT(memmem(table->free_indexes->ptr + sizeof(u32), (cnt + 1) * sizeof(u32), &index, sizeof(index)) == NULL);
+  //ASSERT(memmem(table->free_indexes->ptr + sizeof(u32), cnt * sizeof(u32), &index, sizeof(index)) == NULL);
   for(u32 i = 0; i < seq->count; i++)
     ((u32 *)table->free_indexes->ptr)[cnt + i + 1] = seq->index + i;
   ((u32 *) table->free_indexes->ptr)[0] += seq->count;
@@ -232,18 +232,17 @@ void index_table_optimize(index_table * table){
     return ( *(int*)a - *(int*)b );
   }
   u32 cnt = _index_table_free_index_count(table);
-  logd("CNT: %i\n", cnt);
+
   u32 * p = table->free_indexes->ptr;
   qsort(p + 1,cnt , sizeof(u32), (void *) cmpfunc);
   u32 icnt = index_table_count(table);
-
+  
   u32 freedcount = 0;
   while(icnt > 0 && p[cnt] == icnt - 1){
     icnt -= 1;
     cnt -= 1;
     freedcount += 1;
   }
-  logd("Freed: %i / %i\n", freedcount, cnt);
   _index_table_free_index_count_set(table, cnt);
   index_table_count_set(table, icnt);
 
@@ -466,7 +465,16 @@ bool index_table_test(){
     for(int k = 1; k < 5;k++){
       index_table * t = index_table_create(NULL, sizeof(i64));
       index_table_sequence seq = index_table_alloc_sequence(t, 20);
-
+      index_table_sequence seq3 = index_table_alloc_sequence(t, 10);      
+      index_table_resize_sequence(t, &seq, 9);
+      index_table_remove_sequence(t, &seq3);
+      index_table_remove_sequence(t, &seq);      
+      index_table_optimize(t);
+      
+      
+      seq = index_table_alloc_sequence(t, 20);
+      logd("%i \n", _index_table_free_index_count(t));
+      ASSERT(_index_table_free_index_count(t) == 0);
       //u32 i1 = seq.index;
       ASSERT(seq.count == 20);
       ASSERT(seq.index > 0);
@@ -475,7 +483,7 @@ bool index_table_test(){
 	pts[i] = i;
       index_table_resize_sequence(t, &seq, 21);
 
-      index_table_sequence seq3 = index_table_alloc_sequence(t, 10);
+      seq3 = index_table_alloc_sequence(t, 10);
       index_table_sequence seq4 = index_table_alloc_sequence(t, 40);
       ASSERT(seq.count == 21);
       pts = index_table_lookup_sequence(t, seq);
@@ -483,7 +491,7 @@ bool index_table_test(){
 	ASSERT(pts[i] == i);
       }
      
-      memset(pts,255, sizeof(i64) * 20);
+      memset(pts,255, sizeof(i64) * 21);
       index_table_remove_sequence(t, &seq);
       logd("Free count: %i\n", _index_table_free_index_count(t));
       index_table_sequence seq2 = index_table_alloc_sequence(t, 20);
