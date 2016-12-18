@@ -83,7 +83,6 @@ void render_console(u64 id){
   u64 history_cnt = get_console_history(id, history, array_count(history));
   float voffset = 2;
   char strbuf[100];
-
   for(i64 i = -1; i < (i64) history_cnt && voffset < h ;i++){
     memset(strbuf, 0, sizeof(strbuf));    
     if(i == -1){
@@ -98,7 +97,11 @@ void render_console(u64 id){
       u64 index = get_console_index(id);
       if(index > (u64)(l - offset))
 	index = l - offset;
-      memmove(strbuf + offset + index + 1, strbuf +  offset + index, l - offset - index);
+      if((l - offset - index - 1) < sizeof(strbuf)){
+	memmove(strbuf + offset + index + 1, strbuf +  offset + index, l - offset - index - 1);
+      }else{
+	strbuf[index + offset + 1]  = 0;
+      }
       if(ts == 0){
 	strbuf[index + offset] = '|';
       }else{
@@ -196,18 +199,18 @@ void key_handler_console(u64 id, int key, int mods, int action){
     get_text(id, buffer, len);
     u32 index = get_console_index(id);
     if(index != 0){
-      char * lastchar = buffer;
       size_t lastlen = 0;
       for(u32 i = 0 ; i < index;){
 	if(buffer[i] == 0) break;
 	size_t l = 0;
-	utf8_to_codepoint(lastchar, &l);
-	lastchar = buffer + i;
+	utf8_to_codepoint(buffer + i, &l);
+	ASSERT(l != 0);
 	lastlen = l;
 	if(l == 0) l = 1;
 	i += l;
       }
-      memmove(buffer + index - 1 , buffer + index - 1 + lastlen, len - index - 1);
+      logd("Lastlen: %i\n", lastlen);
+      memmove(buffer + index - lastlen , buffer + index, len - index - 1);
       remove_text(id);
       set_text(id, buffer);
       set_console_index(id, index - lastlen);
@@ -218,10 +221,13 @@ void key_handler_console(u64 id, int key, int mods, int action){
     buffer[0] = 0;
     get_text(id, buffer, len);
     u64 index = get_console_index(id);
-    size_t l = 0;
-    utf8_to_codepoint(buffer + index, &l);
-    index += l;
-    set_console_index(id, index);
+    if(index < strlen(buffer)){
+      size_t l = 0;
+      utf8_to_codepoint(buffer + index, &l);
+      ASSERT(l != 0);
+      index += l;
+      set_console_index(id, index);
+    }
   }else if(key == key_left){
 
     u64 index = get_console_index(id);
@@ -232,9 +238,12 @@ void key_handler_console(u64 id, int key, int mods, int action){
       get_text(id, buffer, len);
       size_t lastlen = 0;
       for(u32 i = 0 ; i < index;){
+	lastlen = 0;
 	utf8_to_codepoint(buffer + i, &lastlen);
+	ASSERT(lastlen != 0);
 	if(lastlen == 0)
 	  lastlen = 1;
+	ASSERT(lastlen != 0);
 	i += lastlen;
       }
       index -= lastlen;      
