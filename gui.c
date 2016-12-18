@@ -647,7 +647,7 @@ void render_text(const char * text, size_t len){
       glUniform2f(uv_size_loc, q.s1 - q.s0, q.t1 - q.t0);
       glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     }
-    i += l;
+    i += MAX((u32)l, (u32)1);
   }
   glDisable(GL_BLEND);
 }
@@ -912,5 +912,9 @@ int key_release = 0;
 int key_press = 1;
 int key_repeat = 2;
 int mod_ctrl= 2;
+int key_up = 265;
+int key_down = 264;
+int key_right = 262;
+int key_left = 263;
 
 

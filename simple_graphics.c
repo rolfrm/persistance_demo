@@ -12,7 +12,7 @@
 #include "gui_test.h"
 #include "index_table.h"
 #include "game_board.h"
-
+#include "console.h"
 typedef struct{
   vec3 position;
   u32 model;
@@ -627,7 +627,49 @@ static void command_entered(u64 id, char * command){
     }
   }
   logd("COMMAND ENTERED %i %s\n", id, command);
+}
 
+CREATE_TABLE_DECL2(console_history_index, u64, u32);
+CREATE_TABLE2(console_history_index, u64, u32);
+
+static void console_handle_history(u64 console, int key, int mods, int action){
+  if(action == key_release)
+    return;
+  logd("%i %i %i\n", console, key, mods);
+  u64 histcnt = get_console_history_cnt(console);
+  u64 history[histcnt + 1];
+  u64 history_cnt = get_console_history(console, history, array_count(history));
+  
+  u32 idx = get_console_history_index(console);
+  if(key == key_up){
+    idx += 1;
+  }else if(key == key_down){
+    if(idx != 0)
+      idx -= 1;
+  }else{
+    unset_console_history_index(console);
+    goto skip;
+  }
+
+  if(idx > history_cnt){
+    idx = 0;
+  }
+  if(idx == 0)
+    unset_console_history_index(console);
+  else
+    set_console_history_index(console, idx);
+  if(idx > 0){
+    char buffer[200] = {0};
+    if(console_get_history(console, idx - 1, buffer, array_count(buffer))){
+      logd("SETTING TEXT TO '%s'\n", buffer);
+      remove_text(console);
+      set_text(console, buffer);
+    }
+  }
+  logd("HIST IDX: %i\n", idx);
+  
+ skip:;
+  CALL_BASE_METHOD(console, key_handler_method, key, mods, action);
 }
 
 #include "console.h"
@@ -647,7 +689,7 @@ void simple_graphics_editor_load(u64 id, u64 win_id){
   set_vertical_alignment(console, VALIGN_BOTTOM);
   set_console_history_cnt(console, 100);
   define_method(console, console_command_entered_method, (method)command_entered);
-
+  define_method(console, key_handler_method, (method) console_handle_history);
   if(once(console)){
     command_entered(console, (char *)"create entity");
     command_entered(console, (char *)"create model");

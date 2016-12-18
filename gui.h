@@ -116,7 +116,10 @@ extern int key_release;
 extern int key_press;
 extern int key_repeat;
 extern int mod_ctrl;
-
+extern int key_up;
+extern int key_down;
+extern int key_right;
+extern int key_left;
 named_item * get_named_item(const char * table, const char * name, bool create);
 u64 get_unique_number();
 

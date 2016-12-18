@@ -68,7 +68,8 @@ u64 console_add_history_method = 0;
 CREATE_TABLE(console_height, u64, float);
 CREATE_MULTI_TABLE(console_history, u64, u64);
 CREATE_STRING_TABLE(strings, u64);
-
+CREATE_TABLE_DECL2(console_index, u64, u64);
+CREATE_TABLE2(console_index, u64, u64);
 void render_console(u64 id){
 
   u64 histcnt = get_console_history_cnt(id);
@@ -84,19 +85,24 @@ void render_console(u64 id){
   char strbuf[100];
 
   for(i64 i = -1; i < (i64) history_cnt && voffset < h ;i++){
-    strbuf[0] = 0;
-    
+    memset(strbuf, 0, sizeof(strbuf));    
     if(i == -1){
-      
+
+
       int offset = 0;
-      offset = sprintf(strbuf, ">>> ");
+      offset = sprintf(strbuf, ">>>");
       u64 ts = (timestamp() / 500000) % 2;
       
       get_text(id, strbuf + offset, sizeof(strbuf) - offset);
       int l = strlen(strbuf);
+      u64 index = get_console_index(id);
+      if(index > (u64)(l - offset))
+	index = l - offset;
+      memmove(strbuf + offset + index + 1, strbuf +  offset + index, l - offset - index);
       if(ts == 0){
-	strbuf[l] = '|';
-	strbuf[l+1] = 0;
+	strbuf[index + offset] = '|';
+      }else{
+	strbuf[index + offset] = ' ';
       }
       
     }else{
@@ -122,15 +128,21 @@ void char_handler_console(u64 id, int codepoint, int mods){
     logd("Error parsing codepoint: %i \n", codepoint);
   }
   ASSERT(utf8len);
+  u64 index = get_console_index(id);
   int len = get_text(id, NULL, 1000);
+
   char buffer[len + utf8len];
-  buffer[0] = 0;
+  memset(buffer, 0, sizeof(buffer));
   get_text(id, buffer, len);
+  u32 len2= strlen(buffer);
+  index = MIN((u64)len2, index);
+  memmove(buffer + index + utf8len , buffer + index, len - index - 1);
   int slen = strlen(buffer);
-  ASSERT(codepoint_to_utf8(codepoint, buffer + slen, utf8len));
+  ASSERT(codepoint_to_utf8(codepoint, buffer + index, utf8len));
   buffer[slen + utf8len] = 0;
   remove_text(id);
   set_text(id, buffer);
+  set_console_index(id, index + utf8len);
 }
 
 void push_console_history(u64 id, const char * buffer){
@@ -182,22 +194,52 @@ void key_handler_console(u64 id, int key, int mods, int action){
     char buffer[len];
     buffer[0] = 0;
     get_text(id, buffer, len);
-
-    char * lastchar = buffer;
-    size_t lastlen = 0;
-    
-    for(int i = 0 ; i < len;){
-      if(buffer[i] == 0) break;
-      size_t l = 0;
-      utf8_to_codepoint(lastchar, &l);
-      lastchar = buffer + i;
-      lastlen = l;
-      i += l;
+    u32 index = get_console_index(id);
+    if(index != 0){
+      char * lastchar = buffer;
+      size_t lastlen = 0;
+      for(u32 i = 0 ; i < index;){
+	if(buffer[i] == 0) break;
+	size_t l = 0;
+	utf8_to_codepoint(lastchar, &l);
+	lastchar = buffer + i;
+	lastlen = l;
+	if(l == 0) l = 1;
+	i += l;
+      }
+      memmove(buffer + index - 1 , buffer + index - 1 + lastlen, len - index - 1);
+      remove_text(id);
+      set_text(id, buffer);
+      set_console_index(id, index - lastlen);
     }
-    memset(lastchar, 0, lastlen);
-    
-    remove_text(id);
-    set_text(id, buffer);
+  }else if(key == key_right){
+    int len = get_text(id, NULL, 1000);
+    char buffer[len];
+    buffer[0] = 0;
+    get_text(id, buffer, len);
+    u64 index = get_console_index(id);
+    size_t l = 0;
+    utf8_to_codepoint(buffer + index, &l);
+    index += l;
+    set_console_index(id, index);
+  }else if(key == key_left){
+
+    u64 index = get_console_index(id);
+    if(index != 0){
+      int len = get_text(id, NULL, 1000);
+      char buffer[len];
+      buffer[0] = 0;
+      get_text(id, buffer, len);
+      size_t lastlen = 0;
+      for(u32 i = 0 ; i < index;){
+	utf8_to_codepoint(buffer + i, &lastlen);
+	if(lastlen == 0)
+	  lastlen = 1;
+	i += lastlen;
+      }
+      index -= lastlen;      
+      set_console_index(id, index);
+    }
   }
 }
 
