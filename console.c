@@ -131,15 +131,20 @@ void char_handler_console(u64 id, int codepoint, int mods){
     logd("Error parsing codepoint: %i \n", codepoint);
   }
   ASSERT(utf8len);
+  
   u64 index = get_console_index(id);
   int len = get_text(id, NULL, 1000);
 
   char buffer[len + utf8len];
   memset(buffer, 0, sizeof(buffer));
+
   get_text(id, buffer, len);
+
   u32 len2= strlen(buffer);
   index = MIN((u64)len2, index);
-  memmove(buffer + index + utf8len , buffer + index, len - index - 1);
+  if(len - index != 0)
+    memmove(buffer + index + utf8len , buffer + index, len - index - 1);
+
   int slen = strlen(buffer);
   ASSERT(codepoint_to_utf8(codepoint, buffer + index, utf8len));
   buffer[slen + utf8len] = 0;

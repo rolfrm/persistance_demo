@@ -690,7 +690,7 @@ void simple_graphics_editor_load(u64 id, u64 win_id){
   set_console_history_cnt(console, 100);
   define_method(console, console_command_entered_method, (method)command_entered);
   define_method(console, key_handler_method, (method) console_handle_history);
-  if(once(console)){
+  if(false && once(console)){
     command_entered(console, (char *)"create entity");
     command_entered(console, (char *)"create model");
     command_entered(console, (char *)"create polygon");
