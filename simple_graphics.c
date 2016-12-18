@@ -63,6 +63,10 @@ CREATE_TABLE_NP(loaded_polygon, u32, loaded_polygon_data);
 CREATE_TABLE_DECL2(polygon_color, u32, vec4);
 CREATE_TABLE2(polygon_color, u32, vec4);
 
+CREATE_TABLE_DECL2(entity_position, u32, vec3);
+CREATE_TABLE2(entity_position, u32, vec3);
+
+
 typedef struct{
   index_table * entities;
   index_table * models;
@@ -267,12 +271,19 @@ void simple_grid_render(u64 id){
   while(0 != (cnt = active_entities_iter_all(gd.active_entities, entities,unused, array_count(unused), &idx))){
     for(u64 i = 0; i < cnt; i++){
       u32 entity = entities[i];
+      
       entity_data * ed = index_table_lookup(gd.entities, entity);
+      
+      vec3 p = get_entity_position(entity);
+      vec3_print(p);logd("\n");
+      mat4 tform = mat4_translate(p.x, p.y, p.z);
+      
       if(ed->model != 0){
 	model_data * model = index_table_lookup(gd.models, ed->model);
+
 	for(u32 j = 0; j < model->polygons.count; j++){
 	  u32 index = j + model->polygons.index;	
-	  simple_grid_render_gl(gd, index, mat4_identity());
+	  simple_grid_render_gl(gd, index, tform);
 	}
       }
     }
@@ -328,6 +339,7 @@ typedef enum{
 typedef struct{
   selected_kind selection_kind;
   u32 selected_index;
+  float zoom;
 }editor_context;
 
 
@@ -393,15 +405,27 @@ void simple_graphics_editor_render(u64 id){
   bool unused[10];
   u64 idx = 0;
   u64 cnt = 0;
+  mat4 editor_tform = mat4_identity();
+  editor_context ed = get_simple_graphics_editor_context(id);
+  if(ed.selection_kind == SELECTED_ENTITY){
+    vec3 p = get_entity_position(ed.selected_index);
+    editor_tform = mat4_translate(-p.x, -p.y, -p.z);
+  }
+
+  editor_tform = mat4_mul(mat4_scaled(ed.zoom, ed.zoom, ed.zoom), editor_tform);
+  
   while(0 != (cnt = active_entities_iter_all(gd.active_entities, entities,unused, array_count(unused), &idx))){
     for(u64 i = 0; i < cnt; i++){
       u32 entity = entities[i];
       entity_data * ed = index_table_lookup(gd.entities, entity);
+      vec3 p = get_entity_position(entity);
+      mat4 tform = mat4_translate(p.x, p.y, p.z);
+      tform = mat4_mul(editor_tform, tform);
       if(ed->model != 0){
 	model_data * model = index_table_lookup(gd.models, ed->model);
 	for(u32 j = 0; j < model->polygons.count; j++){
 	  u32 index = j + model->polygons.index;
-	  simple_grid_render_gl(gd, index, mat4_identity());
+	  simple_grid_render_gl(gd, index, tform);
 	}
       }
     }
@@ -549,6 +573,31 @@ static void command_entered(u64 id, char * command){
 	    pd->material = get_unique_number();
 	  logd("Set color: %i", pd->material);vec4_print(p);logd("\n");	  
 	  polygon_color_set(ctx.poly_color, pd->material, p);
+	}
+	else if(snd("position")&& editor.selected_index != 0  && editor.selection_kind == SELECTED_ENTITY ){
+	  vec3 p = vec3_zero;
+	  char buf[20];
+	  for(u32 i = 0 ; i < array_count(p.data); i++){
+	    if(false == copy_nth(command, 2 + i, buf, array_count(buf)))
+	      break;
+	    sscanf(buf,"%f", p.data + i);
+	  }
+	  if(p.x == 0.0 && p.y == 0.0 && p.z == 0.0)
+	    unset_entity_position(editor.selected_index);
+	  else
+	    set_entity_position(editor.selected_index, p);
+	}
+
+	if(snd("zoom")){
+
+	  char buf[20];
+	  if(copy_nth(command, 2, buf, array_count(buf))){
+	    float v = 1.0;
+	    sscanf(buf,"%f", &v);
+	    editor.zoom = v;
+	  }
+	  logd("ZOOM: %f\n", editor.zoom);
+	  set_simple_graphics_editor_context(control, editor);
 	}
       }
     else if(first("select")){
