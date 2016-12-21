@@ -328,18 +328,21 @@ typedef enum{
   SELECTED_ENTITY,
   SELECTED_MODEL,
   SELECTED_POLYGON,
-  SELECTED_VERTEX
+  SELECTED_VERTEX,
+  SELECTED_NONE
 }selected_kind;
 
 typedef struct{
   selected_kind selection_kind;
   u32 selected_index;
   float zoom;
+  u32 focused_item;
+  selected_kind focused_item_kind;
 }editor_context;
 
 
 CREATE_TABLE_DECL2(simple_graphics_editor_context, u64, editor_context);
-CREATE_TABLE_NP(simple_graphics_editor_context, u64, editor_context);
+CREATE_TABLE2(simple_graphics_editor_context, u64, editor_context);
 
 void simple_grid_mouse_down_func(u64 grid_id, double x, double y, u64 method){
   UNUSED(method);
@@ -412,9 +415,16 @@ void simple_graphics_editor_render(u64 id){
   u64 cnt = 0;
   mat4 editor_tform = mat4_identity();
   editor_context ed = get_simple_graphics_editor_context(id);
-  if(ed.selection_kind == SELECTED_ENTITY){
-    vec3 p = get_entity_position(ed.selected_index);
+  if(ed.focused_item_kind == SELECTED_ENTITY){
+    vec3 p = get_entity_position(ed.focused_item);
     editor_tform = mat4_translate(-p.x, -p.y, -p.z);
+  }else if(ed.focused_item_kind == SELECTED_MODEL){
+    model_data * model = index_table_lookup(gd.models, ed.focused_item);
+    for(u32 j = 0; j < model->polygons.count; j++){
+      u32 index = j + model->polygons.index;
+      simple_grid_render_gl(gd, index, mat4_identity(), true);
+    }
+    return;
   }
 
   editor_tform = mat4_mul(mat4_scaled(ed.zoom, ed.zoom, ed.zoom), editor_tform);
@@ -605,36 +615,44 @@ static void command_entered(u64 id, char * command){
 	  set_simple_graphics_editor_context(control, editor);
 	}
       }
-    else if(first("select")){
+    else if(first("select") || first("focus")){
+      bool is_focus = first("focus");
       char id_buffer[100] = {0};
       if(copy_nth(command, 1, snd_part, array_count(snd_part))
 	 && copy_nth(command, 2, id_buffer, array_count(id_buffer))){
 	u32 i1 = 0;
 	sscanf(id_buffer, "%i", &i1);
+	index_table * table = NULL;
+	selected_kind kind;
 	if(snd("entity")){
-	  if(index_table_contains(ctx.entities, i1)){
-	    editor.selection_kind = SELECTED_ENTITY;
-	    editor.selected_index = i1;
-	  }
-	  
+	  table = ctx.entities;
+	  kind = SELECTED_ENTITY;
 	}else if(snd("model")){
-	  if(index_table_contains(ctx.models, i1)){
-	    editor.selection_kind = SELECTED_MODEL;
-	    editor.selected_index = i1;
-	  }
+	  table = ctx.models;
+	  kind = SELECTED_MODEL;
+	  
 	}else if(snd("polygon")){
-	  if(index_table_contains(ctx.polygon, i1)){
-	    editor.selection_kind = SELECTED_POLYGON;
-	    editor.selected_index = i1;
-	  }
+	  table = ctx.polygon;
+	  kind = SELECTED_POLYGON;
 	  
 	}else if(snd("vertex")){
-	  if(index_table_contains(ctx.vertex, i1)){
-	    logd("VERTEX! %i\n", i1);
-	    editor.selection_kind = SELECTED_VERTEX;
+	  table = ctx.vertex;
+	  kind = SELECTED_VERTEX;
+	}
+	if(table != NULL && index_table_contains(table, i1)){
+	  if(is_focus){
+	    editor.focused_item_kind = kind;
+	    editor.focused_item = i1;
+	  }else{
+	    editor.selection_kind = kind;
 	    editor.selected_index = i1;
 	  }
+	  
+	}else{
+	  editor.focused_item_kind = SELECTED_NONE;
+	  editor.focused_item = 0;
 	}
+	
       }
       set_simple_graphics_editor_context(control, editor);
 	
@@ -649,8 +667,11 @@ static void command_entered(u64 id, char * command){
 	}
 	logd("Remove: %s, %i\n", snd_part, i1);
 	if(snd("vertex")){
-	
+	  
 	  u32 polygon = vertex_get_polygon(ctx, i1);
+	  if(polygon == 0)
+	    return;
+	  
 	  polygon_data * pd = index_table_lookup(ctx.polygon, polygon);
 	  vertex_data * vd = index_table_lookup_sequence(ctx.vertex, pd->vertexes);
 	  u32 offset = i1 - pd->vertexes.index;
