@@ -396,6 +396,20 @@ control_pair * add_control(u64 id, u64 other_id){
   return free;
 }
 
+control_pair * gui_get_control(u64 id, u64 other_id){
+  ASSERT(other_id != 0);
+  size_t total_size = 0;
+  control_pair * w = persist_alloc2("control_pairs", sizeof(control_pair), &total_size);
+  u32 cnt = total_size / sizeof(control_pair);
+  for(u32 i = 0; i < cnt; i++){
+    if(w[i].parent_id == id && w[i].child_id == other_id){
+      return w + i;
+    }
+  }
+  return NULL;
+}
+
+
 control_pair * get_control_pair_parent(u64 parent_id, u64 * index){
   control_pair * w = persist_alloc("control_pairs", sizeof(control_pair));
   u32 cnt = persist_size(w) / sizeof(control_pair);

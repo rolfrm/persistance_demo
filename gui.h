@@ -74,6 +74,7 @@ u64 intern_string(const char * name);
 control_pair * add_control(u64 id, u64 other_id);
 control_pair * get_control_pair_parent(u64 parent_id, u64 * index);
 u64 control_pair_get_parent(u64 child_id);
+control_pair * gui_get_control(u64 id, u64 other_id);
 rectangle * get_rectangle(u64 id);
 rectangle * find_rectangle(u64 id, bool create);
 void rect_render(vec3 color, vec2 offset, vec2 size);

@@ -241,55 +241,6 @@ void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 came
   glDisableVertexAttribArray(shader.vertex_loc);
 }
 
-void simple_grid_render(u64 id){
-
-  graphics_context gd = get_graphics_context(id);
-  {
-    u64 cnt = 0;
-    u32 * items = index_table_all(gd.polygons_to_delete, &cnt);
-    if(cnt > 0){
-      loaded_polygon_data loaded;
-      for(u64 i = 0; i < cnt; i++){
-	if(loaded_polygon_try_get(gd.gpu_poly, items[i], &loaded)){
-	  u32 ref = loaded.gl_ref;
-	  glDeleteBuffers(1, &ref);
-	  loaded_polygon_unset(gd.gpu_poly, items[i]);
-	}
-      }
-      index_table_clear(gd.polygons_to_delete);
-    }
-  }
-  
-  u32 entities[10];
-  bool unused[10];
-  u64 idx = 0;
-  u64 cnt = 0;
-  while(0 != (cnt = active_entities_iter_all(gd.active_entities, entities,unused, array_count(unused), &idx))){
-    for(u64 i = 0; i < cnt; i++){
-      u32 entity = entities[i];
-      
-      entity_data * ed = index_table_lookup(gd.entities, entity);
-      
-      vec3 p = get_entity_position(entity);
-      mat4 tform = mat4_translate(p.x, p.y, p.z);
-      
-      if(ed->model != 0){
-	model_data * model = index_table_lookup(gd.models, ed->model);
-
-	for(u32 j = 0; j < model->polygons.count; j++){
-	  u32 index = j + model->polygons.index;	
-	  simple_grid_render_gl(gd, index, tform, false);
-	}
-      }
-    }
-  }
-
-  u32 error = glGetError();
-  if(error > 0){
-    logd("GL ERROR: %i\n");
-  }
-  
-}
 
 void simple_grid_renderer_create(u64 id){
   graphics_context gd;
@@ -297,14 +248,6 @@ void simple_grid_renderer_create(u64 id){
   set_graphics_context(id, gd);
 }
 
-void simple_grid_measure(u64 id, vec2 * size){
-  UNUSED(id);
-  *size = shared_size;
-  graphics_context gd = get_graphics_context(id);
-  gd.render_size = *size;
-  set_graphics_context(id, gd);
-  
-}
 
 void simple_grid_mouse_over_func(u64 grid_id, double x, double y, u64 method){
   graphics_context ctx = get_graphics_context(grid_id);
@@ -315,13 +258,6 @@ void simple_grid_mouse_over_func(u64 grid_id, double x, double y, u64 method){
     on_mouse_over(grid_id, x, y, 0);
     return;
   }
-}
-
-
-
-void simple_grid_initialize(u64 id){
-  define_method(id, render_control_method, (method)simple_grid_render);
-  define_method(id, measure_control_method, (method)simple_grid_measure);
 }
 
 typedef enum{
@@ -344,12 +280,14 @@ typedef struct{
 CREATE_TABLE_DECL2(simple_graphics_editor_context, u64, editor_context);
 CREATE_TABLE2(simple_graphics_editor_context, u64, editor_context);
 
+
 void simple_grid_mouse_down_func(u64 grid_id, double x, double y, u64 method){
   UNUSED(method);
   if(mouse_button_action != 1) return;
   graphics_context ctx = get_graphics_context(grid_id);
   editor_context editor = get_simple_graphics_editor_context(grid_id);
   vec2 p = graphics_context_pixel_to_screen(ctx, vec2_new(x, y));
+  p = vec2_scale(p, 1.0 / editor.zoom);
   if(editor.selection_kind == SELECTED_VERTEX){
     vertex_data * vd = index_table_lookup(ctx.vertex, editor.selected_index);
     vd->position = p;
@@ -372,7 +310,6 @@ void simple_grid_mouse_down_func(u64 grid_id, double x, double y, u64 method){
     }
   }
 }
-
 
 void simple_graphics_editor_render(u64 id){
   u64 index = 0;
@@ -553,6 +490,7 @@ static void command_entered(u64 id, char * command){
 	//logd("creating polygon.. %i %i\n", pcnt, entity->polygons.count);
 	//polygon_data * pd = index_table_lookup_sequence(ctx.polygon, entity->polygons);
       }else if(snd("vertex") && editor.selection_kind == SELECTED_POLYGON){
+	
 	vec2 p = vec2_zero;
 	char buf[20];
 	for(u32 i = 0 ; i < array_count(p.data); i++){
@@ -588,8 +526,25 @@ static void command_entered(u64 id, char * command){
 	    pd->material = get_unique_number();
 	  logd("Set color: %i", pd->material);vec4_print(p);logd("\n");	  
 	  polygon_color_set(ctx.poly_color, pd->material, p);
-	}
-	else if(snd("position")&& editor.selected_index != 0  && editor.selection_kind == SELECTED_ENTITY ){
+	}else if(snd("color") && editor.selection_kind == SELECTED_VERTEX) {
+	  u32 polygon = vertex_get_polygon(ctx, editor.selected_index);
+	  if(polygon == 0)
+	    return;
+	  vec4 p = vec4_zero;
+	  char buf[20];
+	  for(u32 i = 0 ; i < array_count(p.data); i++){
+	    if(false == copy_nth(command, 2 + i, buf, array_count(buf)))
+	      goto skip;
+	    sscanf(buf,"%f", p.data + i);
+	  }
+
+	  polygon_data * pd = index_table_lookup(ctx.polygon, polygon);
+	  if(pd->material == 0)
+	    pd->material = get_unique_number();
+	  logd("Set color: %i", pd->material);vec4_print(p);logd("\n");	  
+	  polygon_color_set(ctx.poly_color, pd->material, p);
+	  
+	}else if(snd("position")&& editor.selected_index != 0  && editor.selection_kind == SELECTED_ENTITY ){
 	  vec3 p = vec3_zero;
 	  char buf[20];
 	  for(u32 i = 0 ; i < array_count(p.data); i++){
@@ -707,9 +662,7 @@ CREATE_TABLE2(alternative_control, u64, u64);
 
 static void game_handle_key(u64 console, int key, int mods, int action){
   if(key == key_tab && action == key_press){
-    logd("Back to window..\n");
     u64 parent_id = control_pair_get_parent(console);
-    logd("Window: %i\n", parent_id);
     control_pair * p = add_control(parent_id, console);
     p->child_id = get_alternative_control(console);
     u64 keybuf[10];
@@ -736,11 +689,9 @@ static void console_handle_key(u64 console, int key, int mods, int action){
     return;
   
   if(key == key_tab && action == key_press){
-    logd("Back to game..\n");
     u64 control = get_simple_graphics_control(console);
     u64 parent_id = control_pair_get_parent(control);
     graphics_context ctx = get_graphics_context(control);    
-    logd("Window: %i\n", parent_id);
     control_pair * p = add_control(parent_id, control);
     p->child_id = get_alternative_control(control);
     set_focused_element(parent_id, p->child_id);
@@ -748,7 +699,7 @@ static void console_handle_key(u64 console, int key, int mods, int action){
     return;
   }
   
-  logd("%i %i %i\n", console, key, mods);
+  //logd("%i %i %i\n", console, key, mods);
   u64 histcnt = get_console_history_cnt(console);
   u64 history[histcnt + 1];
   u64 history_cnt = get_console_history(console, history, array_count(history));
@@ -785,6 +736,73 @@ static void console_handle_key(u64 console, int key, int mods, int action){
   CALL_BASE_METHOD(console, key_handler_method, key, mods, action);
 }
 
+
+void simple_grid_measure(u64 id, vec2 * size){
+  UNUSED(id);
+  *size = shared_size;
+  graphics_context gd = get_graphics_context(id);
+  gd.render_size = *size;
+  set_graphics_context(id, gd);  
+}
+
+void simple_grid_render(u64 id){
+
+  graphics_context gd = get_graphics_context(id);
+  {
+    u64 cnt = 0;
+    u32 * items = index_table_all(gd.polygons_to_delete, &cnt);
+    if(cnt > 0){
+      loaded_polygon_data loaded;
+      for(u64 i = 0; i < cnt; i++){
+	if(loaded_polygon_try_get(gd.gpu_poly, items[i], &loaded)){
+	  u32 ref = loaded.gl_ref;
+	  glDeleteBuffers(1, &ref);
+	  loaded_polygon_unset(gd.gpu_poly, items[i]);
+	}
+      }
+      index_table_clear(gd.polygons_to_delete);
+    }
+  }
+  
+  u32 entities[10];
+  bool unused[10];
+  u64 idx = 0;
+  u64 cnt = 0;
+  while(0 != (cnt = active_entities_iter_all(gd.active_entities, entities,unused, array_count(unused), &idx))){
+    for(u64 i = 0; i < cnt; i++){
+      u32 entity = entities[i];
+      
+      entity_data * ed = index_table_lookup(gd.entities, entity);
+      
+      vec3 p = get_entity_position(entity);
+      mat4 tform = mat4_translate(p.x, p.y, p.z);
+      
+      if(ed->model != 0){
+	model_data * model = index_table_lookup(gd.models, ed->model);
+
+	for(u32 j = 0; j < model->polygons.count; j++){
+	  u32 index = j + model->polygons.index;	
+	  simple_grid_render_gl(gd, index, tform, false);
+	}
+      }
+    }
+  }
+
+  u32 error = glGetError();
+  if(error > 0){
+    logd("GL ERROR: %i\n");
+  }  
+}
+
+void simple_grid_game_mouse_down_func(u64 grid_id, double x, double y, u64 method){
+  UNUSED(method);
+  UNUSED(grid_id);
+  if(mouse_button_action != 1) return;
+  graphics_context ctx = get_graphics_context(grid_id);
+  vec2 p = graphics_context_pixel_to_screen(ctx, vec2_new(x, y));
+  logd("Game mouse down: %f %f\n", p.x, p.y);
+}
+
 #include "console.h"
 void simple_graphics_editor_load(u64 id, u64 win_id){
   define_method(id, render_control_method, (method)simple_graphics_editor_render);
@@ -793,12 +811,13 @@ void simple_graphics_editor_load(u64 id, u64 win_id){
   define_method(id, mouse_down_method, (method) simple_grid_mouse_down_func);
   
   u64 console = intern_string("ccconsole!");
+  
   set_simple_graphics_control(console, id);
   set_focused_element(win_id, console);
   set_console_height(console, 300);
   create_console(console);
   control_pair * p = add_control(win_id, console);
-  if(p != NULL)
+   if(p != NULL)
     p->parent_id = 0;
   add_control(id, console);
   set_margin(console, (thickness){5,5,5,5});
@@ -808,9 +827,11 @@ void simple_graphics_editor_load(u64 id, u64 win_id){
   define_method(console, key_handler_method, (method) console_handle_key);
 
   u64 game = intern_string("ggame!");
-  simple_grid_initialize(game);
+  define_method(game, render_control_method, (method)simple_grid_render);
+  define_method(game, measure_control_method, (method)simple_grid_measure);
   define_method(game, key_handler_method, (method) game_handle_key);
-  
+  define_method(game, mouse_down_method, (method) simple_grid_game_mouse_down_func);
+  define_method(game, mouse_over_method, (method)simple_grid_mouse_over_func);
   set_alternative_control(id, game);
   set_alternative_control(game, id);
 
