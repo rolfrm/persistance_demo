@@ -195,8 +195,11 @@ simple_grid_shader simple_grid_shader_get(){
 }
 
 vec2 graphics_context_pixel_to_screen(const graphics_context ctx, vec2 pixel_coords){
+  ASSERT(fabs(ctx.render_size.x) >=0.001);
   vec2 v = vec2_sub(vec2_scale(vec2_div(pixel_coords, ctx.render_size), 2.0), vec2_one);
   v.y = -v.y;
+
+  
   return v;
 }
 
@@ -239,13 +242,6 @@ void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 came
     glDrawArrays(GL_POINTS, 0, loaded.count);
   }
   glDisableVertexAttribArray(shader.vertex_loc);
-}
-
-
-void simple_grid_renderer_create(u64 id){
-  graphics_context gd;
-  graphics_context_load(&gd);
-  set_graphics_context(id, gd);
 }
 
 
@@ -662,8 +658,9 @@ CREATE_TABLE2(alternative_control, u64, u64);
 
 static void game_handle_key(u64 console, int key, int mods, int action){
   if(key == key_tab && action == key_press){
+
     u64 parent_id = control_pair_get_parent(console);
-    control_pair * p = add_control(parent_id, console);
+    control_pair * p = gui_get_control(parent_id, console);
     p->child_id = get_alternative_control(console);
     u64 keybuf[10];
     u64 valuebuf[10];
@@ -691,11 +688,9 @@ static void console_handle_key(u64 console, int key, int mods, int action){
   if(key == key_tab && action == key_press){
     u64 control = get_simple_graphics_control(console);
     u64 parent_id = control_pair_get_parent(control);
-    graphics_context ctx = get_graphics_context(control);    
     control_pair * p = add_control(parent_id, control);
     p->child_id = get_alternative_control(control);
     set_focused_element(parent_id, p->child_id);
-    set_graphics_context(p->child_id, ctx);
     return;
   }
   
@@ -745,9 +740,27 @@ void simple_grid_measure(u64 id, vec2 * size){
   set_graphics_context(id, gd);  
 }
 
-void simple_grid_render(u64 id){
+typedef struct {
+  u32 selected_entity;
+  vec2 offset;
+  bool mouse_state;
+  vec2 last_mouse_position;
+}game_data;
 
-  graphics_context gd = get_graphics_context(id);
+CREATE_TABLE_DECL2(entity_target, u64, vec2);
+CREATE_TABLE2(entity_target, u64, vec2);
+CREATE_TABLE_DECL2(simple_game_data, u64, game_data);
+CREATE_TABLE2(simple_game_data, u64, game_data);
+CREATE_TABLE_DECL2(game_window, u64, u64);
+CREATE_TABLE2(game_window, u64, u64);
+
+
+void simple_grid_render(u64 id){
+  game_data _gd = get_simple_game_data(id);
+  vec2 offset = _gd.offset;
+  //game_data _gd = get_simple_game_data(id);
+  //vec2_print(_gd.offset);logd("\n");
+  graphics_context gd = get_graphics_context(get_alternative_control(id));
   {
     u64 cnt = 0;
     u32 * items = index_table_all(gd.polygons_to_delete, &cnt);
@@ -775,7 +788,7 @@ void simple_grid_render(u64 id){
       entity_data * ed = index_table_lookup(gd.entities, entity);
       
       vec3 p = get_entity_position(entity);
-      mat4 tform = mat4_translate(p.x, p.y, p.z);
+      mat4 tform = mat4_translate(p.x - offset.x, p.y - offset.y, p.z);
       
       if(ed->model != 0){
 	model_data * model = index_table_lookup(gd.models, ed->model);
@@ -794,13 +807,84 @@ void simple_grid_render(u64 id){
   }  
 }
 
+void simple_grid_game_mouse_over_func(u64 grid_id, double x, double y, u64 method){
+  u64 ctl = get_alternative_control(grid_id);
+  graphics_context ctx = get_graphics_context(ctl);
+  
+  if(method == 0){
+    {
+      vec2 p = graphics_context_pixel_to_screen(ctx, vec2_new(x, y));
+      game_data gd = get_simple_game_data(grid_id);
+      if(gd.mouse_state){
+	vec2 lastp = ctx.pointer_position;
+	vec2 d = vec2_sub(p, graphics_context_pixel_to_screen(ctx, lastp));
+	gd.offset = vec2_add(d, gd.offset);
+      }
+      
+      gd.last_mouse_position = p;
+      set_simple_game_data(grid_id, gd);
+      ctx.pointer_position = vec2_new(x, y);
+      set_graphics_context(ctl, ctx);
+      return;
+    }
+  }
+  ctx.pointer_position = vec2_new(x, y);
+  set_graphics_context(ctl, ctx);
+  if(method != 0){
+    auto on_mouse_over = get_method(grid_id, method);
+    on_mouse_over(grid_id, x, y, 0);
+    return;
+  }
+}
+
+
 void simple_grid_game_mouse_down_func(u64 grid_id, double x, double y, u64 method){
   UNUSED(method);
   UNUSED(grid_id);
-  if(mouse_button_action != 1) return;
-  graphics_context ctx = get_graphics_context(grid_id);
+  u64 ctl = get_alternative_control(grid_id);
+  //if(mouse_button_action != 1) return;
+  graphics_context ctx = get_graphics_context(ctl);
+  game_data gd = get_simple_game_data(grid_id);
   vec2 p = graphics_context_pixel_to_screen(ctx, vec2_new(x, y));
-  logd("Game mouse down: %f %f\n", p.x, p.y);
+  if(mouse_button_button == mouse_button_right && mouse_button_action != mouse_button_repeat){
+    if(gd.mouse_state){
+      vec2 lastp = gd.last_mouse_position;
+      vec2 d = vec2_sub(p, lastp);
+      gd.offset = vec2_add(d, gd.offset);
+    }
+    gd.last_mouse_position = p;
+    
+    gd.mouse_state = mouse_button_action == mouse_button_press;
+    u64 win = get_game_window(grid_id);
+    if(gd.mouse_state){
+      gui_acquire_mouse_capture(win, grid_id);
+      gui_set_cursor_mode(win, gui_window_cursor_disabled);
+    }else{
+      gui_release_mouse_capture(win, grid_id);
+      gui_set_cursor_mode(win, gui_window_cursor_normal);
+    }
+    set_simple_game_data(grid_id, gd);
+    return;
+  }
+  else if(mouse_button_button == mouse_button_left && mouse_button_action == mouse_button_press)
+  {
+    u32 entities[10];
+    bool unused[10];
+    u64 idx = 0;
+    u64 cnt = 0;
+    while(0 != (cnt = active_entities_iter_all(ctx.active_entities, entities,unused, array_count(unused), &idx))){
+      
+    }
+  }
+}
+
+void simple_grid_game_measure(u64 id, vec2 * size){
+  UNUSED(id);
+  *size = shared_size;
+  u64 ctl = get_alternative_control(id);
+  graphics_context gd = get_graphics_context(ctl);
+  gd.render_size = *size;
+  set_graphics_context(ctl, gd);  
 }
 
 #include "console.h"
@@ -809,16 +893,18 @@ void simple_graphics_editor_load(u64 id, u64 win_id){
   define_method(id, measure_control_method, (method)simple_grid_measure);
   define_method(id, mouse_over_method, (method)simple_grid_mouse_over_func);
   define_method(id, mouse_down_method, (method) simple_grid_mouse_down_func);
+
+  graphics_context gd;
+  graphics_context_load(&gd);
+  
+  set_graphics_context(id, gd);
   
   u64 console = intern_string("ccconsole!");
   
   set_simple_graphics_control(console, id);
-  set_focused_element(win_id, console);
+  
   set_console_height(console, 300);
   create_console(console);
-  control_pair * p = add_control(win_id, console);
-   if(p != NULL)
-    p->parent_id = 0;
   add_control(id, console);
   set_margin(console, (thickness){5,5,5,5});
   set_vertical_alignment(console, VALIGN_BOTTOM);
@@ -828,12 +914,18 @@ void simple_graphics_editor_load(u64 id, u64 win_id){
 
   u64 game = intern_string("ggame!");
   define_method(game, render_control_method, (method)simple_grid_render);
-  define_method(game, measure_control_method, (method)simple_grid_measure);
+  define_method(game, measure_control_method, (method)simple_grid_game_measure);
   define_method(game, key_handler_method, (method) game_handle_key);
   define_method(game, mouse_down_method, (method) simple_grid_game_mouse_down_func);
-  define_method(game, mouse_over_method, (method)simple_grid_mouse_over_func);
+  define_method(game, mouse_over_method, (method)simple_grid_game_mouse_over_func);
   set_alternative_control(id, game);
   set_alternative_control(game, id);
+  set_game_window(game, win_id);
+  
+  if(gui_get_control(win_id, id) == NULL  && gui_get_control(win_id, game) == NULL){
+    add_control(win_id, id);
+    set_focused_element(win_id, console);
+  }
 
   
   if(false && once(console)){
@@ -870,9 +962,13 @@ void simple_graphics_editor_load(u64 id, u64 win_id){
 
 
 bool simple_graphics_editor_test(){
+  
   u64 item = get_unique_number();
   u64 win_id = intern_string("board");
-  simple_grid_renderer_create(item);
+  graphics_context gd;
+  graphics_context_load(&gd);
+  set_graphics_context(item, gd);
+  
   simple_graphics_editor_load(item, win_id);
   u64 console_id = 0;
   {

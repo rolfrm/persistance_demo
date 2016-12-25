@@ -601,12 +601,12 @@ bool index_table_test(){
   //define_method(voxel_board, measure_control_method, (method)measure_voxel_grid);
   u64 win_id = intern_string("voxel window");
   //simple_grid_initialize(voxel_board);
-  simple_grid_renderer_create(voxel_board);
+  //simple_grid_renderer_create(voxel_board);
   simple_graphics_editor_load(voxel_board, win_id);
 
   set_color(win_id, vec3_new(1, 1, 1));
   make_window(win_id); 
-  add_control(win_id, voxel_board);
+  //add_control(win_id, voxel_board);
   auto method = get_method(win_id, render_control_method);
   double i = 0;
   {

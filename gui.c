@@ -49,7 +49,13 @@ u64 stack_panel_class;
 u64 rectangle_class;
 u64 textline_class;
 __thread bool mouse_button_action;
-
+__thread u32 mouse_button_button;
+const u32 mouse_button_left = 0;
+const u32 mouse_button_right = 1;
+const u32 mouse_button_middle = 2;
+const u32 mouse_button_press = 1;
+const u32 mouse_button_release = 0;
+const u32 mouse_button_repeat = 2;
 u64 get_window(GLFWwindow * glwindow){  
   for(u32 i = 0; i < windows.cnt; i++){
     if(windows.glfw_window[i] == glwindow)
@@ -78,10 +84,28 @@ void window_size_callback(GLFWwindow* glwindow, int width, int height)
   w->height = height;
 }
 
+CREATE_TABLE_DECL2(window_mouse_capture, u64, u64);
+CREATE_TABLE_NP(window_mouse_capture, u64, u64);
+void gui_acquire_mouse_capture(u64 window, u64 control){
+  u64 capt = 0;
+  ASSERT(!try_get_window_mouse_capture(window, &capt));
+  set_window_mouse_capture(window, control);
+}
+
+void gui_release_mouse_capture(u64 window, u64 control){
+  u64 capt = 0;
+  ASSERT(try_get_window_mouse_capture(window, &capt));
+  ASSERT(capt == control);
+  unset_window_mouse_capture(window);
+}
+
 void cursor_pos_callback(GLFWwindow * glwindow, double x, double y){
   u64 win_id = get_window(glwindow);
   window * win = get_ref_window_state(win_id);
+  u64 capture = 0;
   auto on_mouse_over = get_method(win_id, mouse_over_method);
+  
+  
   clear_is_mouse_over();
   
   GLFWwindow * glfwWin = find_glfw_window(win_id);
@@ -90,6 +114,14 @@ void cursor_pos_callback(GLFWwindow * glwindow, double x, double y){
   window_size = vec2_new(win->width, win->height);
   shared_offset = vec2_new(margin.left, margin.up);
   shared_size = vec2_new(win->width - margin.left - margin.right, win->height - margin.up - margin.down);
+
+  if(try_get_window_mouse_capture(win_id, &capture)){
+    auto on_mouse_over = get_method(capture, mouse_over_method);
+    if(on_mouse_over != NULL){
+      on_mouse_over(capture, x, y, 0);
+      return;
+    }
+  }
   if(on_mouse_over != NULL)
     on_mouse_over(win_id, x, y, 0);
 }
@@ -97,10 +129,11 @@ void cursor_pos_callback(GLFWwindow * glwindow, double x, double y){
 void mouse_button_callback(GLFWwindow * glwindow, int button, int action, int mods){
   UNUSED(mods);
   mouse_button_action = action == GLFW_PRESS ? 1 : 0;
+  mouse_button_button = button;
   if(action == GLFW_REPEAT){
     mouse_button_action = 2;
   }
-  if(button == 0){
+  if(true || button == 0){
     u64 win_id = get_window(glwindow);
     window * win = get_window_ref(glwindow);
     auto on_mouse_over = get_method(win_id, mouse_over_method);
@@ -115,10 +148,21 @@ void mouse_button_callback(GLFWwindow * glwindow, int button, int action, int mo
       window_size = vec2_new(win->width, win->height);
       shared_offset = vec2_new(margin.left, margin.up);
       shared_size = vec2_new(win->width - margin.left - margin.right, win->height - margin.up - margin.down);
-      on_mouse_over(win_id, x, y, mouse_down_method);
+      u64 capture = 0;
+      if(try_get_window_mouse_capture(win_id, &capture)){
+	auto on_mouse_over = get_method(capture, mouse_over_method);
+	if(on_mouse_over != NULL){
+	  on_mouse_over(capture, x, y, mouse_down_method);
+	  return;
+	}
+      }
+      if(on_mouse_over != NULL)
+	on_mouse_over(win_id, x, y, mouse_down_method);
+      //on_mouse_over(win_id, x, y, mouse_down_method);
     }
   }
 }
+
 
 void scroll_callback(GLFWwindow * glwindow, double x, double y){
   UNUSED(glwindow);UNUSED(x);
@@ -192,8 +236,11 @@ void load_window(u64 id){
   glfwSetScrollCallback(window, scroll_callback);
   glfwSetWindowCloseCallback(window, window_close_callback);
   glfwSetCharCallback(window, char_callback);
+  glfwSetInputMode(window, GLFW_STICKY_MOUSE_BUTTONS, 1);
   insert_window_state(&id, &w, 1);
 }
+
+
 
 
 GLFWwindow * find_glfw_window(u64 id){
@@ -203,6 +250,19 @@ GLFWwindow * find_glfw_window(u64 id){
       return windows.glfw_window[i];
   }
   return NULL;
+}
+
+void gui_set_mouse_position(u64 window, double x, double y){
+  GLFWwindow * win = find_glfw_window(window);
+  glfwSetCursorPos(win, x, y);
+}
+
+const u32 gui_window_cursor_hidden = GLFW_CURSOR_HIDDEN;
+const u32 gui_window_cursor_normal = GLFW_CURSOR_NORMAL;
+const u32 gui_window_cursor_disabled = GLFW_CURSOR_DISABLED;
+void gui_set_cursor_mode(u64 window, u32 mode){
+  GLFWwindow * win = find_glfw_window(window);
+  glfwSetInputMode(win, GLFW_CURSOR, mode);
 }
 
 void make_window(u64 id){

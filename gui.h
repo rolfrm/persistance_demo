@@ -59,6 +59,14 @@ extern u64 rectangle_class;
 extern u64 textline_class;
 extern __thread vec2 shared_offset, shared_size, window_size;
 extern __thread bool mouse_button_action;
+extern __thread u32 mouse_button_button;
+extern const u32 mouse_button_left;
+extern const u32 mouse_button_right;
+extern const u32 mouse_button_middle;
+extern const u32 mouse_button_press;
+extern const u32 mouse_button_release;
+extern const u32 mouse_button_repeat;
+
 void make_window(u64 id);
 
 CREATE_TABLE_DECL(margin, u64, thickness);
@@ -131,7 +139,6 @@ thickness get_margin(u64 itemid);
 
 control_pair * add_control(u64 itemid, u64 subitem);
 
-
 void measure_child_controls(u64 control, vec2 * size);
 
 void handle_mouse_over(u64 control, double x, double y, u64 method);
@@ -141,3 +148,12 @@ void init_gui();
 
 stackpanel * get_stackpanel(u64 id);
 stackpanel * find_stackpanel(u64 id);
+
+void gui_set_mouse_position(u64 window, double x, double y);
+extern const u32 gui_window_cursor_hidden;
+extern const u32 gui_window_cursor_normal;
+extern const u32 gui_window_cursor_disabled;
+void gui_set_cursor_mode(u64 window, u32 mode);
+void gui_acquire_mouse_capture(u64 window, u64 control);
+void gui_release_mouse_capture(u64 window, u64 control);
+
