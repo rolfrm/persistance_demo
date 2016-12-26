@@ -131,6 +131,10 @@ extern const int key_down;
 extern const int key_right;
 extern const int key_left;
 extern const int key_tab;
+
+extern const int mod_ctrl;
+
+
 named_item * get_named_item(const char * table, const char * name, bool create);
 u64 get_unique_number();
 

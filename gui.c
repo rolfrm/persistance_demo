@@ -999,10 +999,10 @@ const int key_space = 32;
 const int key_release = 0;
 const int key_press = 1;
 const int key_repeat = 2;
-const int mod_ctrl= 2;
 const int key_up = 265;
 const int key_down = 264;
 const int key_right = 262;
 const int key_left = 263;
 const int key_tab = 258;
 
+const int mod_ctrl = 2;
