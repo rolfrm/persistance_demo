@@ -227,7 +227,9 @@ void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 came
 
   glBindBuffer(GL_ARRAY_BUFFER, loaded.gl_ref);  
   simple_grid_shader shader = simple_grid_shader_get();
-  
+  glFrontFace(GL_CW);
+  glCullFace(GL_BACK);
+  glEnable(GL_CULL_FACE);
   vec4 color = vec4_zero;
   polygon_color_try_get(ctx.poly_color, pd->material, &color);
   glUseProgram(shader.shader);
@@ -242,6 +244,7 @@ void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 came
     glDrawArrays(GL_POINTS, 0, loaded.count);
   }
   glDisableVertexAttribArray(shader.vertex_loc);
+  glDisable(GL_CULL_FACE);
 }
 
 
@@ -866,6 +869,7 @@ void simple_grid_game_mouse_down_func(u64 grid_id, double x, double y, u64 metho
     set_simple_game_data(grid_id, gd);
     return;
   }
+  
   else if(mouse_button_button == mouse_button_left && mouse_button_action == mouse_button_press)
   {
     u32 entities[10];
@@ -873,7 +877,53 @@ void simple_grid_game_mouse_down_func(u64 grid_id, double x, double y, u64 metho
     u64 idx = 0;
     u64 cnt = 0;
     while(0 != (cnt = active_entities_iter_all(ctx.active_entities, entities,unused, array_count(unused), &idx))){
-      
+      for(u64 i = 0; i < cnt; i++){
+	entity_data * ed = index_table_lookup(ctx.entities, entities[i]);
+	vec3 position = ed->position;
+	UNUSED(position);
+	if(ed == NULL)
+	  continue;
+	vec2 p2 = vec2_add(vec2_sub(p, position.xy), gd.offset);
+	model_data * md = index_table_lookup(ctx.models, ed->model);
+	if(md == NULL)
+	  continue;
+	u64 pdcnt = md->polygons.count;
+	polygon_data * pd = index_table_lookup_sequence(ctx.polygon, md->polygons);
+	if(pd == NULL) continue;
+	for(u64 j = 0; j < pdcnt; j++){
+	  u64 vcnt = pd[j].vertexes.count;
+	  vertex_data * vd = index_table_lookup_sequence(ctx.vertex, pd[j].vertexes);
+	  if(vd == NULL) continue;
+	  bool cw = true;
+	  for(u64 k = 2; k < vcnt; k++){
+	    vec2 verts[3];
+	    if(cw){
+	      verts[0] = vd[k-2].position; verts[1] = vd[k-1].position; verts[2] = vd[k].position;
+	      cw = false;
+	    }else{
+	      verts[0] = vd[k].position; verts[1] = vd[k-1].position; verts[2] = vd[k - 2].position;
+	      cw = true;
+	    }
+	    vec2 d0 = vec2_sub(verts[1], verts[0]);
+	    vec2 pn = vec2_sub(p2, verts[0]);
+	    vec2 n2 = vec2_new(pn.y, -pn.x);
+	    float dp0 = vec2_mul_inner(n2, d0);
+	    
+	    d0 = vec2_sub(verts[2], verts[1]);
+	    pn = vec2_sub(p2, verts[1]);
+	    n2 = vec2_new(pn.y, -pn.x);
+	    float dp1 = vec2_mul_inner(n2, d0);
+	    
+	    d0 = vec2_sub(verts[0], verts[2]);
+	    pn = vec2_sub(p2, verts[2]);
+	    n2 = vec2_new(pn.y, -pn.x);
+	    float dp2 = vec2_mul_inner(n2, d0);
+	    if(dp0 < 0 && dp1 < 0 && dp2 < 0){
+	      logd("HIT:%i\n", k);
+	    }
+	  }
+	}
+      }
     }
   }
 }
