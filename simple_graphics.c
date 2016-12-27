@@ -810,21 +810,156 @@ void simple_grid_render(u64 id){
     for(u64 i = 0; i < cnt; i++){
       u64 entity = entities[i];
       vec2 target;
+      entity_data * ed = index_table_lookup(gd.entities, entity);
+      if(ed == NULL)
+	continue;
       if(try_get_entity_target(entity, &target)){
-	entity_data * ed = index_table_lookup(gd.entities, entity);
 	vec2 d = vec2_sub(target, ed->position.xy);
-	vec2_print(d);logd("%i \n", entity);
 	float l = vec2_len(d);
-	if(l <= 0.1){
+	if(l <= 0.01){
 	  unset_entity_target(entity);
 	}else{
-	  vec2 p2 = vec2_add(ed->position.xy, vec2_scale(d, 0.1 / l));
+	  vec2 p2 = vec2_add(ed->position.xy, vec2_scale(d, 0.01 / l));
 	  ed->position.x = p2.x;
 	  ed->position.y = p2.y;
 	}
       }
+      
+      if(ed->model == 0) continue;      
+      model_data * md = index_table_lookup(gd.models, ed->model);
+      u64 pdcnt = md->polygons.count;
+      polygon_data * pd = index_table_lookup_sequence(gd.polygon, md->polygons);
+
+      if(pd == NULL) continue;
+      
+      vec3 position = ed->position;
+      
+      u64 idx2 = 0;
+      u32 entities2[10];
+      bool unused[10];
+      u64 cnt2 = 0;
+
+      while(0 != (cnt2 = active_entities_iter_all(gd.active_entities, entities2, unused, array_count(unused), &idx2))){
+	for(u64 j = 0; j < cnt2; j++){
+	  entity_data * ed2 = index_table_lookup(gd.entities, entities2[j]);
+	  if(ed2 == NULL)
+	    continue;
+	  if(ed == ed2) continue;
+	  vec3 position2 = ed2->position;
+	  model_data * md2 = index_table_lookup(gd.models, ed2->model);
+	  u64 pd2cnt = md2->polygons.count;
+	  polygon_data * pd2 = index_table_lookup_sequence(gd.polygon, md2->polygons);
+	  if(pd2 == NULL) continue;
+	  for(u32 i = 0; i < pdcnt; i++){
+	    for(u32 j = 0; j < pd2cnt; j++){
+	      if(pd + i == pd2 + j) continue;
+	      u64 vcnt1 = pd[i].vertexes.count;
+	      u64 vcnt2 = pd2[j].vertexes.count;
+	      vertex_data * vd1 = index_table_lookup_sequence(gd.vertex, pd[i].vertexes);
+	      vertex_data * vd2 = index_table_lookup_sequence(gd.vertex, pd2[j].vertexes);
+	      if(vd1 == NULL || vd2 == NULL) continue;
+	      bool cw1 = true;
+	      vec3 offset = vec3_sub(position, position2);
+	      for(u64 k1 = 2; k1 < vcnt1; k1++){
+		vec2 verts1[3];
+		if(cw1){
+		  verts1[0] = vd1[k1 - 2].position;
+		  verts1[1] = vd1[k1 - 1].position;
+		  verts1[2] = vd1[k1].position;
+		  cw1 = false;
+		}else{
+		  verts1[0] = vd1[k1].position;
+		  verts1[1] = vd1[k1 - 1].position;
+		  verts1[2] = vd1[k1 - 2].position;
+		  cw1 = true;
+		}
+		
+		for(u32 kk = 0; kk < 3; kk++){
+		  verts1[kk] = vec2_add(verts1[kk], offset.xy);
+		  //verts1[kk] = vec2_normalize(vec2_new(verts1[kk].y, -verts1[kk].x));
+		}
+		
+		bool cw2 = true;
+		for(u64 k2 = 2; k2 < vcnt2; k2++){
+		  vec2 verts2[3];
+		  if(cw2){
+		    verts2[0] = vd2[k2 - 2].position;
+		    verts2[1] = vd2[k2 - 1].position;
+		    verts2[2] = vd2[k2].position;
+		    cw2 = false;
+		  }else{
+		    verts2[0] = vd2[k2].position;
+		    verts2[1] = vd2[k2 - 1].position;
+		    verts2[2] = vd2[k2 - 2].position;
+		    cw2 = true;
+		  }
+		  // verts1 and verts2 are two triangles.
+		  //vec2_print(verts1[0]);vec2_print(verts2[0]); logd("\n");
+		  int cols = 0;
+		  for(u32 ii = 0; ii < 3; ii++){
+		    u32 ii2 = ii == 2 ? 0 : ii + 1;
+		    u32 ii3 = ii == 0 ? 2 : ii - 1;
+		    vec2 a = verts1[ii];
+		    vec2 b = verts1[ii2];
+		    vec2 d = vec2_normalize(vec2_sub(b, a));
+		    d = vec2_new(d.y, -d.x);
+		    vec2 e = verts1[ii3];
+		    float xe = vec2_mul_inner(d, vec2_sub(e, a));
+		    bool gotcol = false;
+		    for(u32 jj = 0; jj < 3; jj++){
+		      u32 jj2 = jj == 2 ? 0 : jj + 1;
+		      vec2 a2 = vec2_sub(verts2[jj], a);
+		      vec2 b2 = vec2_sub(verts2[jj2], a);
+		      float x = vec2_mul_inner(d, a2);
+		      float y = vec2_mul_inner(d, b2);
+		      if(x > y)
+			SWAP(x, y);
+		      if(x < xe && y > 0)
+			gotcol = true;
+		    }
+		    if(gotcol)
+		      cols += 1;
+		  }
+
+		  for(u32 ii = 0; ii < 3; ii++){
+		    u32 ii2 = ii == 2 ? 0 : ii + 1;
+		    u32 ii3 = ii == 0 ? 2 : ii - 1;
+		    vec2 a = verts2[ii];
+		    vec2 b = verts2[ii2];
+		    vec2 d = vec2_normalize(vec2_sub(b, a));
+		    d = vec2_new(d.y, -d.x);
+		    vec2 e = verts2[ii3];
+		    float xe = vec2_mul_inner(d, vec2_sub(e, a));
+		    bool gotcol = false;
+		    for(u32 jj = 0; jj < 3; jj++){
+		      u32 jj2 = jj == 2 ? 0 : jj + 1;
+		      vec2 a2 = vec2_sub(verts1[jj], a);
+		      vec2 b2 = vec2_sub(verts1[jj2], a);
+		      float x = vec2_mul_inner(d, a2);
+		      float y = vec2_mul_inner(d, b2);
+		      if(x > y)
+			SWAP(x, y);
+		      if(x < xe && y > 0){
+			gotcol = true;
+		      }
+		    }
+		    if(gotcol)
+		      cols += 1;
+		  }
+		  
+		  //logd("COLS: %i\n", cols);
+		  //if(cols == 6)
+		  //  logd("COLLISION!\n");
+		}
+	      }
+	    }
+	  }
+	}
+      }
     }
   }
+
+
   idx = 0;
   cnt = 0;
   
