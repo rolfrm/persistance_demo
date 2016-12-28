@@ -329,10 +329,7 @@ void simple_graphics_editor_render(u64 id){
   while((child_control = get_control_pair_parent(id, &index))){
     if(child_control == NULL)
       break;
-    //vec2 size = measure_sub(child_control->child_id);
-    //vec2 saved_size = shared_size;
     render_sub(child_control->child_id);
-    //shared_size = saved_size;
   }
   
   graphics_context gd = get_graphics_context(id);
@@ -941,8 +938,6 @@ void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index
 void simple_grid_render(u64 id){
   game_data _gd = get_simple_game_data(id);
   vec2 offset = _gd.offset;
-  //game_data _gd = get_simple_game_data(id);
-  //vec2_print(_gd.offset);logd("\n");
   graphics_context gd = get_graphics_context(get_alternative_control(id));
   {
     u64 cnt = 0;
@@ -962,15 +957,15 @@ void simple_grid_render(u64 id){
   u64 idx = 0;
 
   u64 count = active_entities_count(gd.active_entities);
-  logd("Active count: %i\n", count);
   u32 entities[count];
+  vec2 prevp[count];
+  bool moved[count];
   bool unused[count];
   idx = 0;
-
-
   
   active_entities_iter_all(gd.active_entities, entities, unused, count, &idx);
   for(u32 i = 0; i < count ;i ++){
+    moved[i] = false;
     u32 entity = entities[i];
     vec2 target;
     if(try_get_entity_target(entity, &target)){
@@ -981,19 +976,47 @@ void simple_grid_render(u64 id){
 	  unset_entity_target(entity);
       }else{
 	vec2 p2 = vec2_add(ed->position.xy, vec2_scale(d, 0.01 / l));
+	prevp[i] = ed->position.xy;
 	ed->position.x = p2.x;
 	ed->position.y = p2.y;
+	moved[i] = true;
       }
     }
   }
 
-  
-  index_table_clear(gd.collision_table);
-  detect_collisions(entities, count, gd, gd.collision_table);
   {
+    
+    index_table_clear(gd.collision_table);
+    detect_collisions(entities, count, gd, gd.collision_table);
+    u64 collisions = 0;
+    collision_data * cd = index_table_all(gd.collision_table, &collisions);
+    u32 e1[collisions];
+    u32 e2[collisions];
+    for(u32 i = 0; i < collisions; i++){
+      e1[i] = cd[i].entity1.entity;
+      e2[i] = cd[i].entity2.entity;
+    }
+    int keycmp32(const u32 * k1,const  u32 * k2){
+      if(*k1 > *k2)
+	return 1;
+      else if(*k1 == *k2)
+	return 0;
+      else return -1;
+    }
+
+    qsort(e1, collisions, sizeof(*e1), (void *)keycmp32);
+    qsort(e2, collisions, sizeof(*e2), (void *)keycmp32);
+    for(u32 i = 0; i < count; i++){
+      if(moved[i] == false) continue;
+      if(bsearch(entities + i, e1, collisions, sizeof(entities[i]), (void *) keycmp32)
+	 ||bsearch(entities + i, e2, collisions, sizeof(entities[i]), (void *) keycmp32)){
+	entity_data * ed = index_table_lookup(gd.entities, entities[i]);
+	ed->position.xy = prevp[i];
+      }
+
+    }
     u64 count = 0;
     index_table_all(gd.collision_table, &count);
-    logd("Collisions: %i\n", count);
   }
   idx = 0;
   u64 cnt = 0;
