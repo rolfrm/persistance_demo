@@ -57,7 +57,8 @@ void sorttable_destroy(sorttable * table);
   void Name ## _clear(Name ## _table * table);							\
   void Name ## _unset(Name ## _table * table, KeyType key);\
   ValueType * Name ## _ref_at(Name ## _table * table, u64 index);\
-  void Name ## _remove_at(Name ## _table * table, u64 * index, size_t cnt);
+  void Name ## _remove_at(Name ## _table * table, u64 * index, size_t cnt);\
+  u64 Name ## _count(Name ## _table * table);
 
 
 #define _CREATE_TABLE2(Name, KeyType, ValueType, IS_MULTI_TABLE, IS_PERSISTED)	\
@@ -261,6 +262,9 @@ void sorttable_destroy(sorttable * table);
     }									\
     void Name ## _remove_at(Name ## _table * table, u64 * index, size_t cnt){			\
       sorttable_remove_indexes(table->ptr, index, cnt);	\
+    }\
+    u64 Name ## _count(Name ## _table * table){\
+      return table->ptr->key_area->size / sizeof(KeyType) - 1; \
     }
 
 

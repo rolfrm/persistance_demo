@@ -38,6 +38,19 @@ typedef struct{
 }vertex_data;
 
 
+typedef struct{
+  u32 entity;
+  u32 model;
+  u32 polygon_offset;
+  u32 vertex_offset;
+}entity_local_data;
+
+typedef struct{
+  entity_local_data entity1;
+  entity_local_data entity2;
+}collision_data;
+
+
 void print_model_data(u32 index, index_table * models, index_table * polygon, index_table * vertex){
   model_data * m2 = index_table_lookup(models, index);
   for(u32 i = 0; i < m2->polygons.count; i++){
@@ -76,6 +89,8 @@ typedef struct{
   vec2 render_size;
   vec2 pointer_position;
   u32 pointer_index;
+  index_table * collision_table;
+
 }graphics_context;
 
 typedef u32 polygon_id;
@@ -95,6 +110,7 @@ void graphics_context_load(graphics_context * ctx){
   ctx->active_entities = active_entities_table_create("simple/active_entities");
   polygon_id p1 = polygon_create(ctx);
   ctx->pointer_index = p1;
+  ctx->collision_table = index_table_create(NULL, sizeof(collision_data));
   polygon_add_vertex2f(ctx, p1, vec2_new(0, 0));
 }
 
@@ -779,6 +795,148 @@ CREATE_TABLE2(simple_game_data, u64, game_data);
 CREATE_TABLE_DECL2(game_window, u64, u64);
 CREATE_TABLE2(game_window, u64, u64);
 
+void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index_table * result_table){
+  for(u64 i = 0; i < entitycnt; i++){
+    u64 entity = entities[i];
+    entity_data * ed = index_table_lookup(gd.entities, entity);
+    if(ed == NULL)
+      continue;
+    if(ed->model == 0) continue;      
+    model_data * md = index_table_lookup(gd.models, ed->model);
+    u64 pdcnt = md->polygons.count;
+    polygon_data * pd = index_table_lookup_sequence(gd.polygon, md->polygons);
+    
+    if(pd == NULL) continue;
+    vec3 position = ed->position;
+    
+    for(u64 j = i + 1; j < entitycnt; j++){
+      u32 entity2 = entities[j];
+      entity_data * ed2 = index_table_lookup(gd.entities, entity2);
+      if(ed2 == NULL)
+	continue;
+      if(ed == ed2) continue;
+      vec3 position2 = ed2->position;
+      model_data * md2 = index_table_lookup(gd.models, ed2->model);
+      u64 pd2cnt = md2->polygons.count;
+      polygon_data * pd2 = index_table_lookup_sequence(gd.polygon, md2->polygons);
+      if(pd2 == NULL) continue;
+      for(u32 i = 0; i < pdcnt; i++){
+	for(u32 j = 0; j < pd2cnt; j++){
+	  if(pd + i == pd2 + j) continue;
+	  u64 vcnt1 = pd[i].vertexes.count;
+	  u64 vcnt2 = pd2[j].vertexes.count;
+	  vertex_data * vd1 = index_table_lookup_sequence(gd.vertex, pd[i].vertexes);
+	  vertex_data * vd2 = index_table_lookup_sequence(gd.vertex, pd2[j].vertexes);
+	  if(vd1 == NULL || vd2 == NULL) continue;
+	  bool cw1 = true;
+	  vec3 offset = vec3_sub(position, position2);
+	  for(u64 k1 = 2; k1 < vcnt1; k1++){
+	    vec2 verts1[3];
+	    if(cw1){
+	      verts1[0] = vd1[k1 - 2].position;
+	      verts1[1] = vd1[k1 - 1].position;
+	      verts1[2] = vd1[k1].position;
+	      cw1 = false;
+	    }else{
+	      verts1[0] = vd1[k1].position;
+	      verts1[1] = vd1[k1 - 1].position;
+	      verts1[2] = vd1[k1 - 2].position;
+	      cw1 = true;
+	    }
+		
+	    for(u32 kk = 0; kk < 3; kk++)
+	      verts1[kk] = vec2_add(verts1[kk], offset.xy);
+		
+	    bool cw2 = true;
+	    for(u64 k2 = 2; k2 < vcnt2; k2++){
+	      vec2 verts2[3];
+	      if(cw2){
+		verts2[0] = vd2[k2 - 2].position;
+		verts2[1] = vd2[k2 - 1].position;
+		verts2[2] = vd2[k2].position;
+		cw2 = false;
+	      }else{
+		verts2[0] = vd2[k2].position;
+		verts2[1] = vd2[k2 - 1].position;
+		verts2[2] = vd2[k2 - 2].position;
+		cw2 = true;
+	      }
+	      // verts1 and verts2 are two triangles.
+	      int cols = 0;
+	      for(u32 ii = 0; ii < 3; ii++){
+		u32 ii2 = ii == 2 ? 0 : ii + 1;
+		u32 ii3 = ii == 0 ? 2 : ii - 1;
+		vec2 a = verts1[ii];
+		vec2 b = verts1[ii2];
+		vec2 d = vec2_normalize(vec2_sub(b, a));
+		d = vec2_new(d.y, -d.x);
+		vec2 e = verts1[ii3];
+		float xe = vec2_mul_inner(d, vec2_sub(e, a));
+		bool gotcol = false;
+		for(u32 jj = 0; jj < 3; jj++){
+		  u32 jj2 = jj == 2 ? 0 : jj + 1;
+		  vec2 a2 = vec2_sub(verts2[jj], a);
+		  vec2 b2 = vec2_sub(verts2[jj2], a);
+		  float x = vec2_mul_inner(d, a2);
+		  float y = vec2_mul_inner(d, b2);
+		  if(x > y)
+		    SWAP(x, y);
+		  if(x < xe && y > 0)
+		    gotcol = true;
+		}
+		if(gotcol)
+		  cols += 1;
+	      }
+
+	      for(u32 ii = 0; ii < 3; ii++){
+		u32 ii2 = ii == 2 ? 0 : ii + 1;
+		u32 ii3 = ii == 0 ? 2 : ii - 1;
+		vec2 a = verts2[ii];
+		vec2 b = verts2[ii2];
+		vec2 d = vec2_normalize(vec2_sub(b, a));
+		d = vec2_new(d.y, -d.x);
+		vec2 e = verts2[ii3];
+		float xe = vec2_mul_inner(d, vec2_sub(e, a));
+		bool gotcol = false;
+		for(u32 jj = 0; jj < 3; jj++){
+		  u32 jj2 = jj == 2 ? 0 : jj + 1;
+		  vec2 a2 = vec2_sub(verts1[jj], a);
+		  vec2 b2 = vec2_sub(verts1[jj2], a);
+		  float x = vec2_mul_inner(d, a2);
+		  float y = vec2_mul_inner(d, b2);
+		  if(x > y)
+		    SWAP(x, y);
+		  if(x < xe && y > 0){
+		    gotcol = true;
+		  }
+		}
+		if(gotcol)
+		  cols += 1;
+	      }
+		  
+	      if(cols == 6){
+		collision_data cd;
+		cd.entity1.entity = entity;
+		cd.entity1.model = ed->model;
+		cd.entity1.polygon_offset = md->polygons.index + i;
+		cd.entity1.vertex_offset = k1;
+		cd.entity2.entity = entity2;
+		cd.entity2.model = ed2->model;
+		cd.entity2.polygon_offset = md2->polygons.index + i;
+		cd.entity2.vertex_offset = k2;
+		u32 idx = index_table_alloc(result_table);
+		*((collision_data *)index_table_lookup(result_table, idx)) = cd;
+	      }
+	    }
+	  }
+	}
+      }
+    }
+  }
+}
+  
+
+
 
 void simple_grid_render(u64 id){
   game_data _gd = get_simple_game_data(id);
@@ -801,167 +959,44 @@ void simple_grid_render(u64 id){
       index_table_clear(gd.polygons_to_delete);
     }
   }
-  
-  u32 entities[10];
-  bool unused[10];
   u64 idx = 0;
-  u64 cnt = 0;
-  while(0 != (cnt = active_entities_iter_all(gd.active_entities, entities,unused, array_count(unused), &idx))){
-    for(u64 i = 0; i < cnt; i++){
-      u64 entity = entities[i];
-      vec2 target;
+
+  u64 count = active_entities_count(gd.active_entities);
+  logd("Active count: %i\n", count);
+  u32 entities[count];
+  bool unused[count];
+  idx = 0;
+
+
+  
+  active_entities_iter_all(gd.active_entities, entities, unused, count, &idx);
+  for(u32 i = 0; i < count ;i ++){
+    u32 entity = entities[i];
+    vec2 target;
+    if(try_get_entity_target(entity, &target)){
       entity_data * ed = index_table_lookup(gd.entities, entity);
-      if(ed == NULL)
-	continue;
-      if(try_get_entity_target(entity, &target)){
-	vec2 d = vec2_sub(target, ed->position.xy);
-	float l = vec2_len(d);
-	if(l <= 0.01){
+      vec2 d = vec2_sub(target, ed->position.xy);
+      float l = vec2_len(d);
+      if(l <= 0.01){
 	  unset_entity_target(entity);
-	}else{
-	  vec2 p2 = vec2_add(ed->position.xy, vec2_scale(d, 0.01 / l));
-	  ed->position.x = p2.x;
-	  ed->position.y = p2.y;
-	}
-      }
-      
-      if(ed->model == 0) continue;      
-      model_data * md = index_table_lookup(gd.models, ed->model);
-      u64 pdcnt = md->polygons.count;
-      polygon_data * pd = index_table_lookup_sequence(gd.polygon, md->polygons);
-
-      if(pd == NULL) continue;
-      
-      vec3 position = ed->position;
-      
-      u64 idx2 = 0;
-      u32 entities2[10];
-      bool unused[10];
-      u64 cnt2 = 0;
-
-      while(0 != (cnt2 = active_entities_iter_all(gd.active_entities, entities2, unused, array_count(unused), &idx2))){
-	for(u64 j = 0; j < cnt2; j++){
-	  entity_data * ed2 = index_table_lookup(gd.entities, entities2[j]);
-	  if(ed2 == NULL)
-	    continue;
-	  if(ed == ed2) continue;
-	  vec3 position2 = ed2->position;
-	  model_data * md2 = index_table_lookup(gd.models, ed2->model);
-	  u64 pd2cnt = md2->polygons.count;
-	  polygon_data * pd2 = index_table_lookup_sequence(gd.polygon, md2->polygons);
-	  if(pd2 == NULL) continue;
-	  for(u32 i = 0; i < pdcnt; i++){
-	    for(u32 j = 0; j < pd2cnt; j++){
-	      if(pd + i == pd2 + j) continue;
-	      u64 vcnt1 = pd[i].vertexes.count;
-	      u64 vcnt2 = pd2[j].vertexes.count;
-	      vertex_data * vd1 = index_table_lookup_sequence(gd.vertex, pd[i].vertexes);
-	      vertex_data * vd2 = index_table_lookup_sequence(gd.vertex, pd2[j].vertexes);
-	      if(vd1 == NULL || vd2 == NULL) continue;
-	      bool cw1 = true;
-	      vec3 offset = vec3_sub(position, position2);
-	      for(u64 k1 = 2; k1 < vcnt1; k1++){
-		vec2 verts1[3];
-		if(cw1){
-		  verts1[0] = vd1[k1 - 2].position;
-		  verts1[1] = vd1[k1 - 1].position;
-		  verts1[2] = vd1[k1].position;
-		  cw1 = false;
-		}else{
-		  verts1[0] = vd1[k1].position;
-		  verts1[1] = vd1[k1 - 1].position;
-		  verts1[2] = vd1[k1 - 2].position;
-		  cw1 = true;
-		}
-		
-		for(u32 kk = 0; kk < 3; kk++){
-		  verts1[kk] = vec2_add(verts1[kk], offset.xy);
-		  //verts1[kk] = vec2_normalize(vec2_new(verts1[kk].y, -verts1[kk].x));
-		}
-		
-		bool cw2 = true;
-		for(u64 k2 = 2; k2 < vcnt2; k2++){
-		  vec2 verts2[3];
-		  if(cw2){
-		    verts2[0] = vd2[k2 - 2].position;
-		    verts2[1] = vd2[k2 - 1].position;
-		    verts2[2] = vd2[k2].position;
-		    cw2 = false;
-		  }else{
-		    verts2[0] = vd2[k2].position;
-		    verts2[1] = vd2[k2 - 1].position;
-		    verts2[2] = vd2[k2 - 2].position;
-		    cw2 = true;
-		  }
-		  // verts1 and verts2 are two triangles.
-		  //vec2_print(verts1[0]);vec2_print(verts2[0]); logd("\n");
-		  int cols = 0;
-		  for(u32 ii = 0; ii < 3; ii++){
-		    u32 ii2 = ii == 2 ? 0 : ii + 1;
-		    u32 ii3 = ii == 0 ? 2 : ii - 1;
-		    vec2 a = verts1[ii];
-		    vec2 b = verts1[ii2];
-		    vec2 d = vec2_normalize(vec2_sub(b, a));
-		    d = vec2_new(d.y, -d.x);
-		    vec2 e = verts1[ii3];
-		    float xe = vec2_mul_inner(d, vec2_sub(e, a));
-		    bool gotcol = false;
-		    for(u32 jj = 0; jj < 3; jj++){
-		      u32 jj2 = jj == 2 ? 0 : jj + 1;
-		      vec2 a2 = vec2_sub(verts2[jj], a);
-		      vec2 b2 = vec2_sub(verts2[jj2], a);
-		      float x = vec2_mul_inner(d, a2);
-		      float y = vec2_mul_inner(d, b2);
-		      if(x > y)
-			SWAP(x, y);
-		      if(x < xe && y > 0)
-			gotcol = true;
-		    }
-		    if(gotcol)
-		      cols += 1;
-		  }
-
-		  for(u32 ii = 0; ii < 3; ii++){
-		    u32 ii2 = ii == 2 ? 0 : ii + 1;
-		    u32 ii3 = ii == 0 ? 2 : ii - 1;
-		    vec2 a = verts2[ii];
-		    vec2 b = verts2[ii2];
-		    vec2 d = vec2_normalize(vec2_sub(b, a));
-		    d = vec2_new(d.y, -d.x);
-		    vec2 e = verts2[ii3];
-		    float xe = vec2_mul_inner(d, vec2_sub(e, a));
-		    bool gotcol = false;
-		    for(u32 jj = 0; jj < 3; jj++){
-		      u32 jj2 = jj == 2 ? 0 : jj + 1;
-		      vec2 a2 = vec2_sub(verts1[jj], a);
-		      vec2 b2 = vec2_sub(verts1[jj2], a);
-		      float x = vec2_mul_inner(d, a2);
-		      float y = vec2_mul_inner(d, b2);
-		      if(x > y)
-			SWAP(x, y);
-		      if(x < xe && y > 0){
-			gotcol = true;
-		      }
-		    }
-		    if(gotcol)
-		      cols += 1;
-		  }
-		  
-		  //logd("COLS: %i\n", cols);
-		  //if(cols == 6)
-		  //  logd("COLLISION!\n");
-		}
-	      }
-	    }
-	  }
-	}
+      }else{
+	vec2 p2 = vec2_add(ed->position.xy, vec2_scale(d, 0.01 / l));
+	ed->position.x = p2.x;
+	ed->position.y = p2.y;
       }
     }
   }
 
-
+  
+  index_table_clear(gd.collision_table);
+  detect_collisions(entities, count, gd, gd.collision_table);
+  {
+    u64 count = 0;
+    index_table_all(gd.collision_table, &count);
+    logd("Collisions: %i\n", count);
+  }
   idx = 0;
-  cnt = 0;
+  u64 cnt = 0;
   
   while(0 != (cnt = active_entities_iter_all(gd.active_entities, entities,unused, array_count(unused), &idx))){
     for(u64 i = 0; i < cnt; i++){
@@ -1019,6 +1054,72 @@ void simple_grid_game_mouse_over_func(u64 grid_id, double x, double y, u64 metho
   }
 }
 
+void simple_game_point_collision(graphics_context ctx, vec2 loc, index_table * collisiontable){
+  ASSERT(collisiontable->element_size == sizeof(entity_local_data));
+  u32 entities[10];
+  bool unused[10];
+  u64 idx = 0;
+  u64 cnt = 0;
+  vec2 p = loc;
+  while(0 != (cnt = active_entities_iter_all(ctx.active_entities, entities,unused, array_count(unused), &idx))){
+    for(u64 i = 0; i < cnt; i++){
+      entity_data * ed = index_table_lookup(ctx.entities, entities[i]);
+      vec3 position = ed->position;
+      UNUSED(position);
+      if(ed == NULL)
+	continue;
+      vec2 p2 = vec2_sub(p, position.xy);
+      model_data * md = index_table_lookup(ctx.models, ed->model);
+      if(md == NULL)
+	continue;
+      u64 pdcnt = md->polygons.count;
+      polygon_data * pd = index_table_lookup_sequence(ctx.polygon, md->polygons);
+      if(pd == NULL) continue;
+      for(u64 j = 0; j < pdcnt; j++){
+	u64 vcnt = pd[j].vertexes.count;
+	vertex_data * vd = index_table_lookup_sequence(ctx.vertex, pd[j].vertexes);
+	if(vd == NULL) continue;
+	bool cw = true;
+	for(u64 k = 2; k < vcnt; k++){
+	  vec2 verts[3];
+	  if(cw){
+	    verts[0] = vd[k-2].position;
+	    verts[1] = vd[k-1].position;
+	    verts[2] = vd[k].position;
+	    cw = false;
+	  }else{
+	    verts[0] = vd[k].position;
+	    verts[1] = vd[k-1].position;
+	    verts[2] = vd[k - 2].position;
+	    cw = true;
+	  }
+	  vec2 d0 = vec2_sub(verts[1], verts[0]);
+	  vec2 pn = vec2_sub(p2, verts[0]);
+	  vec2 n2 = vec2_new(pn.y, -pn.x);
+	  float dp0 = vec2_mul_inner(n2, d0);
+	  
+	  d0 = vec2_sub(verts[2], verts[1]);
+	  pn = vec2_sub(p2, verts[1]);
+	  n2 = vec2_new(pn.y, -pn.x);
+	  float dp1 = vec2_mul_inner(n2, d0);
+	  
+	  d0 = vec2_sub(verts[0], verts[2]);
+	  pn = vec2_sub(p2, verts[2]);
+	  n2 = vec2_new(pn.y, -pn.x);
+	  float dp2 = vec2_mul_inner(n2, d0);
+	  if(dp0 < 0 && dp1 < 0 && dp2 < 0){
+	    u32 idx = index_table_alloc(collisiontable);
+	    entity_local_data * d =index_table_lookup(collisiontable, idx);
+	    d->entity = entities[i];
+	    d->model = ed->model;
+	    d->polygon_offset = j;
+	    d->vertex_offset = k;
+	  }
+	}
+      }
+    }
+  }
+}
 
 void simple_grid_game_mouse_down_func(u64 grid_id, double x, double y, u64 method){
   UNUSED(method);
@@ -1051,70 +1152,22 @@ void simple_grid_game_mouse_down_func(u64 grid_id, double x, double y, u64 metho
   
   else if(mouse_button_button == mouse_button_left && mouse_button_action == mouse_button_press)
   {
-    u32 entities[10];
-    bool unused[10];
-    u64 idx = 0;
+    static index_table * tab = NULL;
+    if(tab == NULL) tab = index_table_create(NULL, sizeof(entity_local_data));
+    index_table_clear(tab);
+    simple_game_point_collision(ctx, vec2_add(p, gd.offset), tab);
     u64 cnt = 0;
-    p = vec2_add(p, gd.offset);
-    while(0 != (cnt = active_entities_iter_all(ctx.active_entities, entities,unused, array_count(unused), &idx))){
-      for(u64 i = 0; i < cnt; i++){
-	entity_data * ed = index_table_lookup(ctx.entities, entities[i]);
-	vec3 position = ed->position;
-	UNUSED(position);
-	if(ed == NULL)
-	  continue;
-	vec2 p2 = vec2_sub(p, position.xy);
-	model_data * md = index_table_lookup(ctx.models, ed->model);
-	if(md == NULL)
-	  continue;
-	u64 pdcnt = md->polygons.count;
-	polygon_data * pd = index_table_lookup_sequence(ctx.polygon, md->polygons);
-	if(pd == NULL) continue;
-	for(u64 j = 0; j < pdcnt; j++){
-	  u64 vcnt = pd[j].vertexes.count;
-	  vertex_data * vd = index_table_lookup_sequence(ctx.vertex, pd[j].vertexes);
-	  if(vd == NULL) continue;
-	  bool cw = true;
-	  for(u64 k = 2; k < vcnt; k++){
-	    vec2 verts[3];
-	    if(cw){
-	      verts[0] = vd[k-2].position;
-	      verts[1] = vd[k-1].position;
-	      verts[2] = vd[k].position;
-	      cw = false;
-	    }else{
-	      verts[0] = vd[k].position;
-	      verts[1] = vd[k-1].position;
-	      verts[2] = vd[k - 2].position;
-	      cw = true;
-	    }
-	    vec2 d0 = vec2_sub(verts[1], verts[0]);
-	    vec2 pn = vec2_sub(p2, verts[0]);
-	    vec2 n2 = vec2_new(pn.y, -pn.x);
-	    float dp0 = vec2_mul_inner(n2, d0);
-	    
-	    d0 = vec2_sub(verts[2], verts[1]);
-	    pn = vec2_sub(p2, verts[1]);
-	    n2 = vec2_new(pn.y, -pn.x);
-	    float dp1 = vec2_mul_inner(n2, d0);
-	    
-	    d0 = vec2_sub(verts[0], verts[2]);
-	    pn = vec2_sub(p2, verts[2]);
-	    n2 = vec2_new(pn.y, -pn.x);
-	    float dp2 = vec2_mul_inner(n2, d0);
-	    if(dp0 < 0 && dp1 < 0 && dp2 < 0){
-	      gd.selected_entity = entities[i];
-	      logd("HIT:%i\n", k);
-	      set_simple_game_data(grid_id, gd);
-	      return;
-	    }
-	  }
-	}
-      }
+    entity_local_data * all = index_table_all(tab, &cnt);
+    if(cnt > 0){
+
+      gd.selected_entity = all->entity;
+      logd("HIT:%i %i %i %i\n", all->entity, all->model, all->polygon_offset, all->vertex_offset);
+      set_simple_game_data(grid_id, gd);
+    }else{
+      // Assumed we did not hit something.
+      if(gd.selected_entity != 0)
+	set_entity_target(gd.selected_entity, vec2_add(p, gd.offset));
     }
-    // Assumed we did not hit something.
-    if(gd.selected_entity != 0)
-      set_entity_target(gd.selected_entity, p);
   }
 }
 
