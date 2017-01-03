@@ -30,13 +30,13 @@ typedef struct{
 typedef struct{
   index_table_sequence vertexes;
   u32 material;
+  bool physical;
 }polygon_data;
 
 typedef struct{
   u32 color;
   vec2 position;
 }vertex_data;
-
 
 typedef struct{
   u32 entity;
@@ -49,7 +49,6 @@ typedef struct{
   entity_local_data entity1;
   entity_local_data entity2;
 }collision_data;
-
 
 void print_model_data(u32 index, index_table * models, index_table * polygon, index_table * vertex){
   model_data * m2 = index_table_lookup(models, index);
@@ -379,6 +378,10 @@ void simple_graphics_editor_render(u64 id){
   }
 
   editor_tform = mat4_mul(mat4_scaled(ed.zoom, ed.zoom, ed.zoom), editor_tform);
+
+  mat4 cammat = mat4_identity();
+  cammat.m22 = 0;
+  cammat.m21 = 1;
   
   while(0 != (cnt = active_entities_iter_all(gd.active_entities, entities,unused, array_count(unused), &idx))){
     for(u64 i = 0; i < cnt; i++){
@@ -386,7 +389,7 @@ void simple_graphics_editor_render(u64 id){
       entity_data * ed = index_table_lookup(gd.entities, entity);
       vec3 p = ed->position;
       mat4 tform = mat4_translate(p.x, p.y, p.z);
-      tform = mat4_mul(editor_tform, tform);
+      tform = mat4_mul(cammat, mat4_mul(editor_tform, tform));
       if(ed->model != 0){
 	model_data * model = index_table_lookup(gd.models, ed->model);
 	for(u32 j = 0; j < model->polygons.count; j++){
@@ -570,6 +573,15 @@ static void command_entered(u64 id, char * command){
 	  entity_data * ed = index_table_lookup(ctx.entities, editor.selected_index);
 	  if(ed != NULL){
 	    ed->position = p;
+	  }
+	}
+	if(snd("flat") && editor.selected_index != 0  && editor.selection_kind == SELECTED_POLYGON){
+	  char buf[10];
+	  if(copy_nth(command, 2, buf, array_count(buf))){
+	    int state = 0;
+	    sscanf(buf, "%i", &state);
+	    polygon_data * pd = index_table_lookup(ctx.polygon, editor.selected_index);
+	    pd->physical = state ? 1 : 0;
 	  }
 	}
 
@@ -931,9 +943,6 @@ void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index
     }
   }
 }
-  
-
-
 
 void simple_grid_render(u64 id){
   game_data _gd = get_simple_game_data(id);
