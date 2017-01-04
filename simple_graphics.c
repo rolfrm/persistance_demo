@@ -576,12 +576,15 @@ static void command_entered(u64 id, char * command){
 	  }
 	}
 	if(snd("flat") && editor.selected_index != 0  && editor.selection_kind == SELECTED_POLYGON){
+
 	  char buf[10];
 	  if(copy_nth(command, 2, buf, array_count(buf))){
 	    int state = 0;
 	    sscanf(buf, "%i", &state);
+
 	    polygon_data * pd = index_table_lookup(ctx.polygon, editor.selected_index);
 	    pd->physical = state ? 1 : 0;
+	    logd("FLAT: %i\n", pd->physical);
 	  }
 	}
 
@@ -815,7 +818,7 @@ void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index
     u64 pdcnt = md->polygons.count;
     polygon_data * pd = index_table_lookup_sequence(gd.polygon, md->polygons);
     
-    if(pd == NULL) continue;
+    if(pd == NULL || pd->physical == false) continue;
     vec3 position = ed->position;
     
     for(u64 j = i + 1; j < entitycnt; j++){
@@ -830,7 +833,9 @@ void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index
       polygon_data * pd2 = index_table_lookup_sequence(gd.polygon, md2->polygons);
       if(pd2 == NULL) continue;
       for(u32 i = 0; i < pdcnt; i++){
+	if(pd[i].physical == false) continue;
 	for(u32 j = 0; j < pd2cnt; j++){
+	  if(pd2[j].physical == false) continue;
 	  if(pd + i == pd2 + j) continue;
 	  u64 vcnt1 = pd[i].vertexes.count;
 	  u64 vcnt2 = pd2[j].vertexes.count;
