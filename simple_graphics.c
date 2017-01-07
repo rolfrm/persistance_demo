@@ -30,7 +30,7 @@ typedef struct{
 typedef struct{
   index_table_sequence vertexes;
   u32 material;
-  bool physical;
+  f32 physical_height;
 }polygon_data;
 
 typedef struct{
@@ -471,8 +471,9 @@ static void command_entered(u64 id, char * command){
 	  model_data * md = index_table_lookup(ctx.models, model_id);
 	  for(u32 j = 0; j < md->polygons.count; j++){
 	    u32 polygon_id = j + md->polygons.index;
-	    logd("Polygon: %i\n", polygon_id);
 	    polygon_data * pd = index_table_lookup(ctx.polygon, polygon_id);
+	    if(pd == NULL) continue;
+	    logd("Polygon: %i  Height:%f\n", polygon_id, pd->physical_height);
 	    for(u32 i = 0; i < pd->vertexes.count; i++){
 	      vertex_data * vd = index_table_lookup(ctx.vertex, pd->vertexes.index + i);
 	      logd("Vertex %i: ", pd->vertexes.index + i);vec2_print(vd->position);logd("\n");
@@ -579,12 +580,12 @@ static void command_entered(u64 id, char * command){
 
 	  char buf[10];
 	  if(copy_nth(command, 2, buf, array_count(buf))){
-	    int state = 0;
-	    sscanf(buf, "%i", &state);
+	    float state = 0;
+	    sscanf(buf, "%f", &state);
 
 	    polygon_data * pd = index_table_lookup(ctx.polygon, editor.selected_index);
-	    pd->physical = state ? 1 : 0;
-	    logd("FLAT: %i\n", pd->physical);
+	    pd->physical_height = state;
+	    logd("FLAT: %f\n", pd->physical_height);
 	  }
 	}
 
@@ -800,8 +801,8 @@ typedef struct {
   vec2 last_mouse_position;
 }game_data;
 
-CREATE_TABLE_DECL2(entity_target, u32, vec2);
-CREATE_TABLE2(entity_target, u32, vec2);
+CREATE_TABLE_DECL2(entity_target, u32, vec3);
+CREATE_TABLE2(entity_target, u32, vec3);
 CREATE_TABLE_DECL2(simple_game_data, u64, game_data);
 CREATE_TABLE2(simple_game_data, u64, game_data);
 CREATE_TABLE_DECL2(game_window, u64, u64);
@@ -818,7 +819,7 @@ void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index
     u64 pdcnt = md->polygons.count;
     polygon_data * pd = index_table_lookup_sequence(gd.polygon, md->polygons);
     
-    if(pd == NULL || pd->physical == false) continue;
+    if(pd == NULL || pd->physical_height == 0.0f) continue;
     vec3 position = ed->position;
     
     for(u64 j = i + 1; j < entitycnt; j++){
@@ -833,9 +834,9 @@ void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index
       polygon_data * pd2 = index_table_lookup_sequence(gd.polygon, md2->polygons);
       if(pd2 == NULL) continue;
       for(u32 i = 0; i < pdcnt; i++){
-	if(pd[i].physical == false) continue;
+	if(pd[i].physical_height == 0.0f) continue;
 	for(u32 j = 0; j < pd2cnt; j++){
-	  if(pd2[j].physical == false) continue;
+	  if(pd2[j].physical_height == 0.0f) continue;
 	  if(pd + i == pd2 + j) continue;
 	  u64 vcnt1 = pd[i].vertexes.count;
 	  u64 vcnt2 = pd2[j].vertexes.count;
@@ -844,6 +845,17 @@ void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index
 	  if(vd1 == NULL || vd2 == NULL) continue;
 	  bool cw1 = true;
 	  vec3 offset = vec3_sub(position, position2);
+	  {
+	    // detect collisions along the y axis.
+	    float y1 = 0, y2 = pd2->physical_height,
+	      y3 = offset.y, y4 = offset.y + pd->physical_height;
+	    if(y2 < y1) SWAP(y2, y1);
+	    if(y4 < y3) SWAP(y4, y3);
+	    if(y1 > y4 || y2 < y3)
+	      continue;
+	  }
+
+	  
 	  for(u64 k1 = 2; k1 < vcnt1; k1++){
 	    vec2 verts1[3];
 	    if(cw1){
@@ -858,8 +870,10 @@ void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index
 	      cw1 = true;
 	    }
 		
-	    for(u32 kk = 0; kk < 3; kk++)
-	      verts1[kk] = vec2_add(verts1[kk], offset.xy);
+	    for(u32 kk = 0; kk < 3; kk++){
+	      vec2 off = {.x = offset.x, .y = offset.z};
+	      verts1[kk] = vec2_add(verts1[kk], off);
+	    }
 		
 	    bool cw2 = true;
 	    for(u64 k2 = 2; k2 < vcnt2; k2++){
@@ -972,7 +986,7 @@ void simple_grid_render(u64 id){
 
   u64 count = active_entities_count(gd.active_entities);
   u32 entities[count];
-  vec2 prevp[count];
+  vec3 prevp[count];
   bool moved[count];
   bool unused[count];
   idx = 0;
@@ -981,18 +995,18 @@ void simple_grid_render(u64 id){
   for(u32 i = 0; i < count ;i ++){
     moved[i] = false;
     u32 entity = entities[i];
-    vec2 target;
+    vec3 target;
     if(try_get_entity_target(entity, &target)){
       entity_data * ed = index_table_lookup(gd.entities, entity);
-      vec2 d = vec2_sub(target, ed->position.xy);
-      float l = vec2_len(d);
+      vec3 d = vec3_sub(target, ed->position);
+      float l = vec3_len(d);
       if(l <= 0.01){
 	  unset_entity_target(entity);
       }else{
-	vec2 p2 = vec2_add(ed->position.xy, vec2_scale(d, 0.01 / l));
-	prevp[i] = ed->position.xy;
-	ed->position.x = p2.x;
-	ed->position.y = p2.y;
+	auto p2 = vec3_add(ed->position, vec3_scale(d, 0.01 / l));
+	prevp[i] = ed->position;
+	ed->position = p2;
+	vec3_print(p2);logd("\n");
 	moved[i] = true;
       }
     }
@@ -1025,7 +1039,7 @@ void simple_grid_render(u64 id){
       if(bsearch(entities + i, e1, collisions, sizeof(entities[i]), (void *) keycmp32)
 	 ||bsearch(entities + i, e2, collisions, sizeof(entities[i]), (void *) keycmp32)){
 	entity_data * ed = index_table_lookup(gd.entities, entities[i]);
-	ed->position.xy = prevp[i];
+	ed->position = prevp[i];
       }
 
     }
@@ -1034,7 +1048,9 @@ void simple_grid_render(u64 id){
   }
   idx = 0;
   u64 cnt = 0;
-  
+  mat4 cammat = mat4_identity();
+  cammat.m22 = 0;
+  cammat.m21 = 1;
   while(0 != (cnt = active_entities_iter_all(gd.active_entities, entities,unused, array_count(unused), &idx))){
     for(u64 i = 0; i < cnt; i++){
       u32 entity = entities[i];
@@ -1043,7 +1059,7 @@ void simple_grid_render(u64 id){
       
       vec3 p = ed->position;
       mat4 tform = mat4_translate(p.x - offset.x, p.y - offset.y, p.z);
-      
+      tform = mat4_mul(cammat, tform);
       if(ed->model != 0){
 	model_data * model = index_table_lookup(gd.models, ed->model);
 
@@ -1202,8 +1218,12 @@ void simple_grid_game_mouse_down_func(u64 grid_id, double x, double y, u64 metho
       set_simple_game_data(grid_id, gd);
     }else{
       // Assumed we did not hit something.
-      if(gd.selected_entity != 0)
-	set_entity_target(gd.selected_entity, vec2_add(p, gd.offset));
+      if(gd.selected_entity != 0){
+	vec2 v = vec2_add(p, gd.offset);
+	entity_data * ed = index_table_lookup(ctx.entities, gd.selected_entity);
+	logd("Target: ");vec2_print(v);logd("\n");
+	set_entity_target(gd.selected_entity, vec3_new(v.x, ed->position.y, v.y));
+      }
     }
   }
 }
