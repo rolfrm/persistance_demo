@@ -193,7 +193,8 @@ void char_callback(GLFWwindow * glwindow, u32 codepoint){
   if(focused == 0) return;
   
   method m = get_method(focused, char_handler_method);
-  m(focused, codepoint, 0);
+  if(m != NULL)
+    m(focused, codepoint, 0);
     
 }
 

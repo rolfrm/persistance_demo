@@ -77,6 +77,9 @@ CREATE_TABLE2(polygon_color, u32, vec4);
 CREATE_TABLE_DECL2(gravity_affects, u64, bool);
 CREATE_TABLE2(gravity_affects, u64, bool);
 
+CREATE_TABLE_DECL2(current_impulse, u64, vec3);
+CREATE_TABLE2(current_impulse, u64, vec3);
+
 
 typedef struct{
   index_table * entities;
@@ -475,11 +478,11 @@ static void command_entered(u64 id, char * command){
 	    u32 polygon_id = j + md->polygons.index;
 	    polygon_data * pd = index_table_lookup(ctx.polygon, polygon_id);
 	    if(pd == NULL) continue;
-	    logd("Polygon: %i  Height:%f\n", polygon_id, pd->physical_height);
-	    for(u32 i = 0; i < pd->vertexes.count; i++){
+	    logd("Polygon: %i  Height:%f   verts: %i\n", polygon_id, pd->physical_height, pd->vertexes.count);
+	    /*for(u32 i = 0; i < pd->vertexes.count; i++){
 	      vertex_data * vd = index_table_lookup(ctx.vertex, pd->vertexes.index + i);
 	      logd("Vertex %i: ", pd->vertexes.index + i);vec2_print(vd->position);logd("\n");
-	    }
+	      }*/
 	  }
 	}
       }
@@ -706,34 +709,6 @@ CREATE_TABLE2(console_history_index, u64, u32);
 CREATE_TABLE_DECL2(alternative_control, u64, u64);
 CREATE_TABLE2(alternative_control, u64, u64);
 
-static void game_handle_key(u64 console, int key, int mods, int action){
-  if(key == key_tab && action == key_press){
-
-    u64 parent_id = control_pair_get_parent(console);
-    control_pair * p = gui_get_control(parent_id, console);
-    p->child_id = get_alternative_control(console);
-    u64 keybuf[10];
-    u64 valuebuf[10];
-    u64 idx = 0;
-    u64 cnt = 0;
-    while(0 != (cnt = iter_all_simple_graphics_control(keybuf, valuebuf, array_count(keybuf), &idx))){
-      for(u32 i = 0; i < cnt; i++){
-	if(valuebuf[i] == p->child_id){
-	  set_focused_element(parent_id, keybuf[i]);
-	  return;
-	}
-
-      }
-      
-    }
-    
-  }
-  if(key == key_space && action == key_press){
-    
-
-  }
-  UNUSED(mods);
-}
 
 static void console_handle_key(u64 console, int key, int mods, int action){
   if(action == key_release)
@@ -826,6 +801,45 @@ CREATE_TABLE_DECL2(simple_game_data, u64, game_data);
 CREATE_TABLE2(simple_game_data, u64, game_data);
 CREATE_TABLE_DECL2(game_window, u64, u64);
 CREATE_TABLE2(game_window, u64, u64);
+
+static void game_handle_key(u64 console, int key, int mods, int action){
+  if(key == key_tab && action == key_press){
+
+    u64 parent_id = control_pair_get_parent(console);
+    control_pair * p = gui_get_control(parent_id, console);
+    p->child_id = get_alternative_control(console);
+    u64 keybuf[10];
+    u64 valuebuf[10];
+    u64 idx = 0;
+    u64 cnt = 0;
+    while(0 != (cnt = iter_all_simple_graphics_control(keybuf, valuebuf, array_count(keybuf), &idx))){
+      for(u32 i = 0; i < cnt; i++){
+	if(valuebuf[i] == p->child_id){
+	  set_focused_element(parent_id, keybuf[i]);
+	  return;
+	}
+
+      }
+      
+    }
+    
+  }
+  if(key == key_space && action == key_press){
+    u64 ctl = get_alternative_control(console);
+    graphics_context ctx = get_graphics_context(ctl);
+    game_data gd = get_simple_game_data(console);
+    
+    vec2_print(gd.offset);logd("\n");
+    if(gd.selected_entity != 0){
+      vec3 current_impulse;
+      if(!try_get_current_impulse(gd.selected_entity, &current_impulse))
+	set_current_impulse(gd.selected_entity, vec3_new(0,0.2,0));
+    }
+    UNUSED(ctx);
+  }
+  UNUSED(mods);
+}
+
 
 void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index_table * result_table){
   for(u64 i = 0; i < entitycnt; i++){
@@ -1064,13 +1078,43 @@ void simple_grid_render(u64 id){
   }
 
   if(true){ // check collisions due to move.
+    vec3 gravity = vec3_new(0, -0.01, 0);
     for(u32 i = 0; i < count ;i ++){
       moved[i] = false;
       u32 entity = entities[i];
-      if(get_gravity_affects(entity)){
+
+      vec3 impulse = vec3_zero;
+      bool grav = get_gravity_affects(entity);
+      bool hasimpulse = try_get_current_impulse(entity, &impulse);
+
+      if(try_get_current_impulse(entity, &impulse) || grav){
 	entity_data * ed = index_table_lookup(gd.entities, entity);
-	auto p2 = vec3_add(ed->position, vec3_new(0,-0.01,0));
 	prevp[i] = ed->position;
+	
+	auto p2 = ed->position;
+	if(hasimpulse){
+	  
+	  if(grav){
+	    impulse = vec3_add(impulse, gravity);
+	    vec3_print(impulse);logd("\n");
+	    p2 = vec3_add(p2, impulse);
+	    if(vec3_len(vec3_sub(impulse, gravity)) < 0.01)
+	      unset_current_impulse(entity);
+	    else
+	      set_current_impulse(entity, vec3_scale(impulse, 0.9));
+	    
+	  }else{
+	    p2 = vec3_add(p2, impulse);
+	    if(vec3_len(impulse) < 0.1)
+	      unset_current_impulse(entity);
+	    else
+	      set_current_impulse(entity, vec3_scale(impulse, 0.8));
+	  }
+	}else{
+	  if(grav)
+	    p2 = vec3_add(p2, gravity);
+	}
+
 	ed->position = p2;
 	moved[i] = true;
       }
@@ -1184,6 +1228,7 @@ void simple_game_point_collision(graphics_context ctx, vec2 loc, index_table * c
       if(ed == NULL)
 	continue;
       vec2 p2 = vec2_sub(p, position.xy);
+      p2.y -= position.z;
       model_data * md = index_table_lookup(ctx.models, ed->model);
       if(md == NULL)
 	continue;
