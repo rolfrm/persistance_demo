@@ -74,6 +74,8 @@ CREATE_TABLE_DECL2(loaded_polygon, u32, loaded_polygon_data);
 CREATE_TABLE_NP(loaded_polygon, u32, loaded_polygon_data);
 CREATE_TABLE_DECL2(polygon_color, u32, vec4);
 CREATE_TABLE2(polygon_color, u32, vec4);
+CREATE_TABLE_DECL2(gravity_affects, u64, bool);
+CREATE_TABLE2(gravity_affects, u64, bool);
 
 
 typedef struct{
@@ -600,6 +602,19 @@ static void command_entered(u64 id, char * command){
 	  logd("ZOOM: %f\n", editor.zoom);
 	  set_simple_graphics_editor_context(control, editor);
 	}
+
+	if(snd("gravity") && editor.selected_index != 0  && editor.selection_kind == SELECTED_ENTITY){
+	  char buf[20];
+	  if(copy_nth(command, 2, buf, array_count(buf))){
+	    int v = 1;
+	    sscanf(buf,"%i", &v);
+	    if(v)
+	      set_gravity_affects(editor.selected_index, v);
+	    else
+	      unset_gravity_affects(editor.selected_index);
+	    logd("GRAVITY: %i\n", editor.selected_index);
+	  }
+	}
       }
     else if(first("select") || first("focus")){
       bool is_focus = first("focus");
@@ -712,6 +727,10 @@ static void game_handle_key(u64 console, int key, int mods, int action){
       
     }
     
+  }
+  if(key == key_space && action == key_press){
+    
+
   }
   UNUSED(mods);
 }
@@ -941,7 +960,6 @@ void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index
 		if(gotcol)
 		  cols += 1;
 	      }
-		  
 	      if(cols == 6){
 		collision_data cd;
 		cd.entity1.entity = entity;
@@ -992,60 +1010,105 @@ void simple_grid_render(u64 id){
   idx = 0;
   
   active_entities_iter_all(gd.active_entities, entities, unused, count, &idx);
-  for(u32 i = 0; i < count ;i ++){
-    moved[i] = false;
-    u32 entity = entities[i];
-    vec3 target;
-    if(try_get_entity_target(entity, &target)){
-      entity_data * ed = index_table_lookup(gd.entities, entity);
-      vec3 d = vec3_sub(target, ed->position);
-      float l = vec3_len(d);
-      if(l <= 0.01){
+  { // check collisions due to move.
+    for(u32 i = 0; i < count ;i ++){
+      moved[i] = false;
+      u32 entity = entities[i];
+      vec3 target;
+      if(try_get_entity_target(entity, &target)){
+	entity_data * ed = index_table_lookup(gd.entities, entity);
+	vec3 d = vec3_sub(target, ed->position);
+	float l = vec3_len(d);
+	if(l <= 0.01){
 	  unset_entity_target(entity);
-      }else{
-	auto p2 = vec3_add(ed->position, vec3_scale(d, 0.01 / l));
+	}else{
+	  auto p2 = vec3_add(ed->position, vec3_scale(d, 0.01 / l));
+	  prevp[i] = ed->position;
+	  ed->position = p2;
+	  moved[i] = true;
+	}
+      }
+    }
+
+    {
+      
+      index_table_clear(gd.collision_table);
+      detect_collisions(entities, count, gd, gd.collision_table);
+      u64 collisions = 0;
+      collision_data * cd = index_table_all(gd.collision_table, &collisions);
+      u32 e1[collisions];
+      u32 e2[collisions];
+      for(u32 i = 0; i < collisions; i++){
+	e1[i] = cd[i].entity1.entity;
+	e2[i] = cd[i].entity2.entity;
+      }
+      int keycmp32(const u32 * k1,const  u32 * k2){
+	if(*k1 > *k2)
+	  return 1;
+	else if(*k1 == *k2)
+	  return 0;
+	else return -1;
+      }
+      
+      qsort(e1, collisions, sizeof(*e1), (void *)keycmp32);
+      qsort(e2, collisions, sizeof(*e2), (void *)keycmp32);
+      for(u32 i = 0; i < count; i++){
+	if(moved[i] == false) continue;
+	if(bsearch(entities + i, e1, collisions, sizeof(entities[i]), (void *) keycmp32)
+	   ||bsearch(entities + i, e2, collisions, sizeof(entities[i]), (void *) keycmp32)){
+	  entity_data * ed = index_table_lookup(gd.entities, entities[i]);
+	  ed->position = prevp[i];
+	}	
+      }
+    }
+  }
+
+  if(true){ // check collisions due to move.
+    for(u32 i = 0; i < count ;i ++){
+      moved[i] = false;
+      u32 entity = entities[i];
+      if(get_gravity_affects(entity)){
+	entity_data * ed = index_table_lookup(gd.entities, entity);
+	auto p2 = vec3_add(ed->position, vec3_new(0,-0.01,0));
 	prevp[i] = ed->position;
 	ed->position = p2;
-	vec3_print(p2);logd("\n");
 	moved[i] = true;
       }
     }
-  }
 
-  {
-    
-    index_table_clear(gd.collision_table);
-    detect_collisions(entities, count, gd, gd.collision_table);
-    u64 collisions = 0;
-    collision_data * cd = index_table_all(gd.collision_table, &collisions);
-    u32 e1[collisions];
-    u32 e2[collisions];
-    for(u32 i = 0; i < collisions; i++){
-      e1[i] = cd[i].entity1.entity;
-      e2[i] = cd[i].entity2.entity;
-    }
-    int keycmp32(const u32 * k1,const  u32 * k2){
-      if(*k1 > *k2)
-	return 1;
-      else if(*k1 == *k2)
-	return 0;
-      else return -1;
-    }
-
-    qsort(e1, collisions, sizeof(*e1), (void *)keycmp32);
-    qsort(e2, collisions, sizeof(*e2), (void *)keycmp32);
-    for(u32 i = 0; i < count; i++){
-      if(moved[i] == false) continue;
-      if(bsearch(entities + i, e1, collisions, sizeof(entities[i]), (void *) keycmp32)
-	 ||bsearch(entities + i, e2, collisions, sizeof(entities[i]), (void *) keycmp32)){
-	entity_data * ed = index_table_lookup(gd.entities, entities[i]);
-	ed->position = prevp[i];
+    {
+      
+      index_table_clear(gd.collision_table);
+      detect_collisions(entities, count, gd, gd.collision_table);
+      u64 collisions = 0;
+      collision_data * cd = index_table_all(gd.collision_table, &collisions);
+      u32 e1[collisions];
+      u32 e2[collisions];
+      for(u32 i = 0; i < collisions; i++){
+	e1[i] = cd[i].entity1.entity;
+	e2[i] = cd[i].entity2.entity;
       }
-
+      int keycmp32(const u32 * k1,const  u32 * k2){
+	if(*k1 > *k2)
+	  return 1;
+	else if(*k1 == *k2)
+	  return 0;
+	else return -1;
+      }
+      
+      qsort(e1, collisions, sizeof(*e1), (void *)keycmp32);
+      qsort(e2, collisions, sizeof(*e2), (void *)keycmp32);
+      for(u32 i = 0; i < count; i++){
+	if(moved[i] == false) continue;
+	if(bsearch(entities + i, e1, collisions, sizeof(entities[i]), (void *) keycmp32)
+	   ||bsearch(entities + i, e2, collisions, sizeof(entities[i]), (void *) keycmp32)){
+	  entity_data * ed = index_table_lookup(gd.entities, entities[i]);
+	  ed->position = prevp[i];
+	}	
+      }
     }
-    u64 count = 0;
-    index_table_all(gd.collision_table, &count);
   }
+  
   idx = 0;
   u64 cnt = 0;
   mat4 cammat = mat4_identity();
@@ -1072,9 +1135,8 @@ void simple_grid_render(u64 id){
   }
 
   u32 error = glGetError();
-  if(error > 0){
-    logd("GL ERROR: %i\n");
-  }  
+  if(error > 0)
+    logd("GL ERROR: %i\n", error);
 }
 
 void simple_grid_game_mouse_over_func(u64 grid_id, double x, double y, u64 method){
