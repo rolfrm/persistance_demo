@@ -229,13 +229,15 @@ void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 came
   polygon_data * pd = index_table_lookup(ctx.polygon, polygon_id);
   if(pd->vertexes.index == 0)
     return;
-  if(false == loaded_polygon_try_get(ctx.gpu_poly, polygon_id, &loaded)) {
+  if(pd->material == 0)
+    return;
+  if(false == loaded_polygon_try_get(ctx.gpu_poly, pd->material, &loaded)) {
     u32 count = pd->vertexes.count;
-
+    
     if(count == 0)
       return;
     vec2 positions[count];
-
+    logd("Loading polygon.. %i\n", polygon_id);
     vertex_data * vd = index_table_lookup_sequence(ctx.vertex, pd->vertexes);
     for(u32 i = 0; i < count; i++)
       positions[i] = vd[i].position;
@@ -244,7 +246,7 @@ void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 came
     loaded.gl_ref = simple_grid_polygon_load(positions, count);
     ASSERT(loaded.gl_ref > 0);
     loaded.count = count;
-    loaded_polygon_set(ctx.gpu_poly, polygon_id, loaded);
+    loaded_polygon_set(ctx.gpu_poly, pd->material, loaded);
 
   }
   glEnable( GL_BLEND );
@@ -340,16 +342,17 @@ void simple_grid_mouse_down_func(u64 grid_id, double x, double y, u64 method){
       if(loaded_polygon_try_get(ctx.gpu_poly, polygon, &loaded)){
 	u32 idx = index_table_alloc(ctx.polygons_to_delete);
 	u32 * ptr = index_table_lookup(ctx.polygons_to_delete, idx);
-	ptr[0] = polygon;
+	ptr[0] = ((polygon_data *)index_table_lookup(ctx.polygon, polygon))->material;
       }
     
     }else if(editor.selection_kind == SELECTED_POLYGON){
       polygon_add_vertex2f(&ctx, editor.selected_index, p);
       loaded_polygon_data loaded;
-      if(loaded_polygon_try_get(ctx.gpu_poly, editor.selected_index, &loaded)){
+      polygon_data * pd = index_table_lookup(ctx.polygon, editor.selected_index);
+      if(pd != NULL && loaded_polygon_try_get(ctx.gpu_poly, pd->material, &loaded)){
 	u32 idx = index_table_alloc(ctx.polygons_to_delete);
 	u32 * ptr = index_table_lookup(ctx.polygons_to_delete, idx);
-	ptr[0] = editor.selected_index;
+	ptr[0] = pd->material;
       }
     }
   } else if(mouse_button_button == mouse_button_right){
@@ -367,14 +370,7 @@ void simple_grid_mouse_down_func(u64 grid_id, double x, double y, u64 method){
 }
 
 void simple_graphics_editor_render(u64 id){
-  u64 index = 0;
-  control_pair * child_control = NULL;
-  while((child_control = get_control_pair_parent(id, &index))){
-    if(child_control == NULL)
-      break;
-    render_sub(child_control->child_id);
-  }
-  
+    
   graphics_context gd = get_graphics_context(id);
   {
     u64 cnt = 0;
@@ -443,6 +439,16 @@ void simple_graphics_editor_render(u64 id){
   {
     vec2 offset = graphics_context_pixel_to_screen(gd, gd.pointer_position);
     simple_grid_render_gl(gd, gd.pointer_index, mat4_translate(offset.x, offset.y, 0), true); 
+  }
+
+  {
+    u64 index = 0;
+    control_pair * child_control = NULL;
+    while((child_control = get_control_pair_parent(id, &index))){
+      if(child_control == NULL)
+	break;
+      render_sub(child_control->child_id);
+    }
   }
   
   u32 error = glGetError();
@@ -557,8 +563,7 @@ static void command_entered(u64 id, char * command){
 	index_table_resize_sequence(ctx.polygon, &(entity->polygons), pcnt + 1);
 	editor.selection_kind = SELECTED_POLYGON;
 	editor.selected_index = entity->polygons.index + entity->polygons.count - 1;
-	//logd("creating polygon.. %i %i\n", pcnt, entity->polygons.count);
-	//polygon_data * pd = index_table_lookup_sequence(ctx.polygon, entity->polygons);
+	logd("New polygon: %i\n", editor.selected_index);
       }else if(snd("vertex") && editor.selection_kind == SELECTED_POLYGON){
 	
 	vec2 p = vec2_zero;
@@ -570,9 +575,13 @@ static void command_entered(u64 id, char * command){
 	}
 	logd("@ ");vec2_print(p);logd("\n");
 	polygon_add_vertex2f(&ctx, editor.selected_index, p);
-	u32 idx = index_table_alloc(ctx.polygons_to_delete);
-	u32 * ptr = index_table_lookup(ctx.polygons_to_delete, idx);
-	ptr[0] = editor.selected_index;
+
+	polygon_data * pd = index_table_lookup(ctx.polygon, editor.selected_index);
+	if(pd != NULL && pd->material != 0){
+	  u32 idx = index_table_alloc(ctx.polygons_to_delete);
+	  u32 * ptr = index_table_lookup(ctx.polygons_to_delete, idx);
+	  ptr[0] = pd->material;
+	}
 
       skip:;
 	
@@ -729,10 +738,13 @@ static void command_entered(u64 id, char * command){
 	  u32 offset = i1 - pd->vertexes.index;
 	  for(u32 i = offset; i < pd->vertexes.count - 1; i++)
 	    vd[i] = vd[i + 1];
+	  
 	  index_table_resize_sequence(ctx.vertex, &(pd->vertexes), pd->vertexes.count - 1);
-	  u32 idx = index_table_alloc(ctx.polygons_to_delete);
-	  u32 * ptr = index_table_lookup(ctx.polygons_to_delete, idx);
-	  ptr[0] = polygon;
+	  if(pd != NULL && pd->material != 0){
+	    u32 idx = index_table_alloc(ctx.polygons_to_delete);
+	    u32 * ptr = index_table_lookup(ctx.polygons_to_delete, idx);
+	    ptr[0] = pd->material;
+	  }
 	    
 	}else if(snd("polygon")){
 	  polygon_data * pd = index_table_lookup(ctx.polygon, i1);
@@ -756,7 +768,7 @@ static void command_entered(u64 id, char * command){
 	  index_table_resize_sequence(ctx.vertex, &(pd->vertexes), 0);
 	  u32 idx = index_table_alloc(ctx.polygons_to_delete);
 	  u32 * ptr = index_table_lookup(ctx.polygons_to_delete, idx);
-	  ptr[0] = i1;
+	  ptr[0] = pd->material;
 	}
       }
     }else if(first("recenter")){
@@ -805,11 +817,11 @@ static void command_entered(u64 id, char * command){
 	for(u32 j = 0; j < seq.count; j++)
 	  v[j].position = vec2_sub(v[j].position, avg);
 	loaded_polygon_data loaded;
-	if(loaded_polygon_try_get(ctx.gpu_poly,md->polygons.index + i , &loaded)){
+	if(loaded_polygon_try_get(ctx.gpu_poly, pd[i].material, &loaded)){
 	  logd("Deleting GPU polygon..\n");
 	  u32 idx = index_table_alloc(ctx.polygons_to_delete);
 	  u32 * ptr = index_table_lookup(ctx.polygons_to_delete, idx);
-	  ptr[0] = md->polygons.index + i;
+	  ptr[0] = pd[i].material;
 	}
       }
       
@@ -818,7 +830,7 @@ static void command_entered(u64 id, char * command){
       index_table_optimize(ctx.vertex);
       index_table_optimize(ctx.entities);
       index_table_optimize(ctx.models);
-      logd("Optimized!");
+      logd("Optimized!\n");
     }else{
       logd("Unkown command!\n");
     }
@@ -851,15 +863,17 @@ static void console_handle_key(u64 console, int key, int mods, int action){
     editor_context editor = get_simple_graphics_editor_context(control);
     if(editor.selection_kind == SELECTED_POLYGON){
       polygon_data * pd = index_table_lookup(ctx.polygon, editor.selected_index);
+      if(pd == NULL)
+	return;
       u32 pcnt = pd->vertexes.count;
       if(pcnt > 0)
 	index_table_resize_sequence(ctx.vertex, &(pd->vertexes), pcnt - 1);
       logd("COUNT: %i\n", pcnt);
       loaded_polygon_data loaded;
-      if(loaded_polygon_try_get(ctx.gpu_poly, editor.selected_index, &loaded)){
+      if(loaded_polygon_try_get(ctx.gpu_poly, pd->material, &loaded)){
 	u32 idx = index_table_alloc(ctx.polygons_to_delete);
 	u32 * ptr = index_table_lookup(ctx.polygons_to_delete, idx);
-	ptr[0] = editor.selected_index;
+	ptr[0] = pd->material;
       }
     }
     return;
@@ -916,6 +930,7 @@ typedef struct {
   vec2 offset;
   bool mouse_state;
   vec2 last_mouse_position;
+  float zoom;
 }game_data;
 
 CREATE_TABLE_DECL2(entity_target, u32, vec3);
@@ -1278,6 +1293,7 @@ void simple_grid_render(u64 id){
   mat4 cammat = mat4_identity();
   cammat.m22 = 0;
   cammat.m21 = 1;
+  cammat = mat4_mul(cammat, mat4_scaled(1.0 / _gd.zoom, 1.0 / _gd.zoom,1.0 / _gd.zoom));
   while(0 != (cnt = active_entities_iter_all(gd.active_entities, entities,unused, array_count(unused), &idx))){
     for(u64 i = 0; i < cnt; i++){
       u32 entity = entities[i];
@@ -1310,10 +1326,12 @@ void simple_grid_game_mouse_over_func(u64 grid_id, double x, double y, u64 metho
   if(method == 0){
     {
       vec2 p = graphics_context_pixel_to_screen(ctx, vec2_new(x, y));
+
       game_data gd = get_simple_game_data(grid_id);
       if(gd.mouse_state){
 	vec2 lastp = ctx.pointer_position;
 	vec2 d = vec2_sub(p, graphics_context_pixel_to_screen(ctx, lastp));
+	d = vec2_scale(d, gd.zoom);
 	gd.offset = vec2_sub(gd.offset, d);
       }
       
@@ -1404,11 +1422,12 @@ void simple_grid_game_mouse_down_func(u64 grid_id, double x, double y, u64 metho
   graphics_context ctx = get_graphics_context(ctl);
   game_data gd = get_simple_game_data(grid_id);
   vec2 p = graphics_context_pixel_to_screen(ctx, vec2_new(x, y));
+  p = vec2_scale(p, gd.zoom);
   if(mouse_button_button == mouse_button_right && mouse_button_action != mouse_button_repeat){
     if(gd.mouse_state){
-      vec2 lastp = gd.last_mouse_position;
-      vec2 d = vec2_sub(p, lastp);
-      gd.offset = vec2_add(d, gd.offset);
+      //vec2 lastp = gd.last_mouse_position;
+      //vec2 d = vec2_sub(p, lastp);
+      //gd.offset = vec2_add(vec2_scale(d, gd.zoom), gd.offset);
     }
     gd.last_mouse_position = p;
     
@@ -1485,7 +1504,7 @@ void simple_graphics_editor_load(u64 id, u64 win_id){
   u64 console = intern_string("ccconsole!");
   
   set_simple_graphics_control(console, id);
-  
+  set_color_alpha(console, vec4_new(1,1,1,0.2));
   set_console_height(console, 300);
   create_console(console);
   add_control(id, console);
@@ -1505,7 +1524,14 @@ void simple_graphics_editor_load(u64 id, u64 win_id){
   set_alternative_control(id, game);
   set_alternative_control(game, id);
   set_game_window(game, win_id);
-
+  
+  //if(once(game)){
+    game_data _gd = get_simple_game_data(game);
+    _gd.zoom = 0.5;
+    set_simple_game_data(game, _gd);
+    //}
+    
+  
   
   if(gui_get_control(win_id, id) == NULL  && gui_get_control(win_id, game) == NULL){
     add_control(win_id, id);

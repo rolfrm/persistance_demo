@@ -140,8 +140,8 @@ index_table_sequence index_table_alloc_sequence(index_table * table, u32 count){
 	  
 	  //memmove(&(ptr[i - cnt + 1]), &(ptr[i]), (freeindexcnt - i - 1) * sizeof(u32));
 	  ASSERT(start != 0);
-	  //void * p = index_table_lookup(table, start);
-	  //memset(p, 0, cnt * table->element_size);
+	  void * p = index_table_lookup(table, start);
+	  memset(p, 0, cnt * table->element_size);
 	  return (index_table_sequence){.index = start, .count = cnt};
 	}
       }

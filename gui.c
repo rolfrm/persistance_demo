@@ -26,7 +26,7 @@ bool once(u64 itemid){
 CREATE_TABLE(is_mouse_over, u64, bool);
 CREATE_TABLE(focused_element, u64, u64);
 CREATE_TABLE2(window_state, u64, window);
-
+CREATE_TABLE2(color_alpha, u64, vec4);
 struct{
   GLFWwindow ** glfw_window;
   u64 * window_id;
@@ -519,10 +519,11 @@ void measure_rectangle(u64 rect_id, vec2 * size){
     *size =rect->size;
   
 }
+
 void rect_render(vec3 color, vec2 offset, vec2 size){
   rect_render2(color, offset, size, 0, vec2_zero, vec2_zero);
 }
-void rect_render2(vec3 color, vec2 offset, vec2 size, i32 tex, vec2 uv_offset, vec2 uv_size){
+void rect_render2_alpha(vec4 color, vec2 offset, vec2 size, i32 tex, vec2 uv_offset, vec2 uv_size){
 		
   static int initialized = false;
   static int shader = -1;
@@ -561,11 +562,20 @@ void rect_render2(vec3 color, vec2 offset, vec2 size, i32 tex, vec2 uv_offset, v
   else
     glUniform1i(mode_loc, 0);
 
-  glUniform4f(color_loc, color.x, color.y, color.z, 1.0);
+  glUniform4f(color_loc, color.x, color.y, color.z, color.w);
   glUniform2f(offset_loc, offset.x, offset.y);
   glUniform2f(size_loc, size.x, size.y);
   glUniform2f(window_size_loc, window_size.x, window_size.y);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+}
+
+void rect_render2(vec3 color, vec2 offset, vec2 size, i32 tex, vec2 uv_offset, vec2 uv_size){
+  rect_render2_alpha(vec4_new(color.x, color.y, color.z, 1), offset, size, tex, uv_offset, uv_size);
+}
+
+
+void rect_render_alpha(vec4 color, vec2 offset, vec2 size){
+  rect_render2_alpha(color, offset, size, 0, vec2_zero, vec2_zero);
 }
 
 /*
