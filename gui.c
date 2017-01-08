@@ -217,6 +217,7 @@ void load_window(u64 id){
   if(w.width <= 0) w.width = 200;
   static GLFWwindow * ctx = NULL;
   logd("Window size:  %s %i %i\n", w.title, w.width, w.height);
+  glfwWindowHint(GLFW_SAMPLES, 16);
   GLFWwindow * window = glfwCreateWindow(w.width, w.height, w.title, NULL, ctx);
   ASSERT(window != NULL);
   if(ctx == NULL){

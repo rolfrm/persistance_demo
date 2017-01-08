@@ -94,11 +94,19 @@ void index_table_remove(index_table * table, u32 index){
 }
 
 void index_table_resize_sequence(index_table * table, index_table_sequence * seq,  u32 new_count){
-  index_table_sequence nseq = index_table_alloc_sequence(table, new_count);
+  index_table_sequence nseq;
+  if(new_count > 0)
+    nseq = index_table_alloc_sequence(table, new_count);
+  else{
+    nseq.index = 0;
+    nseq.count = 0;
+  }
   if(seq->index != 0 && seq->count != 0 ){
-    void * src = index_table_lookup_sequence(table, *seq);
-    void * dst = index_table_lookup_sequence(table, nseq);
-    memmove(dst, src, seq->count * table->element_size);
+    if(new_count > 0){
+      void * src = index_table_lookup_sequence(table, *seq);
+      void * dst = index_table_lookup_sequence(table, nseq);
+      memmove(dst, src, seq->count * table->element_size);
+    }
     index_table_remove_sequence(table, seq);
   }
   *seq = nseq;

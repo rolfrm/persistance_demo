@@ -68,6 +68,9 @@ typedef struct{
   u32 count;
 }loaded_polygon_data;
 
+CREATE_TABLE_DECL2(game_window, u64, u64);
+CREATE_TABLE2(game_window, u64, u64);
+
 CREATE_TABLE_DECL2(active_entities, u32, bool);
 CREATE_TABLE_NP(active_entities, u32, bool);
 CREATE_TABLE_DECL2(loaded_polygon, u32, loaded_polygon_data);
@@ -224,12 +227,14 @@ void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 came
   loaded_polygon_data loaded;
   ASSERT(polygon_id != 0);
   polygon_data * pd = index_table_lookup(ctx.polygon, polygon_id);
+  if(pd->vertexes.index == 0)
+    return;
   if(false == loaded_polygon_try_get(ctx.gpu_poly, polygon_id, &loaded)) {
     u32 count = pd->vertexes.count;
+
     if(count == 0)
       return;
     vec2 positions[count];
-    
 
     vertex_data * vd = index_table_lookup_sequence(ctx.vertex, pd->vertexes);
     for(u32 i = 0; i < count; i++)
@@ -240,8 +245,11 @@ void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 came
     ASSERT(loaded.gl_ref > 0);
     loaded.count = count;
     loaded_polygon_set(ctx.gpu_poly, polygon_id, loaded);
-  }
 
+  }
+  glEnable( GL_BLEND );
+  glDisable( GL_DEPTH_TEST );
+  
   glBindBuffer(GL_ARRAY_BUFFER, loaded.gl_ref);  
   simple_grid_shader shader = simple_grid_shader_get();
   glFrontFace(GL_CW);
@@ -264,18 +272,6 @@ void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 came
   glDisable(GL_CULL_FACE);
 }
 
-
-void simple_grid_mouse_over_func(u64 grid_id, double x, double y, u64 method){
-  graphics_context ctx = get_graphics_context(grid_id);
-  ctx.pointer_position = vec2_new(x, y);
-  set_graphics_context(grid_id, ctx);
-  if(method != 0){
-    auto on_mouse_over = get_method(grid_id, method);
-    on_mouse_over(grid_id, x, y, 0);
-    return;
-  }
-}
-
 typedef enum{
   SELECTED_ENTITY,
   SELECTED_MODEL,
@@ -290,40 +286,83 @@ typedef struct{
   float zoom;
   u32 focused_item;
   selected_kind focused_item_kind;
+  vec2 offset;
+  bool is_grabbed;
+  union {
+    
+    u32 reserved[16];
+  };
 }editor_context;
 
 
 CREATE_TABLE_DECL2(simple_graphics_editor_context, u64, editor_context);
 CREATE_TABLE2(simple_graphics_editor_context, u64, editor_context);
 
+void simple_grid_mouse_over_func(u64 grid_id, double x, double y, u64 method){
+  graphics_context ctx = get_graphics_context(grid_id);
+  editor_context editor = get_simple_graphics_editor_context(grid_id);
+  vec2 last_position = ctx.pointer_position;
+  ctx.pointer_position = vec2_new(x, y);
+  set_graphics_context(grid_id, ctx);
+  if(method != 0){
+    auto on_mouse_over = get_method(grid_id, method);
+    on_mouse_over(grid_id, x, y, 0);
+  }else{
+    if(editor.is_grabbed != false){
+      
+      vec2 d = vec2_sub(graphics_context_pixel_to_screen(ctx, ctx.pointer_position), graphics_context_pixel_to_screen(ctx, last_position));
+      if(editor.zoom > 0)
+      d = vec2_scale(d, 1.0/editor.zoom);
+      editor.offset = vec2_add(editor.offset, d);
+      set_simple_graphics_editor_context(grid_id, editor);
+    }
+  }
+}
 
 void simple_grid_mouse_down_func(u64 grid_id, double x, double y, u64 method){
   UNUSED(method);
-  if(mouse_button_action != 1) return;
+  if(mouse_button_action == mouse_button_repeat) return;
+
   graphics_context ctx = get_graphics_context(grid_id);
   editor_context editor = get_simple_graphics_editor_context(grid_id);
   vec2 p = graphics_context_pixel_to_screen(ctx, vec2_new(x, y));
   p = vec2_scale(p, 1.0 / editor.zoom);
-  if(editor.selection_kind == SELECTED_VERTEX){
-    vertex_data * vd = index_table_lookup(ctx.vertex, editor.selected_index);
-    vd->position = p;
-    u32 polygon = vertex_get_polygon(ctx, editor.selected_index);
+  p = vec2_sub(p, editor.offset);
+  if(mouse_button_button == mouse_button_left){
+    if(mouse_button_action != mouse_button_press)
+      return;
+    if(editor.selection_kind == SELECTED_VERTEX){
+      vertex_data * vd = index_table_lookup(ctx.vertex, editor.selected_index);
+      vd->position = p;
+      u32 polygon = vertex_get_polygon(ctx, editor.selected_index);
+      logd("POLYGON: %i\n", polygon);
+      loaded_polygon_data loaded;
+      if(loaded_polygon_try_get(ctx.gpu_poly, polygon, &loaded)){
+	u32 idx = index_table_alloc(ctx.polygons_to_delete);
+	u32 * ptr = index_table_lookup(ctx.polygons_to_delete, idx);
+	ptr[0] = polygon;
+      }
     
-    loaded_polygon_data loaded;
-    if(loaded_polygon_try_get(ctx.gpu_poly, polygon, &loaded)){
-      u32 idx = index_table_alloc(ctx.polygons_to_delete);
-      u32 * ptr = index_table_lookup(ctx.polygons_to_delete, idx);
-      ptr[0] = polygon;
+    }else if(editor.selection_kind == SELECTED_POLYGON){
+      polygon_add_vertex2f(&ctx, editor.selected_index, p);
+      loaded_polygon_data loaded;
+      if(loaded_polygon_try_get(ctx.gpu_poly, editor.selected_index, &loaded)){
+	u32 idx = index_table_alloc(ctx.polygons_to_delete);
+	u32 * ptr = index_table_lookup(ctx.polygons_to_delete, idx);
+	ptr[0] = editor.selected_index;
+      }
     }
-    
-  }else if(editor.selection_kind == SELECTED_POLYGON){
-    polygon_add_vertex2f(&ctx, editor.selected_index, p);
-    loaded_polygon_data loaded;
-    if(loaded_polygon_try_get(ctx.gpu_poly, editor.selected_index, &loaded)){
-      u32 idx = index_table_alloc(ctx.polygons_to_delete);
-      u32 * ptr = index_table_lookup(ctx.polygons_to_delete, idx);
-      ptr[0] = editor.selected_index;
+  } else if(mouse_button_button == mouse_button_right){
+    editor.is_grabbed = mouse_button_action == mouse_button_press;
+    u64 win = get_game_window(grid_id);
+    if(editor.is_grabbed){
+      gui_acquire_mouse_capture(win, grid_id);
+      gui_set_cursor_mode(win, gui_window_cursor_disabled);
+    }else{
+      gui_release_mouse_capture(win, grid_id);
+      gui_set_cursor_mode(win, gui_window_cursor_normal);
     }
+    set_simple_graphics_editor_context(grid_id, editor);
   }
 }
 
@@ -353,24 +392,20 @@ void simple_graphics_editor_render(u64 id){
     }
   }
   
-  {
-    vec2 offset = graphics_context_pixel_to_screen(gd, gd.pointer_position);
-    UNUSED(offset);
-    simple_grid_render_gl(gd, gd.pointer_index, mat4_translate(offset.x, offset.y, 0), true); 
-  }
-  
   u32 entities[10];
   bool unused[10];
   u64 idx = 0;
   u64 cnt = 0;
-  mat4 editor_tform = mat4_identity();
+
   editor_context ed = get_simple_graphics_editor_context(id);
+  mat4 editor_tform = mat4_translate(ed.offset.x, ed.offset.y, 0);
+  //vec2_print(ed.offset);
   if(ed.focused_item_kind == SELECTED_ENTITY){
     if(ed.focused_item != 0){
       entity_data * ed2 = index_table_lookup(gd.entities, ed.focused_item);
       if(ed2 != NULL){
 	vec3 p = ed2->position;;
-	editor_tform = mat4_translate(-p.x, -p.y, -p.z);
+	editor_tform = mat4_mul(editor_tform, mat4_translate(-p.x, -p.y , -p.z));
       }
     }
   }else if(ed.focused_item_kind == SELECTED_MODEL){
@@ -404,7 +439,12 @@ void simple_graphics_editor_render(u64 id){
       }
     }
   }
-
+  
+  {
+    vec2 offset = graphics_context_pixel_to_screen(gd, gd.pointer_position);
+    simple_grid_render_gl(gd, gd.pointer_index, mat4_translate(offset.x, offset.y, 0), true); 
+  }
+  
   u32 error = glGetError();
   if(error > 0){
     logd("GL ERROR: %i\n");
@@ -478,11 +518,18 @@ static void command_entered(u64 id, char * command){
 	    u32 polygon_id = j + md->polygons.index;
 	    polygon_data * pd = index_table_lookup(ctx.polygon, polygon_id);
 	    if(pd == NULL) continue;
-	    logd("Polygon: %i  Height:%f   verts: %i\n", polygon_id, pd->physical_height, pd->vertexes.count);
-	    /*for(u32 i = 0; i < pd->vertexes.count; i++){
-	      vertex_data * vd = index_table_lookup(ctx.vertex, pd->vertexes.index + i);
-	      logd("Vertex %i: ", pd->vertexes.index + i);vec2_print(vd->position);logd("\n");
-	      }*/
+	    logd("Polygon: %i  Height:%f   verts: %i ", polygon_id, pd->physical_height, pd->vertexes.count);
+	    vec4 color;
+	    if(polygon_color_try_get(ctx.poly_color, pd->material, &color))
+	      vec4_print(color);
+	    logd("\n");
+	    if(copy_nth(command, 1, snd_part, array_count(snd_part))
+	       && snd("vertex")){
+	      for(u32 i = 0; i < pd->vertexes.count; i++){
+		vertex_data * vd = index_table_lookup(ctx.vertex, pd->vertexes.index + i);
+		logd("Vertex %i: ", pd->vertexes.index + i);vec2_print(vd->position);logd("\n");
+	      }
+	    }
 	  }
 	}
       }
@@ -644,6 +691,7 @@ static void command_entered(u64 id, char * command){
 	  kind = SELECTED_VERTEX;
 	}
 	if(table != NULL && index_table_contains(table, i1)){
+	  editor.offset = vec2_zero;
 	  if(is_focus){
 	    editor.focused_item_kind = kind;
 	    editor.focused_item = i1;
@@ -686,10 +734,85 @@ static void command_entered(u64 id, char * command){
 	  u32 * ptr = index_table_lookup(ctx.polygons_to_delete, idx);
 	  ptr[0] = polygon;
 	    
+	}else if(snd("polygon")){
+	  polygon_data * pd = index_table_lookup(ctx.polygon, i1);
+	  index_table_resize_sequence(ctx.vertex, &(pd->vertexes), 0);
 	}
+	
       }
       set_simple_graphics_editor_context(control, editor);
+    }else if(first("clear")){
+      char id_buffer[100] = {0};
+      if(copy_nth(command, 1, snd_part, array_count(snd_part))){
+	u32 i1 = 0;
+	if(copy_nth(command, 2, id_buffer, array_count(id_buffer))){
+	  sscanf(id_buffer, "%i", &i1);
+	}else{
+	  i1 = editor.selected_index;
+	}
+	logd("Clear: %s, %i\n", snd_part, i1);
+	if(snd("polygon")){
+	  polygon_data * pd = index_table_lookup(ctx.polygon, i1);
+	  index_table_resize_sequence(ctx.vertex, &(pd->vertexes), 0);
+	  u32 idx = index_table_alloc(ctx.polygons_to_delete);
+	  u32 * ptr = index_table_lookup(ctx.polygons_to_delete, idx);
+	  ptr[0] = i1;
+	}
+      }
+    }else if(first("recenter")){
+      // recenter the model based on average vertex positions of a polygon.
+      u32 model = 0;
+      u32 polygon = 0;
+      if(editor.selection_kind == SELECTED_MODEL)
+	model = editor.selected_index;
+      
+      char buf[100];
+      if(copy_nth(command,1, buf, array_count(buf))){
+	sscanf(buf, "%i", &model);
+      }
 
+      if(model != 0){
+	model_data * md = index_table_lookup(ctx.models, model);
+	polygon = md->polygons.index;
+      }
+
+      if(copy_nth(command,2, buf, array_count(buf))){
+	sscanf(buf, "%i", &polygon);
+      }
+      if(model == 0){
+	loge("ERROR: model == 0");
+	return;
+      }
+
+      if(polygon == 0){
+	loge("ERROR: polygon == 0");
+	return;
+      }
+      vec2 avg = vec2_zero;
+      {
+	polygon_data * pd = index_table_lookup(ctx.polygon, polygon);
+	vertex_data * v = index_table_lookup_sequence(ctx.vertex, pd->vertexes);
+	for(u32 i = 0; i < pd->vertexes.count; i++){
+	  avg = vec2_add(avg, v[i].position);
+	}
+	avg = vec2_scale(avg, 1.0f / pd->vertexes.count);
+      }
+      model_data * md = index_table_lookup(ctx.models, model);
+      polygon_data * pd = index_table_lookup_sequence(ctx.polygon, md->polygons);
+      for(u32 i = 0; i < md->polygons.count; i++){
+	index_table_sequence seq = pd[i].vertexes;
+	vertex_data * v = index_table_lookup_sequence(ctx.vertex, seq);
+	for(u32 j = 0; j < seq.count; j++)
+	  v[j].position = vec2_sub(v[j].position, avg);
+	loaded_polygon_data loaded;
+	if(loaded_polygon_try_get(ctx.gpu_poly,md->polygons.index + i , &loaded)){
+	  logd("Deleting GPU polygon..\n");
+	  u32 idx = index_table_alloc(ctx.polygons_to_delete);
+	  u32 * ptr = index_table_lookup(ctx.polygons_to_delete, idx);
+	  ptr[0] = md->polygons.index + i;
+	}
+      }
+      
     }else if(first("optimize")){
       index_table_optimize(ctx.polygon);
       index_table_optimize(ctx.vertex);
@@ -799,8 +922,7 @@ CREATE_TABLE_DECL2(entity_target, u32, vec3);
 CREATE_TABLE2(entity_target, u32, vec3);
 CREATE_TABLE_DECL2(simple_game_data, u64, game_data);
 CREATE_TABLE2(simple_game_data, u64, game_data);
-CREATE_TABLE_DECL2(game_window, u64, u64);
-CREATE_TABLE2(game_window, u64, u64);
+
 
 static void game_handle_key(u64 console, int key, int mods, int action){
   if(key == key_tab && action == key_press){
@@ -828,8 +950,6 @@ static void game_handle_key(u64 console, int key, int mods, int action){
     u64 ctl = get_alternative_control(console);
     graphics_context ctx = get_graphics_context(ctl);
     game_data gd = get_simple_game_data(console);
-    
-    vec2_print(gd.offset);logd("\n");
     if(gd.selected_entity != 0){
       vec3 current_impulse;
       if(!try_get_current_impulse(gd.selected_entity, &current_impulse))
@@ -887,7 +1007,6 @@ void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index
 	    if(y1 > y4 || y2 < y3)
 	      continue;
 	  }
-
 	  
 	  for(u64 k1 = 2; k1 < vcnt1; k1++){
 	    vec2 verts1[3];
@@ -948,7 +1067,7 @@ void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index
 		if(gotcol)
 		  cols += 1;
 	      }
-
+	      
 	      for(u32 ii = 0; ii < 3; ii++){
 		u32 ii2 = ii == 2 ? 0 : ii + 1;
 		u32 ii3 = ii == 0 ? 2 : ii - 1;
@@ -1031,6 +1150,7 @@ void simple_grid_render(u64 id){
       vec3 target;
       if(try_get_entity_target(entity, &target)){
 	entity_data * ed = index_table_lookup(gd.entities, entity);
+	target.y = ed->position.y;
 	vec3 d = vec3_sub(target, ed->position);
 	float l = vec3_len(d);
 	if(l <= 0.01){
@@ -1194,7 +1314,7 @@ void simple_grid_game_mouse_over_func(u64 grid_id, double x, double y, u64 metho
       if(gd.mouse_state){
 	vec2 lastp = ctx.pointer_position;
 	vec2 d = vec2_sub(p, graphics_context_pixel_to_screen(ctx, lastp));
-	gd.offset = vec2_add(d, gd.offset);
+	gd.offset = vec2_sub(gd.offset, d);
       }
       
       gd.last_mouse_position = p;
@@ -1213,15 +1333,12 @@ void simple_grid_game_mouse_over_func(u64 grid_id, double x, double y, u64 metho
   }
 }
 
-void simple_game_point_collision(graphics_context ctx, vec2 loc, index_table * collisiontable){
+void simple_game_point_collision(graphics_context ctx, u32 * entities, u32 entity_count, vec2 loc, index_table * collisiontable){
   ASSERT(collisiontable->element_size == sizeof(entity_local_data));
-  u32 entities[10];
-  bool unused[10];
-  u64 idx = 0;
-  u64 cnt = 0;
   vec2 p = loc;
-  while(0 != (cnt = active_entities_iter_all(ctx.active_entities, entities,unused, array_count(unused), &idx))){
-    for(u64 i = 0; i < cnt; i++){
+  {
+    for(u64 i = 0; i < entity_count; i++){
+      if(entities[i] == 0) continue;
       entity_data * ed = index_table_lookup(ctx.entities, entities[i]);
       vec3 position = ed->position;
       UNUSED(position);
@@ -1283,9 +1400,7 @@ void simple_game_point_collision(graphics_context ctx, vec2 loc, index_table * c
 
 void simple_grid_game_mouse_down_func(u64 grid_id, double x, double y, u64 method){
   UNUSED(method);
-  UNUSED(grid_id);
   u64 ctl = get_alternative_control(grid_id);
-  //if(mouse_button_action != 1) return;
   graphics_context ctx = get_graphics_context(ctl);
   game_data gd = get_simple_game_data(grid_id);
   vec2 p = graphics_context_pixel_to_screen(ctx, vec2_new(x, y));
@@ -1314,10 +1429,21 @@ void simple_grid_game_mouse_down_func(u64 grid_id, double x, double y, u64 metho
   {
     static index_table * tab = NULL;
     if(tab == NULL) tab = index_table_create(NULL, sizeof(entity_local_data));
-    index_table_clear(tab);
-    simple_game_point_collision(ctx, vec2_add(p, gd.offset), tab);
+    u64 count = active_entities_count(ctx.active_entities);
+    u32 entities[count];
+    
+    bool unused[count];
+    u64 idx = 0;
+    active_entities_iter_all(ctx.active_entities, entities, unused, count, &idx);
     u64 cnt = 0;
-    entity_local_data * all = index_table_all(tab, &cnt);
+
+    index_table_clear(tab);
+    for(u32 i = 0 ; i < count; i++){
+      if(!get_gravity_affects(entities[i]))
+	entities[i] = 0;
+    }
+    simple_game_point_collision(ctx, entities, count, vec2_add(p, gd.offset), tab);
+    entity_local_data * all = index_table_all(tab, &cnt);    
     if(cnt > 0){
 
       gd.selected_entity = all->entity;
@@ -1368,7 +1494,8 @@ void simple_graphics_editor_load(u64 id, u64 win_id){
   set_console_history_cnt(console, 100);
   define_method(console, console_command_entered_method, (method)command_entered);
   define_method(console, key_handler_method, (method) console_handle_key);
-
+  set_game_window(id, win_id);
+  
   u64 game = intern_string("ggame!");
   define_method(game, render_control_method, (method)simple_grid_render);
   define_method(game, measure_control_method, (method)simple_grid_game_measure);
@@ -1378,6 +1505,7 @@ void simple_graphics_editor_load(u64 id, u64 win_id){
   set_alternative_control(id, game);
   set_alternative_control(game, id);
   set_game_window(game, win_id);
+
   
   if(gui_get_control(win_id, id) == NULL  && gui_get_control(win_id, game) == NULL){
     add_control(win_id, id);
