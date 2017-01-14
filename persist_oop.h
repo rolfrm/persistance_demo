@@ -38,7 +38,6 @@ typedef struct{
   int (* compare)(void * key, void * value);
   bool is_multi_table;
   const char * name;
-
 }u64_table_info;
 
 #define CREATE_TABLE_DECL(Name, KeyType, ValueType)		\

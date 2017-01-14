@@ -639,6 +639,9 @@ bool index_table_test(){
 }
 
 int main(){
+  //void test_hydra();
+  //test_hydra();
+  //return 0;
   
   //table2_test();
   //test_persist_oop();
