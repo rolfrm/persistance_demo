@@ -53,8 +53,26 @@ typedef struct{
 typedef struct{
   char data[100];
 }name_data;
+
 CREATE_TABLE_DECL2(desc_text, u64, name_data);
 CREATE_TABLE2(desc_text, u64, name_data);
+
+typedef enum{
+  ENTITY_TYPE_PLAYER = 1,
+  ENTITY_TYPE_ENEMY = 2,
+  ENTITY_TYPE_ITEM = 3,
+  ENTITY_TYPE_INTERACTABLE = 4
+}ENTITY_TYPE;
+
+CREATE_TABLE_DECL2(entity_type, u64, ENTITY_TYPE);
+CREATE_TABLE2(entity_type, u64, ENTITY_TYPE);
+
+CREATE_TABLE_DECL2(hit_queue, u32, u32);
+CREATE_TABLE2(hit_queue, u32, u32);
+
+
+
+
 
 void set_desc_text2(u32 idx, u32 group, const char * str){
   u64 id = ((u64)idx) | ( ((u64)group) << 32);
@@ -111,6 +129,8 @@ CREATE_TABLE2(gravity_affects, u64, bool);
 CREATE_TABLE_DECL2(current_impulse, u64, vec3);
 CREATE_TABLE2(current_impulse, u64, vec3);
 
+CREATE_TABLE_DECL2(entity_2_collisions, u32, u32);
+CREATE_MULTI_TABLE2(entity_2_collisions, u32, u32);
 
 typedef struct{
   index_table * entities;
@@ -125,7 +145,8 @@ typedef struct{
   vec2 pointer_position;
   u32 pointer_index;
   index_table * collision_table;
-
+  entity_2_collisions_table * collisions_2_table;
+  
 }graphics_context;
 
 typedef u32 polygon_id;
@@ -158,6 +179,7 @@ void graphics_context_load(graphics_context * ctx){
   ctx->pointer_index = p1;
   ctx->collision_table = index_table_create(NULL, sizeof(collision_data));
   polygon_add_vertex2f(ctx, p1, vec2_new(0, 0));
+  ctx->collisions_2_table = entity_2_collisions_table_create(NULL);
 }
 
 
@@ -549,13 +571,37 @@ bool copy_nth(const char * _str, u32 index, char * buffer, u32 buffer_size){
 
 }
 
+
 CREATE_TABLE_DECL2(simple_graphics_control, u64, u64);
 CREATE_TABLE_NP(simple_graphics_control, u64, u64);
+
+typedef struct {
+  u32 selected_entity;
+  vec2 offset;
+  bool mouse_state;
+  vec2 last_mouse_position;
+  float zoom;
+}game_data;
+
+CREATE_TABLE_DECL2(entity_target, u32, vec3);
+CREATE_TABLE2(entity_target, u32, vec3);
+CREATE_TABLE_DECL2(simple_game_data, u64, game_data);
+CREATE_TABLE2(simple_game_data, u64, game_data);
+
+CREATE_TABLE_DECL2(alternative_control, u64, u64);
+CREATE_TABLE2(alternative_control, u64, u64);
+
 
 static void command_entered(u64 id, char * command){
   u64 control = get_simple_graphics_control(id);
   editor_context editor = get_simple_graphics_editor_context(control);
   graphics_context ctx = get_graphics_context(control);
+  // game_data gamedata;
+  // {
+  //   u64 gamectl = get_alternative_control(control);
+  //   gamedata = get_simple_game_data(gamectl);
+  // }
+
   char first_part[100];
   bool first(const char * check){
     return strcmp(first_part, check) == 0;
@@ -585,6 +631,23 @@ static void command_entered(u64 id, char * command){
       }
     }
   }
+
+  void print_entity(u32 entity_id, bool print_polygons, bool print_vertexes){
+    namebuf[0] = 0;get_desc_text2(SELECTED_ENTITY, entity_id, namebuf, array_count(namebuf));
+    entity_data * entity = index_table_lookup(ctx.entities, entity_id);
+    logd("Entity: %i   ", entity_id); vec3_print(entity->position);logd(" %s\n", namebuf);
+    u32 model_id = entity->model;
+    if(model_id != 0){
+      namebuf[0] = 0;get_desc_text2(SELECTED_MODEL, model_id, namebuf, array_count(namebuf));
+      logd("Model: %i %s\n", model_id, namebuf);
+      if(print_polygons){
+	model_data * md = index_table_lookup(ctx.models, model_id);
+	for(u32 j = 0; j < md->polygons.count; j++){
+	  print_polygon(j + md->polygons.index, print_vertexes);
+	}
+      }
+    }
+  }
   
   if(copy_nth(command, 0, first_part, array_count(first_part))){
     if(first("exit")){
@@ -606,32 +669,41 @@ static void command_entered(u64 id, char * command){
 	    for(u64 i = 0; i < cnt; i++){
 	      print_polygon(i + 1, false);
 	    }
+	    return;
 	  }
 	}
+	if(snd("entity")){
+	  char idbuf[100];
+	  u64 index = 0;
+	  if(copy_nth(command, 2, idbuf, array_count(idbuf))){
+	    sscanf(idbuf, "%i", &index);
+	    if(index > 0 && index_table_contains(ctx.entities, (u32)index)){
+	      print_entity(index, true, false);
+	      return;
+	    }
+	  }else{
+	    u64 cnt = 0;
+	    index_table_all(ctx.entities, &cnt);
+	    for(u64 i = 0; i < cnt; i++){
+	      print_entity(i + 1, false, false);
+	    }
+	    return;
+	  }
+
+	}
+	
       }
 	 
       logd("Listing: \n");
 
       u64 cnt = 0;
-      entity_data * entities = index_table_all(ctx.entities, &cnt);
+      index_table_all(ctx.entities, &cnt);
       logd("Entities: %i items.\n", cnt);
       bool print_vertexes = copy_nth(command, 1, snd_part, array_count(snd_part)) && snd("vertex");
       for(u64 i = 0; i < cnt; i++){
 	u32 entity_id = i + 1;
-
-	namebuf[0] = 0;get_desc_text2(SELECTED_ENTITY, entity_id, namebuf, array_count(namebuf));
-	entity_data * entity = entities + i;
-	logd("Entity: %i   ", entity_id); vec3_print(entity->position);logd(" %s\n", namebuf);
-	u32 model_id = entity->model;
-	if(model_id != 0){
-	  namebuf[0] = 0;get_desc_text2(SELECTED_MODEL, model_id, namebuf, array_count(namebuf));
-	  logd("Model: %i %s\n", model_id, namebuf);
-
-	  model_data * md = index_table_lookup(ctx.models, model_id);
-	  for(u32 j = 0; j < md->polygons.count; j++){
-	    print_polygon(j + md->polygons.index, print_vertexes);
-	  }
-	}
+	print_entity(entity_id, true, print_vertexes);
+	
       }
     }else if(first("create")){
       copy_nth(command, 1, snd_part, array_count(snd_part));
@@ -792,6 +864,26 @@ static void command_entered(u64 id, char * command){
 	      ed->model = v;
 	  }
 	}
+	if(snd("entity")){
+	  char trd_part[100];
+	  if(!copy_nth(command, 2, trd_part, array_count(trd_part))) return;
+
+	  bool trd(const char * check){
+	    return strcmp(trd_part, check) == 0;
+	  }
+	  if(trd("type") && editor.selection_kind == SELECTED_ENTITY && editor.selected_index != 0){
+	    char buf[20];
+	    if(copy_nth(command, 3, buf, array_count(buf))){
+	      u64 v = 0;
+	      sscanf(buf,"%i", &v);
+	      if(v != 0){
+		logd("setting %i %i\n", editor.selected_index, v);
+		set_entity_type(editor.selected_index, v);
+	      }
+	    }
+	  }
+	}
+	
     }
     else if(first("select") || first("focus")){
       bool is_focus = first("focus");
@@ -822,11 +914,9 @@ static void command_entered(u64 id, char * command){
 	  if(is_focus){
 	    editor.focused_item_kind = kind;
 	    editor.focused_item = i1;
-	  }else{
-	    editor.selection_kind = kind;
-	    editor.selected_index = i1;
 	  }
-	  
+	  editor.selection_kind = kind;
+	  editor.selected_index = i1;
 	}else{
 	  editor.focused_item_kind = SELECTED_NONE;
 	  editor.focused_item = 0;
@@ -970,9 +1060,6 @@ static void command_entered(u64 id, char * command){
 CREATE_TABLE_DECL2(console_history_index, u64, u32);
 CREATE_TABLE2(console_history_index, u64, u32);
 
-CREATE_TABLE_DECL2(alternative_control, u64, u64);
-CREATE_TABLE2(alternative_control, u64, u64);
-
 
 static void console_handle_key(u64 console, int key, int mods, int action){
   if(action == key_release)
@@ -1054,18 +1141,6 @@ void simple_grid_measure(u64 id, vec2 * size){
   set_graphics_context(id, gd);  
 }
 
-typedef struct {
-  u32 selected_entity;
-  vec2 offset;
-  bool mouse_state;
-  vec2 last_mouse_position;
-  float zoom;
-}game_data;
-
-CREATE_TABLE_DECL2(entity_target, u32, vec3);
-CREATE_TABLE2(entity_target, u32, vec3);
-CREATE_TABLE_DECL2(simple_game_data, u64, game_data);
-CREATE_TABLE2(simple_game_data, u64, game_data);
 
 
 static void game_handle_key(u64 console, int key, int mods, int action){
@@ -1286,7 +1361,8 @@ void simple_grid_render(u64 id){
   bool moved[count];
   bool unused[count];
   idx = 0;
-  
+  entity_2_collisions_clear(gd.collisions_2_table);
+
   active_entities_iter_all(gd.active_entities, entities, unused, count, &idx);
   { // check collisions due to move.
     for(u32 i = 0; i < count ;i ++){
@@ -1322,6 +1398,8 @@ void simple_grid_render(u64 id){
 	e1[i] = cd[i].entity1.entity;
 	e2[i] = cd[i].entity2.entity;
       }
+      entity_2_collisions_insert(gd.collisions_2_table, e1, e2, collisions);
+      entity_2_collisions_insert(gd.collisions_2_table, e2, e1, collisions);
       int keycmp32(const u32 * k1,const  u32 * k2){
 	if(*k1 > *k2)
 	  return 1;
@@ -1398,6 +1476,10 @@ void simple_grid_render(u64 id){
 	e1[i] = cd[i].entity1.entity;
 	e2[i] = cd[i].entity2.entity;
       }
+
+      //entity_2_collisions_insert(gd.collisions_2_table, e1, e2, collisions);
+      //entity_2_collisions_insert(gd.collisions_2_table, e2, e1, collisions);
+
       int keycmp32(const u32 * k1,const  u32 * k2){
 	if(*k1 > *k2)
 	  return 1;
@@ -1418,6 +1500,34 @@ void simple_grid_render(u64 id){
       }
     }
   }
+  {
+    
+    for(u64 i = 0;i < count; i++){
+      u32 entity = entities[i];
+      u32 to_hit = get_hit_queue(entity);
+      if(to_hit != 0){
+	size_t idx = 0;
+	u32 count = 0;
+	u32 e2[10];
+	while(0 < (count = entity_2_collisions_iter2(gd.collisions_2_table, entity, e2, array_count(e2), &idx))){
+	  //logd("CC: %i\n", count);
+	  for(u32 i = 0; i < count; i++){
+	    //logd("E: %i\n", e2[i]);
+	    if(e2[i] == to_hit){
+	      logd("Hitting: %i\n", e2[i]);
+	      unset_hit_queue(entity);
+	      goto exit_loop;
+	    }
+	  }
+	}
+      exit_loop:;
+	
+      }
+    }
+  }
+
+  // depth is used for simple depth sorting
+  // this is important to get correct alpha blending.
   float depth[count];
   idx = 0;
   mat4 cammat = mat4_identity();
@@ -1609,9 +1719,16 @@ void simple_grid_game_mouse_down_func(u64 grid_id, double x, double y, u64 metho
     simple_game_point_collision(ctx, entities, count, vec2_add(p, gd.offset), tab);
     entity_local_data * all = index_table_all(tab, &cnt);    
     if(cnt > 0 && gd.selected_entity != all->entity){
-      gd.selected_entity = all->entity;
-      logd("HIT:%i %i %i %i\n", all->entity, all->model, all->polygon_offset, all->vertex_offset);
-      set_simple_game_data(grid_id, gd);
+      if(get_entity_type(all->entity) == ENTITY_TYPE_PLAYER){
+	gd.selected_entity = all->entity;
+      }
+      if(get_entity_type(gd.selected_entity) == ENTITY_TYPE_PLAYER
+	 && get_entity_type(all->entity) == ENTITY_TYPE_ENEMY){
+	vec2 v = vec2_add(p, gd.offset);
+	entity_data * ed = index_table_lookup(ctx.entities, gd.selected_entity);
+	set_entity_target(gd.selected_entity, vec3_new(v.x, ed->position.y, v.y));
+	set_hit_queue(gd.selected_entity, all->entity);
+      }
     }else{
       // Assumed we did not hit something.
       if(gd.selected_entity != 0){
