@@ -70,10 +70,6 @@ CREATE_TABLE2(entity_type, u64, ENTITY_TYPE);
 CREATE_TABLE_DECL2(hit_queue, u32, u32);
 CREATE_TABLE2(hit_queue, u32, u32);
 
-
-
-
-
 void set_desc_text2(u32 idx, u32 group, const char * str){
   u64 id = ((u64)idx) | ( ((u64)group) << 32);
   name_data d = {0};
@@ -315,7 +311,6 @@ void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 came
       return;
     vec2 positions[count];
     float max_depth = -100;
-    logd("Loading polygon.. %i\n", polygon_id);
     vertex_data * vd = index_table_lookup_sequence(ctx.vertex, pd->vertexes);
     for(u32 i = 0; i < count; i++){
       positions[i] = vd[i].position;
@@ -596,6 +591,7 @@ static void command_entered(u64 id, char * command){
   u64 control = get_simple_graphics_control(id);
   editor_context editor = get_simple_graphics_editor_context(control);
   graphics_context ctx = get_graphics_context(control);
+  u64 win = get_game_window(control);
   // game_data gamedata;
   // {
   //   u64 gamectl = get_alternative_control(control);
@@ -883,6 +879,17 @@ static void command_entered(u64 id, char * command){
 	    }
 	  }
 	}
+
+	if(snd("background")){
+	  vec3 color = {0};
+	  for(u32 i = 0; i < array_count(color.data); i++){
+	    char buf[10] = {0};
+	    if(!copy_nth(command, 2 + i, buf, array_count(buf)))
+	      break;
+	    sscanf(buf, "%f", &(color.data[i]));
+	  }
+	  set_color(win, color);
+	}
 	
     }
     else if(first("select") || first("focus")){
@@ -910,10 +917,11 @@ static void command_entered(u64 id, char * command){
 	  kind = SELECTED_VERTEX;
 	}
 	if(table != NULL && index_table_contains(table, i1)){
-	  editor.offset = vec2_zero;
+
 	  if(is_focus){
 	    editor.focused_item_kind = kind;
 	    editor.focused_item = i1;
+	    editor.offset = vec2_zero;
 	  }
 	  editor.selection_kind = kind;
 	  editor.selected_index = i1;
@@ -1196,6 +1204,7 @@ void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index
 	continue;
       if(ed == ed2) continue;
       vec3 position2 = ed2->position;
+      if(ed2->model == 0) continue;
       model_data * md2 = index_table_lookup(gd.models, ed2->model);
       u64 pd2cnt = md2->polygons.count;
       polygon_data * pd2 = index_table_lookup_sequence(gd.polygon, md2->polygons);
@@ -1204,7 +1213,6 @@ void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index
 	if(pd[i].physical_height == 0.0f) continue;
 	for(u32 j = 0; j < pd2cnt; j++){
 	  if(pd2[j].physical_height == 0.0f) continue;
-	  //if(pd + i == pd2 + j) continue;
 	  u64 vcnt1 = pd[i].vertexes.count;
 	  u64 vcnt2 = pd2[j].vertexes.count;
 
@@ -1224,8 +1232,6 @@ void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index
 	      continue;
 	  }
 
-
-	  
 	  for(u64 k1 = 2; k1 < vcnt1; k1++){
 	    vec2 verts1[3];
 	    if(cw1){
@@ -1398,8 +1404,6 @@ void simple_grid_render(u64 id){
 	e1[i] = cd[i].entity1.entity;
 	e2[i] = cd[i].entity2.entity;
       }
-      entity_2_collisions_insert(gd.collisions_2_table, e1, e2, collisions);
-      entity_2_collisions_insert(gd.collisions_2_table, e2, e1, collisions);
       int keycmp32(const u32 * k1,const  u32 * k2){
 	if(*k1 > *k2)
 	  return 1;
@@ -1410,6 +1414,8 @@ void simple_grid_render(u64 id){
       
       qsort(e1, collisions, sizeof(*e1), (void *)keycmp32);
       qsort(e2, collisions, sizeof(*e2), (void *)keycmp32);
+      entity_2_collisions_insert(gd.collisions_2_table, e1, e2, collisions);
+      entity_2_collisions_insert(gd.collisions_2_table, e2, e1, collisions);
       for(u32 i = 0; i < count; i++){
 	if(moved[i] == false) continue;
 	if(bsearch(entities + i, e1, collisions, sizeof(entities[i]), (void *) keycmp32)
@@ -1719,8 +1725,10 @@ void simple_grid_game_mouse_down_func(u64 grid_id, double x, double y, u64 metho
     simple_game_point_collision(ctx, entities, count, vec2_add(p, gd.offset), tab);
     entity_local_data * all = index_table_all(tab, &cnt);    
     if(cnt > 0 && gd.selected_entity != all->entity){
+      logd("Entity type: %i\n", get_entity_type(all->entity));
       if(get_entity_type(all->entity) == ENTITY_TYPE_PLAYER){
 	gd.selected_entity = all->entity;
+	set_simple_game_data(grid_id, gd);
       }
       if(get_entity_type(gd.selected_entity) == ENTITY_TYPE_PLAYER
 	 && get_entity_type(all->entity) == ENTITY_TYPE_ENEMY){
@@ -1791,8 +1799,6 @@ void simple_graphics_editor_load(u64 id, u64 win_id){
     _gd.zoom = 0.5;
     set_simple_game_data(game, _gd);
     //}
-    
-  
   
   if(gui_get_control(win_id, id) == NULL  && gui_get_control(win_id, game) == NULL){
     add_control(win_id, id);
@@ -1828,10 +1834,8 @@ void simple_graphics_editor_load(u64 id, u64 win_id){
     command_entered(console, (char *)"create vertex -0.3 0.3");
     command_entered(console, (char *)"set color 0.7 0.7 0.3 1.0");
     
-  }
-  
+  }  
 }
-
 
 bool simple_graphics_editor_test(){
   
