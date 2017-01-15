@@ -160,6 +160,29 @@ void graphics_context_reload_polygon(graphics_context ctx, u32 polygon){
   }
 }
 
+typedef enum{
+  SELECTED_ENTITY,
+  SELECTED_MODEL,
+  SELECTED_POLYGON,
+  SELECTED_VERTEX,
+  SELECTED_NONE
+}selected_kind;
+
+typedef struct{
+  selected_kind selection_kind;
+  u32 selected_index;
+  float zoom;
+  u32 focused_item;
+  selected_kind focused_item_kind;
+  vec2 offset;
+  bool is_grabbed;
+  union {
+    
+    u32 reserved[16];
+  };
+}editor_context;
+
+
 void graphics_context_load(graphics_context * ctx){
   memset(ctx, 0, sizeof(*ctx));
   ctx->models = index_table_create("simple/models", sizeof(model_data));
@@ -171,10 +194,30 @@ void graphics_context_load(graphics_context * ctx){
   ctx->gpu_poly = loaded_polygon_table_create(NULL);
   ctx->poly_color = polygon_color_table_create("simple/polygon_color");
   ctx->active_entities = active_entities_table_create("simple/active_entities");
-  polygon_id p1 = polygon_create(ctx);
-  ctx->pointer_index = p1;
+  { // find cursor.
+    u64 cnt = 0;
+    polygon_data * pd = index_table_all(ctx->polygon, &cnt);
+    polygon_id pid = 0;
+    for(u64 i = 0; i < cnt; i++){
+      char nd[100];
+      if(get_desc_text2(pd[i].material,SELECTED_POLYGON, nd, sizeof(nd))){
+	if(strcmp(nd, "pointer_poly") == 0){
+	  pid = i + 1;
+	  break;
+	}
+      }
+    }
+    if(pid == 0){
+      pid = polygon_create(ctx);
+      ctx->pointer_index = pid;
+      polygon_add_vertex2f(ctx, pid, vec2_new(0, 0));
+      set_desc_text2(SELECTED_POLYGON, pid, "pointer_poly");
+      polygon_data * pd = index_table_lookup(ctx->polygon, pid);
+      pd->material = get_unique_number();
+    }
+  }
+  
   ctx->collision_table = index_table_create(NULL, sizeof(collision_data));
-  polygon_add_vertex2f(ctx, p1, vec2_new(0, 0));
   ctx->collisions_2_table = entity_2_collisions_table_create(NULL);
 }
 
@@ -337,10 +380,15 @@ void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 came
   glFrontFace(GL_CW);
   glCullFace(GL_BACK);
   glEnable(GL_CULL_FACE);
-  glEnable(GL_DEPTH_TEST);
-  glDepthFunc(GL_LEQUAL);
+  
   vec4 color = vec4_zero;
   polygon_color_try_get(ctx.poly_color, pd->material, &color);
+  if(depth > -100){
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+  }else{
+    glDisable(GL_DEPTH_TEST);
+  }
   glUseProgram(shader.shader);
   glUniformMatrix4fv(shader.camera_loc,1,false, &(camera.data[0][0]));
   glUniform4f(shader.color_loc, color.x, color.y, color.z, color.w);
@@ -358,27 +406,6 @@ void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 came
   glDisable( GL_DEPTH_TEST );
 }
 
-typedef enum{
-  SELECTED_ENTITY,
-  SELECTED_MODEL,
-  SELECTED_POLYGON,
-  SELECTED_VERTEX,
-  SELECTED_NONE
-}selected_kind;
-
-typedef struct{
-  selected_kind selection_kind;
-  u32 selected_index;
-  float zoom;
-  u32 focused_item;
-  selected_kind focused_item_kind;
-  vec2 offset;
-  bool is_grabbed;
-  union {
-    
-    u32 reserved[16];
-  };
-}editor_context;
 
 
 CREATE_TABLE_DECL2(simple_graphics_editor_context, u64, editor_context);
@@ -414,9 +441,11 @@ void simple_grid_mouse_down_func(u64 grid_id, double x, double y, u64 method){
   vec2 p = graphics_context_pixel_to_screen(ctx, vec2_new(x, y));
   p = vec2_scale(p, 1.0 / editor.zoom);
   p = vec2_sub(p, editor.offset);
+
   if(mouse_button_button == mouse_button_left){
     if(mouse_button_action != mouse_button_press)
       return;
+    vec2_print(p);logd("\n");
     if(editor.selection_kind == SELECTED_VERTEX){
       vertex_data * vd = index_table_lookup(ctx.vertex, editor.selected_index);
       vd->position = p;
@@ -426,13 +455,11 @@ void simple_grid_mouse_down_func(u64 grid_id, double x, double y, u64 method){
       
     }else if(editor.selection_kind == SELECTED_POLYGON){
       polygon_add_vertex2f(&ctx, editor.selected_index, p);
-      loaded_polygon_data loaded;
-      polygon_data * pd = index_table_lookup(ctx.polygon, editor.selected_index);
-      if(pd != NULL && loaded_polygon_try_get(ctx.gpu_poly, pd->material, &loaded)){
-	u32 idx = index_table_alloc(ctx.polygons_to_delete);
-	u32 * ptr = index_table_lookup(ctx.polygons_to_delete, idx);
-	ptr[0] = pd->material;
-      }
+      graphics_context_reload_polygon(ctx, editor.selected_index);
+    }else if(editor.selection_kind == SELECTED_ENTITY && editor.selected_index != 0){
+      entity_data * ed = index_table_lookup(ctx.entities, editor.selected_index);
+      ed->position = vec3_new(ed->position.x + p.x, ed->position.y, ed->position.z + p.y);
+
     }
   } else if(mouse_button_button == mouse_button_right){
     editor.is_grabbed = mouse_button_action == mouse_button_press;
@@ -474,7 +501,6 @@ void simple_graphics_editor_render(u64 id){
 
   editor_context ed = get_simple_graphics_editor_context(id);
   mat4 editor_tform = mat4_translate(ed.offset.x, ed.offset.y, 0);
-  //vec2_print(ed.offset);
   if(ed.focused_item_kind == SELECTED_ENTITY){
     if(ed.focused_item != 0){
       entity_data * ed2 = index_table_lookup(gd.entities, ed.focused_item);
@@ -518,7 +544,7 @@ void simple_graphics_editor_render(u64 id){
   
   {
     vec2 offset = graphics_context_pixel_to_screen(gd, gd.pointer_position);
-    simple_grid_render_gl(gd, gd.pointer_index, mat4_translate(offset.x, offset.y, 0), true, 0); 
+    simple_grid_render_gl(gd, gd.pointer_index, mat4_translate(offset.x, offset.y, 0), true, -1000); 
   }
 
   {
@@ -1177,7 +1203,7 @@ static void game_handle_key(u64 console, int key, int mods, int action){
     if(gd.selected_entity != 0){
       vec3 current_impulse;
       if(!try_get_current_impulse(gd.selected_entity, &current_impulse))
-	set_current_impulse(gd.selected_entity, vec3_new(0,0.2,0));
+	set_current_impulse(gd.selected_entity, vec3_new(0,0.05, 0));
     }
     UNUSED(ctx);
   }
@@ -1773,7 +1799,7 @@ void simple_graphics_editor_load(u64 id, u64 win_id){
   u64 console = intern_string("ccconsole!");
   
   set_simple_graphics_control(console, id);
-  set_color_alpha(console, vec4_new(1,1,1,0.2));
+  set_color_alpha(console, vec4_new(1,1,1,0.3));
   set_console_height(console, 300);
   create_console(console);
   add_control(id, console);

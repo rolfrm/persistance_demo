@@ -1,4 +1,3 @@
-
 #include <GL/glew.h>
 #include <iron/full.h>
 #include "persist.h"
@@ -610,10 +609,24 @@ bool index_table_test(){
   u64 win_id = intern_string("voxel window");
   //simple_grid_initialize(voxel_board);
   //simple_grid_renderer_create(voxel_board);
+  u64 fpstextline = 0;
+  {
+    fpstextline = intern_string("text_line_1");
+    get_textline(fpstextline);
+    add_control(win_id, fpstextline);
+    set_horizontal_alignment(fpstextline, HALIGN_LEFT);
+    set_vertical_alignment(fpstextline, VALIGN_TOP);
+  }
+  
   simple_graphics_editor_load(voxel_board, win_id);
+  make_window(win_id);
 
-  set_color(win_id, vec3_new(1, 1, 1));
-  make_window(win_id); 
+  if(once(win_id + 0xFFFFFFFF134123)){
+    set_color(win_id, vec3_new(1, 1, 1));
+  }
+  
+  
+  
   //add_control(win_id, voxel_board);
   auto method = get_method(win_id, render_control_method);
   double i = 0;
@@ -625,14 +638,26 @@ bool index_table_test(){
       dealloc(ptrs[j]);
   }
   while(!get_should_exit(voxel_board)){
+    u64 ts = timestamp(); // for fps calculation.
     mat4 p = mat4_perspective(0.8, 1, 0.1, 10);
     i += 0.03;
     mat4 t = mat4_rotate(mat4_translate(0.5,0.5,0),1,0.23,0.1,i);//mat4_rotate(mat4_translate(-0.0,-1.5,-4 + 0 * sin(i)),0,1,1, 0.0 * i);
     t = mat4_mul(t, mat4_translate(0,0,4));
     set_camera_3d_position(voxel_board, mat4_mul(p, mat4_invert(t)));
-    iron_sleep(0.03);
+    //iron_sleep(0.03);
     glfwPollEvents();
+    u64 ts2 = timestamp(); // for fps calculation.
     method(win_id);
+    {
+      u64 tsend = timestamp();
+      u64 msdiff = tsend - ts;
+      char fpsbuf[100];
+      sprintf(fpsbuf, "%3.0f / %3.0f FPS", 1.0 / (1e-6 * (tsend - ts2)), 1.0 / (1e-6 * msdiff));
+      remove_text(fpstextline);
+      set_text(fpstextline, fpsbuf);
+    }
+	
+    
   }
   unset_should_exit(voxel_board);
   return TEST_SUCCESS;
