@@ -158,8 +158,7 @@ void mem_area_realloc(persisted_mem_area * area, u64 size){
   if(area->size == size) return;
   
   if(false == area->is_persisted){
-    area->ptr = ralloc(area->ptr, size);
-    area->size = size;
+    area->ptr = ralloc(area->ptr, area->size = size);
     return;
   }
 

@@ -725,8 +725,8 @@ static void command_entered(u64 id, char * command){
       for(u64 i = 0; i < cnt; i++){
 	u32 entity_id = i + 1;
 	print_entity(entity_id, true, print_vertexes);
-	
       }
+      logd("%i \n", ((u32 *)ctx.vertex->free_indexes->ptr)[0]);
     }else if(first("create")){
       copy_nth(command, 1, snd_part, array_count(snd_part));
       logd("SND: %s\n", snd_part);
@@ -988,11 +988,11 @@ static void command_entered(u64 id, char * command){
 	    ptr[0] = pd->material;
 	  }
 	    
-	}else if(snd("polygon")){
+	}
+	else if(snd("polygon")){
 	  polygon_data * pd = index_table_lookup(ctx.polygon, i1);
 	  index_table_resize_sequence(ctx.vertex, &(pd->vertexes), 0);
 	}
-	
       }
       set_simple_graphics_editor_context(control, editor);
     }else if(first("clear")){
@@ -1060,6 +1060,33 @@ static void command_entered(u64 id, char * command){
 	  v[j].position = vec2_sub(v[j].position, avg);
 	graphics_context_reload_polygon(ctx, md->polygons.index + i);
       }
+    }else if(first("scale")){
+      if(copy_nth(command, 1, snd_part, array_count(snd_part))){
+	if(snd("model")){
+	  u32 model = 0;
+	  f32 scale = 1.0;
+	  char arg[20];
+	  if(copy_nth(command, 3, arg, sizeof(arg))){
+	    sscanf(arg, "%f", &scale);
+	    copy_nth(command, 2, arg, sizeof(arg));
+	    sscanf(arg, "%i", &model);
+	  }else{
+	    copy_nth(command, 2, arg, sizeof(arg));
+	    sscanf(arg, "%f", &scale);
+	  }
+	  if(model == 0)
+	    return;
+	  model_data * md = index_table_lookup(ctx.models, model);
+	  polygon_data * pd = index_table_lookup_sequence(ctx.polygon, md->polygons);
+	  for(u32 i = 0; i < md->polygons.count; i++){
+	    index_table_sequence seq = pd[i].vertexes;
+	    vertex_data * v = index_table_lookup_sequence(ctx.vertex, seq);
+	    for(u32 j = 0; j < seq.count; j++)
+	      v[j].position = vec2_scale(v[j].position, scale);
+	    graphics_context_reload_polygon(ctx, md->polygons.index + i);
+	  }
+	} 
+      }
     }
     else if(first("moveup") && editor.selection_kind == SELECTED_POLYGON){
       u32 model = polygon_get_model(ctx, editor.selected_index);
@@ -1075,10 +1102,25 @@ static void command_entered(u64 id, char * command){
 	  graphics_context_reload_polygon(ctx, md->polygons.index + a);
 	  graphics_context_reload_polygon(ctx, md->polygons.index + b);
 	}
-
       }
-
     }else if(first("optimize")){
+      {
+	u64 cnt = 0;
+	index_table_all(ctx.entities, &cnt);
+	for(u64 i = 0; i < cnt; i++){
+	  u32 entity_id = i + 1;
+	  entity_data * entity = index_table_lookup(ctx.entities, entity_id);
+	  u32 model_id = entity->model;
+	  if(model_id != 0){
+	    model_data * md = index_table_lookup(ctx.models, model_id);
+	    for(u32 j = 0; j < md->polygons.count; j++){
+	      polygon_data * pd = index_table_lookup(ctx.polygon, j + md->polygons.index);
+	      index_table_resize_sequence(ctx.vertex, &(pd->vertexes), pd->vertexes.count);
+	    }
+	  }
+	}
+      }
+    
       index_table_optimize(ctx.polygon);
       index_table_optimize(ctx.vertex);
       index_table_optimize(ctx.entities);

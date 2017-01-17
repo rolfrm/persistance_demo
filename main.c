@@ -104,7 +104,7 @@ void index_table_resize_sequence(index_table * table, index_table_sequence * seq
     if(new_count > 0){
       void * src = index_table_lookup_sequence(table, *seq);
       void * dst = index_table_lookup_sequence(table, nseq);
-      memmove(dst, src, seq->count * table->element_size);
+      memmove(dst, src, MIN(seq->count, nseq.count) * table->element_size);
     }
     index_table_remove_sequence(table, seq);
   }
@@ -137,7 +137,6 @@ index_table_sequence index_table_alloc_sequence(index_table * table, u32 count){
 	  for(u32 j = i - cnt + 1; j < freeindexcnt - cnt; j++)
 	    ptr[j + 1] = ptr[j + cnt + 1];
 	  
-	  //memmove(&(ptr[i - cnt + 1]), &(ptr[i]), (freeindexcnt - i - 1) * sizeof(u32));
 	  ASSERT(start != 0);
 	  void * p = index_table_lookup(table, start);
 	  memset(p, 0, cnt * table->element_size);
@@ -166,6 +165,7 @@ void index_table_remove_sequence(index_table * table, index_table_sequence * seq
     ((u32 *)table->free_indexes->ptr)[cnt + i + 1] = seq->index + i;
   ((u32 *) table->free_indexes->ptr)[0] += seq->count;
   memset(seq, 0, sizeof(*seq));
+  index_table_optimize(table);
 }
 
 void * index_table_lookup_sequence(index_table * table, index_table_sequence seq){
@@ -239,20 +239,30 @@ void index_table_optimize(index_table * table){
     return ( *(int*)a - *(int*)b );
   }
   u32 cnt = _index_table_free_index_count(table);
-
+  if(table->free_indexes->ptr == NULL || cnt ==  0)
+    return;
+    
   u32 * p = table->free_indexes->ptr;
   qsort(p + 1,cnt , sizeof(u32), (void *) cmpfunc);
   u32 icnt = index_table_count(table);
   
   u32 freedcount = 0;
+  while(icnt > 0 && p[cnt] >= icnt){
+    freedcount += 1;
+    cnt -= 1;
+    }
   while(icnt > 0 && p[cnt] == icnt - 1){
+
     icnt -= 1;
     cnt -= 1;
     freedcount += 1;
   }
   _index_table_free_index_count_set(table, cnt);
   index_table_count_set(table, icnt);
-
+  u64 newsize = icnt * table->element_size + table->element_size * 5;
+  mem_area_realloc(table->area, newsize);
+  u64 newsize2 = cnt * table->element_size + sizeof(u32);
+  mem_area_realloc(table->free_indexes, newsize2);
 }
 
 
@@ -470,14 +480,17 @@ bool index_table_test(){
   
   if(true){// first test.
     for(int k = 1; k < 5;k++){
+      logd("K: %i\n", k);
       index_table * t = index_table_create(NULL, sizeof(i64));
+      index_table_optimize(t);
       index_table_sequence seq = index_table_alloc_sequence(t, 20);
       index_table_sequence seq3 = index_table_alloc_sequence(t, 10);      
       index_table_resize_sequence(t, &seq, 9);
       index_table_remove_sequence(t, &seq3);
+
       index_table_remove_sequence(t, &seq);      
       index_table_optimize(t);
-      
+
       
       seq = index_table_alloc_sequence(t, 20);
       logd("%i \n", _index_table_free_index_count(t));
