@@ -177,6 +177,9 @@ typedef struct{
   vec2 offset;
   bool is_grabbed;
   union {
+    struct {
+      bool snap_to_grid;
+    };
     
     u32 reserved[16];
   };
@@ -211,10 +214,22 @@ void graphics_context_load(graphics_context * ctx){
       pid = polygon_create(ctx);
       ctx->pointer_index = pid;
       polygon_add_vertex2f(ctx, pid, vec2_new(0, 0));
+      polygon_add_vertex2f(ctx, pid, vec2_new(0.2, 0));
+      polygon_add_vertex2f(ctx, pid, vec2_new(0.2, 0.2));
       set_desc_text2(SELECTED_POLYGON, pid, "pointer_poly");
-      polygon_data * pd = index_table_lookup(ctx->polygon, pid);
+      pd = index_table_lookup(ctx->polygon, pid);
       pd->material = get_unique_number();
     }
+    if(pd->vertexes.count < 2){
+      polygon_add_vertex2f(ctx, pid, vec2_new(0.2, 0));
+      polygon_add_vertex2f(ctx, pid, vec2_new(0.2, 0.2));
+    }
+
+    vertex_data * vd = index_table_lookup_sequence(ctx->vertex, pd->vertexes);
+    vd[0].position = vec2_new(0, 0);
+    vd[1].position = vec2_new(0.01, 0.03);
+    vd[2].position = vec2_new(0.03, 0.01);
+    
   }
   
   ctx->collision_table = index_table_create(NULL, sizeof(collision_data));
@@ -334,30 +349,30 @@ vec2 graphics_context_pixel_to_screen(const graphics_context ctx, vec2 pixel_coo
   ASSERT(fabs(ctx.render_size.x) >=0.001);
   vec2 v = vec2_sub(vec2_scale(vec2_div(pixel_coords, ctx.render_size), 2.0), vec2_one);
   v.y = -v.y;
-
-  
+ 
   return v;
 }
 
-void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 camera, bool draw_points, float depth){
-  loaded_polygon_data loaded;
+loaded_polygon_data simple_grid_load_polygon(const graphics_context ctx, u32 polygon_id){
+  loaded_polygon_data loaded = {0};
   ASSERT(polygon_id != 0);
   polygon_data * pd = index_table_lookup(ctx.polygon, polygon_id);
   if(pd->vertexes.index == 0)
-    return;
+    return loaded;
   if(pd->material == 0)
-    return;
+    return loaded;
   if(false == loaded_polygon_try_get(ctx.gpu_poly, pd->material, &loaded)) {
     u32 count = pd->vertexes.count;
     
     if(count == 0)
-      return;
+      return loaded;
     vec2 positions[count];
     float max_depth = -100;
     vertex_data * vd = index_table_lookup_sequence(ctx.vertex, pd->vertexes);
     for(u32 i = 0; i < count; i++){
       positions[i] = vd[i].position;
       max_depth = MAX(vd[i].position.y, max_depth);
+      
     }
     
     ASSERT(count > 0);
@@ -367,8 +382,19 @@ void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 came
     loaded.count = count;
     loaded.depth = max_depth;
     loaded_polygon_set(ctx.gpu_poly, pd->material, loaded);
-
   }
+  return loaded;
+}
+
+CREATE_TABLE_DECL2(grid_poly, u32, u32);
+CREATE_TABLE2(grid_poly, u32, u32);
+
+
+void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 camera, bool draw_points, float depth){
+  loaded_polygon_data loaded = simple_grid_load_polygon(ctx, polygon_id);
+  if(loaded.gl_ref == 0)
+    return;
+  polygon_data * pd = index_table_lookup(ctx.polygon, polygon_id);
   glEnable( GL_BLEND );
   if(pd->physical_height != 0.0f){
 
@@ -475,6 +501,9 @@ void simple_grid_mouse_down_func(u64 grid_id, double x, double y, u64 method){
   }
 }
 
+CREATE_TABLE_DECL2(simple_graphics_editor_grid_width, u64, f32);
+CREATE_TABLE2(simple_graphics_editor_grid_width, u64, f32);
+
 void simple_graphics_editor_render(u64 id){
     
   graphics_context gd = get_graphics_context(id);
@@ -515,7 +544,6 @@ void simple_graphics_editor_render(u64 id){
       u32 index = j + model->polygons.index;
       simple_grid_render_gl(gd, index, mat4_identity(), true, 0.5);
     }
-
   }
 
   editor_tform = mat4_mul(mat4_scaled(ed.zoom, ed.zoom, ed.zoom), editor_tform);
@@ -543,10 +571,92 @@ void simple_graphics_editor_render(u64 id){
   }
   
   {
+    polygon_data * pd = index_table_lookup(gd.polygon, gd.pointer_index);
+    if(pd->material == 0)
+      pd->material = get_unique_number();
+    polygon_color_set(gd.poly_color, pd->material, vec4_new(0, 0, 0, 1));
     vec2 offset = graphics_context_pixel_to_screen(gd, gd.pointer_position);
-    simple_grid_render_gl(gd, gd.pointer_index, mat4_translate(offset.x, offset.y, 0), true, -1000); 
+    auto tf = mat4_translate(offset.x, offset.y, 0);
+    simple_grid_render_gl(gd, gd.pointer_index, tf, false, -1000);
+    polygon_color_set(gd.poly_color, pd->material, vec4_new(1, 1, 1, 1));
+    simple_grid_render_gl(gd, gd.pointer_index,
+			  mat4_mul(tf,  mat4_scaled(0.5, 0.5, 0.5)), false, -1000); 
   }
 
+  { // Here grid lines are rendered
+    glDisable(GL_DEPTH_TEST);
+    //mat4 m = mat4_identity();
+    u64 polyid = intern_string("__grid_polygon__");
+    float grid_width = 0.1;
+    if(!try_get_simple_graphics_editor_grid_width(id, &grid_width))
+      grid_width = 0.1;
+    if(true){
+      
+      u32 poly = get_grid_poly(polyid);
+      if(poly == 0){
+	set_grid_poly(polyid, poly = polygon_create(&gd));
+	polygon_add_vertex2f(&gd, poly, vec2_new(-1.0, 0.0));
+      }
+      polygon_data * pd = index_table_lookup(gd.polygon, poly);
+      if(pd->material == 0)
+	pd->material = get_unique_number();
+      
+      if(pd->vertexes.count == 1)
+	polygon_add_vertex2f(&gd, poly, vec2_new(1.0, 0.0));
+      mat4 inv = mat4_invert(editor_tform);
+      vec4 vout = mat4_mul_vec4(inv, vec4_new(-1,-1,0,1));
+      vec4 vout2 = mat4_mul_vec4(inv, vec4_new(1,1,0,1));
+      vec3 v1 = vec3_scale(vout.xyz, 1.0 / grid_width);
+      vec3 v2 = vec3_scale(vout2.xyz, 1.0 / grid_width);
+      if(v1.x > v2.x) SWAP(v1.x, v2.x);
+      if(v1.y > v2.y) SWAP(v1.y, v2.y);
+      float px = v1.x;
+      float py = v1.y;
+      v1.x = floor(v1.x);
+      v1.y = floor(v1.y);
+      v2.x = ceil(v2.x);
+      v2.y = ceil(v2.y);
+      if(v2.x - v1.x < 100){
+	for(;v1.y < v2.y; v1.y += 1){
+	  vec4 v = vec4_new(px * grid_width, v1.y * grid_width,0,1);
+	  v = mat4_mul_vec4(editor_tform, v);
+	  mat4 cam = mat4_translate(v.x + 1, v.y, v.z);
+	  auto loaded = simple_grid_load_polygon(gd, poly);
+	  glBindBuffer(GL_ARRAY_BUFFER, loaded.gl_ref);
+	  simple_grid_shader shader = simple_grid_shader_get();
+	  glUseProgram(shader.shader);
+	
+	  glUniformMatrix4fv(shader.camera_loc,1,false, &(cam.data[0][0]));
+	  glUniform4f(shader.color_loc, 0, 0, 0, 1);
+	  glEnableVertexAttribArray(shader.vertex_loc);
+	  glVertexAttribPointer(shader.vertex_loc, 2, GL_FLOAT, false, 0, 0);
+	  glDrawArrays(GL_LINE_LOOP, 0, loaded.count);
+	  glDisableVertexAttribArray(shader.vertex_loc);
+	}
+
+	mat4 rot = mat4_rotate_Z(mat4_identity(), M_PI * 0.5);
+      
+	for(;v1.x < v2.x; v1.x += 1){
+	  vec4 v = vec4_new(v1.x * grid_width, py * grid_width,0,1);
+	  v = mat4_mul_vec4(editor_tform, v);
+	  mat4 cam = mat4_mul(mat4_translate(v.x, v.y + 1, v.z), rot);
+	  auto loaded = simple_grid_load_polygon(gd, poly);
+	  glBindBuffer(GL_ARRAY_BUFFER, loaded.gl_ref);
+	  simple_grid_shader shader = simple_grid_shader_get();
+	  glUseProgram(shader.shader);
+	
+	  glUniformMatrix4fv(shader.camera_loc,1,false, &(cam.data[0][0]));
+	  glUniform4f(shader.color_loc, 0, 0, 0, 1);
+	  glEnableVertexAttribArray(shader.vertex_loc);
+	  glVertexAttribPointer(shader.vertex_loc, 2, GL_FLOAT, false, 0, 0);
+	  glDrawArrays(GL_LINE_LOOP, 0, loaded.count);
+	  glDisableVertexAttribArray(shader.vertex_loc);
+	}
+      }
+    }
+  }
+
+  
   {
     u64 index = 0;
     control_pair * child_control = NULL;
@@ -916,6 +1026,17 @@ static void command_entered(u64 id, char * command){
 	  }
 	  set_color(win, color);
 	}
+
+	if(snd("grid-size")){
+	  float v = 1;
+	  char buf[10] = {0};
+	  if(copy_nth(command, 2, buf, sizeof(buf))){
+	    sscanf(buf, "%f", &v);
+	    set_simple_graphics_editor_grid_width(control, v);
+	  }
+	  
+	}
+	
 	
     }
     else if(first("select") || first("focus")){
@@ -987,11 +1108,22 @@ static void command_entered(u64 id, char * command){
 	    u32 * ptr = index_table_lookup(ctx.polygons_to_delete, idx);
 	    ptr[0] = pd->material;
 	  }
-	    
 	}
 	else if(snd("polygon")){
-	  polygon_data * pd = index_table_lookup(ctx.polygon, i1);
-	  index_table_resize_sequence(ctx.vertex, &(pd->vertexes), 0);
+	  char buf[100] = {0};
+	  u32 startidx = 0;
+	  u32 endidx = 0;
+	  if(copy_nth(command, 2, buf, sizeof(buf)))
+	    sscanf(buf, "%i", &startidx);
+	  if(copy_nth(command, 3, buf, sizeof(buf)))
+	    sscanf(buf, "%i", &endidx);
+	  if(startidx != 0 && endidx >= startidx){
+	    index_table_sequence seq = {.index = startidx, .count = endidx - startidx + 1};
+	    index_table_resize_sequence(ctx.vertex, &(seq), 0);
+	  }else{
+	    polygon_data * pd = index_table_lookup(ctx.polygon, i1);
+	    index_table_resize_sequence(ctx.vertex, &(pd->vertexes), 0);
+	  }
 	}
       }
       set_simple_graphics_editor_context(control, editor);
@@ -1126,6 +1258,25 @@ static void command_entered(u64 id, char * command){
       index_table_optimize(ctx.entities);
       index_table_optimize(ctx.models);
       logd("Optimized!\n");
+    }else if(first("backup")){
+      {
+	iron_process cdp = {};
+	const char * args[] = {"data", 0};
+	ASSERT(0 == iron_process_run("cd", (const char **)args, &cdp));
+	iron_process_wait(cdp, 1000000);
+      }
+      {
+	iron_process cdp = {};
+	const char * args[] = {"commit", "-a", "-m" ,"\"backup\"", 0};
+	ASSERT(0 == iron_process_run("/usr/bin/git", (const char **)args, &cdp));
+	iron_process_wait(cdp, 1000000);
+      }
+      {
+	iron_process cdp = {};
+	const char * args[] = {"..", 0};
+	ASSERT(0 == iron_process_run("cd", (const char **)args, &cdp));
+	iron_process_wait(cdp, 1000000);
+      }
     }else{
       logd("Unkown command!\n");
     }
