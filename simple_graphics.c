@@ -153,7 +153,6 @@ void graphics_context_reload_polygon(graphics_context ctx, u32 polygon){
   polygon_data * pd = index_table_lookup(ctx.polygon, polygon);
   loaded_polygon_data loaded;
   if(loaded_polygon_try_get(ctx.gpu_poly, pd->material, &loaded)){
-    logd("Deleting GPU polygon..\n");
     u32 idx = index_table_alloc(ctx.polygons_to_delete);
     u32 * ptr = index_table_lookup(ctx.polygons_to_delete, idx);
     ptr[0] = pd->material;
@@ -304,7 +303,6 @@ u32 simple_grid_polygon_load(vec2 * vertexes, u32 count){
   glGenBuffers(1, &vbo);
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
   glBufferData(GL_ARRAY_BUFFER, sizeof(vertexes[0]) * count, vertexes, GL_STATIC_DRAW);
-  logd("Loaded %i bytes to VBO\n", sizeof(vertexes[0]) * count);
   return vbo;
 }
 
@@ -458,6 +456,11 @@ void simple_grid_mouse_over_func(u64 grid_id, double x, double y, u64 method){
   }
 }
 
+
+CREATE_TABLE_DECL2(simple_graphics_editor_grid_width, u64, f32);
+CREATE_TABLE2(simple_graphics_editor_grid_width, u64, f32);
+
+
 void simple_grid_mouse_down_func(u64 grid_id, double x, double y, u64 method){
   UNUSED(method);
   if(mouse_button_action == mouse_button_repeat) return;
@@ -467,11 +470,31 @@ void simple_grid_mouse_down_func(u64 grid_id, double x, double y, u64 method){
   vec2 p = graphics_context_pixel_to_screen(ctx, vec2_new(x, y));
   p = vec2_scale(p, 1.0 / editor.zoom);
   p = vec2_sub(p, editor.offset);
-
+  //mat4 editor_tform = mat4_translate(editor.offset.x, editor.offset.y, 0);
+  //editor_tform = mat4_mul(mat4_scaled(editor.zoom, editor.zoom, editor.zoom), editor_tform);
+  
+  if(editor.snap_to_grid){
+    float grid_width = 0.1;
+    if(!try_get_simple_graphics_editor_grid_width(grid_id, &grid_width))
+      grid_width = 0.1;
+    //mat4 inv = mat4_invert(editor_tform);
+    //vec4 p = mat4_mul_vec4(inv, vec4_new(offset.x, offset.y, 0, 1));
+    if(editor.focused_item_kind == SELECTED_ENTITY){
+      entity_data * ed2 = index_table_lookup(ctx.entities, editor.focused_item);
+      p.x = p.x + ed2->position.x;
+      p.y = p.y + ed2->position.y;
+      p.x = round(p.x / grid_width) * grid_width;
+      p.y = round(p.y / grid_width) * grid_width;
+      p.x = p.x - ed2->position.x;
+      p.y = p.y - ed2->position.y;
+    
+    }
+    
+  }
+  
   if(mouse_button_button == mouse_button_left){
     if(mouse_button_action != mouse_button_press)
       return;
-    vec2_print(p);logd("\n");
     if(editor.selection_kind == SELECTED_VERTEX){
       vertex_data * vd = index_table_lookup(ctx.vertex, editor.selected_index);
       vd->position = p;
@@ -500,9 +523,6 @@ void simple_grid_mouse_down_func(u64 grid_id, double x, double y, u64 method){
     set_simple_graphics_editor_context(grid_id, editor);
   }
 }
-
-CREATE_TABLE_DECL2(simple_graphics_editor_grid_width, u64, f32);
-CREATE_TABLE2(simple_graphics_editor_grid_width, u64, f32);
 
 void simple_graphics_editor_render(u64 id){
     
@@ -571,11 +591,21 @@ void simple_graphics_editor_render(u64 id){
   }
   
   {
+    float grid_width = 0.1;
+    if(!try_get_simple_graphics_editor_grid_width(id, &grid_width))
+      grid_width = 0.1;
     polygon_data * pd = index_table_lookup(gd.polygon, gd.pointer_index);
     if(pd->material == 0)
       pd->material = get_unique_number();
     polygon_color_set(gd.poly_color, pd->material, vec4_new(0, 0, 0, 1));
     vec2 offset = graphics_context_pixel_to_screen(gd, gd.pointer_position);
+    if(ed.snap_to_grid){
+      mat4 inv = mat4_invert(editor_tform);
+      vec4 p = mat4_mul_vec4(inv, vec4_new(offset.x, offset.y, 0, 1));
+      p.x = round(p.x / grid_width) * grid_width;
+      p.y = round(p.y / grid_width) * grid_width;
+      offset = mat4_mul_vec4(editor_tform, p).xyz.xy;
+    }
     auto tf = mat4_translate(offset.x, offset.y, 0);
     simple_grid_render_gl(gd, gd.pointer_index, tf, false, -1000);
     polygon_color_set(gd.poly_color, pd->material, vec4_new(1, 1, 1, 1));
@@ -627,7 +657,7 @@ void simple_graphics_editor_render(u64 id){
 	  glUseProgram(shader.shader);
 	
 	  glUniformMatrix4fv(shader.camera_loc,1,false, &(cam.data[0][0]));
-	  glUniform4f(shader.color_loc, 0, 0, 0, 1);
+	  glUniform4f(shader.color_loc, 0, 0, 0, 0.2);
 	  glEnableVertexAttribArray(shader.vertex_loc);
 	  glVertexAttribPointer(shader.vertex_loc, 2, GL_FLOAT, false, 0, 0);
 	  glDrawArrays(GL_LINE_LOOP, 0, loaded.count);
@@ -646,7 +676,7 @@ void simple_graphics_editor_render(u64 id){
 	  glUseProgram(shader.shader);
 	
 	  glUniformMatrix4fv(shader.camera_loc,1,false, &(cam.data[0][0]));
-	  glUniform4f(shader.color_loc, 0, 0, 0, 1);
+	  glUniform4f(shader.color_loc, 0, 0, 0, 0.2);
 	  glEnableVertexAttribArray(shader.vertex_loc);
 	  glVertexAttribPointer(shader.vertex_loc, 2, GL_FLOAT, false, 0, 0);
 	  glDrawArrays(GL_LINE_LOOP, 0, loaded.count);
@@ -1277,7 +1307,12 @@ static void command_entered(u64 id, char * command){
 	ASSERT(0 == iron_process_run("cd", (const char **)args, &cdp));
 	iron_process_wait(cdp, 1000000);
       }
-    }else{
+    }else if(first("snap-to-grid")){
+      editor.snap_to_grid = !editor.snap_to_grid;
+      set_simple_graphics_editor_context(control, editor);
+    }
+
+    else{
       logd("Unkown command!\n");
     }
   }
@@ -1289,9 +1324,9 @@ CREATE_TABLE2(console_history_index, u64, u32);
 
 
 static void console_handle_key(u64 console, int key, int mods, int action){
+
   if(action == key_release)
     return;
-  
   if(key == key_tab && action == key_press){
     u64 control = get_simple_graphics_control(console);
     u64 parent_id = control_pair_get_parent(control);

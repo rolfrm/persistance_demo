@@ -1016,5 +1016,6 @@ const int key_down = 264;
 const int key_right = 262;
 const int key_left = 263;
 const int key_tab = 258;
+const int key_alt = 342;
 
 const int mod_ctrl = 2;

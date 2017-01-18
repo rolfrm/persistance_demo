@@ -133,6 +133,7 @@ extern const int key_down;
 extern const int key_right;
 extern const int key_left;
 extern const int key_tab;
+extern const int key_alt;
 
 extern const int mod_ctrl;
 
