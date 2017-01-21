@@ -638,8 +638,6 @@ bool index_table_test(){
     set_color(win_id, vec3_new(1, 1, 1));
   }
   
-  
-  
   //add_control(win_id, voxel_board);
   auto method = get_method(win_id, render_control_method);
   double i = 0;
@@ -676,7 +674,148 @@ bool index_table_test(){
   return TEST_SUCCESS;
 }
 
+typedef struct{
+  void (*f)();
+  coroutine * cc;
+  void * channels[10];
+  u32 active;
+
+}task;
+
+typedef struct{
+  float x, y, radius;
+  u32 * channel;
+}circle_body;
+
+CREATE_TABLE_DECL2(circle_body, u32, circle_body);
+CREATE_TABLE_NP(circle_body, u32, circle_body);
+
+u32 circle_body_register(){
+  return get_unique_number();
+}
+
+void circle_body_update(u32 id, float x, float y, float radius, void * channel){
+  set_circle_body(id, (circle_body){.x = x, .y = y, .radius = radius, .channel = channel});
+}
+
+__thread coroutine * current_coroutine = NULL;
+
+task * current_task = NULL;
+int choose(void ** out){
+  while(true){
+    for(u32 i = 0; i < current_task->active; i++){
+     
+      if(current_task->channels[i] != NULL){
+	*out = current_task->channels[i];
+	current_task->channels[i] = NULL;
+	return i;
+      }
+    }
+    ccyield();
+  }
+  return 0;
+}
+
+void task_step(task * _task, bool channels){
+  task * prev_task = current_task;
+  current_task = _task;
+
+  for(u32 i = 0; i < _task->active; i++){
+    if(_task->channels[i] != NULL){
+      if(_task->cc != NULL){
+	ccstep(_task->cc);
+	return;
+      }
+    }
+  }
+  if(channels){
+    return;
+    }
+  UNUSED(channels);
+  if(_task->f != NULL){
+    _task->cc = ccstart(_task->f);
+    _task->f = NULL;
+  }else
+    ccstep(_task->cc);
+  
+  current_task = prev_task;
+}
+
+void testcc1(){
+  float x = 0, y = 0, radius = 1;
+  void * result;
+  u32 body = get_unique_number();
+  circle_body_update(body, x, y, radius, current_task->channels + 0);
+  current_task->active = 1;
+  logd("Body updated..\n");
+  while(true){
+    u32 i = choose(&result);
+
+    switch(i){
+    case 0:
+      x += (randf32() * 0.01 - 0.005) * 30;
+      y += (randf32() * 0.01 - 0.005) * 30;
+      logd("P: %f %f\n", x, y);
+      circle_body_update(body, x, y, radius, current_task->channels + 0);
+      break;
+    case 1:
+      logd("AI\n");
+      break;
+    default:
+      logd("Dont know..\n");
+    }
+    ccyield();
+  }
+}
+
+void check_collisions(){
+  circle_body bodies[10] = {0};
+  u32 body_ids[10] = {0};
+  u64 idx = 0;
+  u32 cnt = iter_all_circle_body(body_ids, bodies, array_count(bodies), &idx);
+  for(u32 i = 0; i < cnt; i++){
+    for(u32 j = i + 1; j < cnt; j++){
+      circle_body a = bodies[i];
+      circle_body b =  bodies[j];
+      float dx = a.x - b.x;
+      float dy = a.y - b.y;
+      float d = sqrt(dx * dx + dy * dy);
+      if(a.radius + b.radius > d){
+	if(bodies[i].channel != NULL)
+	  *bodies[i].channel = body_ids[j];
+	if(bodies[j].channel != NULL)
+	  *bodies[j].channel = body_ids[i];
+      }
+    }
+  }
+}
+
+#include <iron/time.h>
+
+void test_coroutines(){
+  clear_circle_body();
+  task * t1 = alloc0(sizeof(task));
+  task * t2 = alloc0(sizeof(task));
+  t1->f = testcc1;
+  t2->f = testcc1;
+  task_step(t1,false);
+  task_step(t2, false);
+  int rounds = 0;
+ loop:
+  rounds++;
+  check_collisions();
+  task_step(t1, true);
+  task_step(t2, true);
+  if(rounds % 1000000 == 0){
+    logd("Round.. %i\n", rounds);
+  }
+  goto loop;
+}
+
 int main(){
+  //test_coroutines();
+  //return 0;
+  
   //void test_hydra();
   //test_hydra();
   //return 0;
