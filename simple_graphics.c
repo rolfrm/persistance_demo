@@ -1452,10 +1452,64 @@ static void game_handle_key(u64 console, int key, int mods, int action){
   UNUSED(mods);
 }
 
-
 void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index_table * result_table){
+  struct detect_collision_aabb{
+    vec3 min, max;
+  };
+  index_table * aabb_table = NULL;
+  if(aabb_table == NULL)
+    aabb_table = index_table_create(NULL, sizeof(struct detect_collision_aabb));
+  index_table_clear(aabb_table);
+  index_table_sequence aabbseq = index_table_alloc_sequence(aabb_table, entitycnt);
+  struct detect_collision_aabb * aabbs = index_table_lookup_sequence(aabb_table, aabbseq);
+  memset(aabbs, 0, aabbseq.count * sizeof(struct detect_collision_aabb));
+  const float bigval = 100000.0f;
   for(u64 i = 0; i < entitycnt; i++){
     u64 entity = entities[i];
+    entity_data * ed = index_table_lookup(gd.entities, entity);
+    if(ed == NULL)
+      continue;
+    model_data * md = index_table_lookup(gd.models, ed->model);
+    if(md == NULL) continue;
+    polygon_data * pd = index_table_lookup_sequence(gd.polygon, md->polygons);
+    if(pd == NULL) continue;
+    vec3 min = vec3_new1(bigval), max = vec3_new1(-bigval);
+    u64 pdcnt = md->polygons.count;
+    bool any = false;
+    for(u32 i = 0; i < pdcnt; i++){
+      
+      bool flat = pd[i].physical_height != 0.0f;
+      u64 vcnt1 = pd[i].vertexes.count;
+      vertex_data * vd1 = index_table_lookup_sequence(gd.vertex, pd[i].vertexes);
+      for(u32 j = 0; j < vcnt1; j++){
+	vec2 pos = vd1[j].position;
+	if(flat){
+	  any = true;
+	  if(pd[i].physical_height < 0){
+	    min = vec3_min(min, vec3_new(pos.x, pd[i].physical_height, pos.y));
+	    max = vec3_max(max, vec3_new(pos.x, 0, pos.y));
+	  }else{
+	    min = vec3_min(min, vec3_new(pos.x, 0, pos.y));
+	    max = vec3_max(max, vec3_new(pos.x, pd[i].physical_height, pos.y));
+	  }
+	}
+      }
+    }
+    if(any){
+      aabbs[i].min = vec3_add(ed->position, min);
+      aabbs[i].max = vec3_add(ed->position, max);
+    }else{
+      aabbs[i].min = min;
+      aabbs[i].max = max;
+    }
+  }
+  for(u64 i = 0; i < entitycnt; i++){
+
+    auto aabb1 = aabbs[i];
+    if(aabb1.min.x == bigval)
+      continue;
+    u64 entity = entities[i];
+    bool grav1 = get_gravity_affects(entity);
     entity_data * ed = index_table_lookup(gd.entities, entity);
     if(ed == NULL)
       continue;
@@ -1466,7 +1520,21 @@ void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index
     
     vec3 position = ed->position;
     for(u64 j = i + 1; j < entitycnt; j++){
+      auto aabb2 = aabbs[j];
+      if(aabb2.min.x == bigval)
+	continue;
+      if(aabb2.min.x == aabb2.max.x)
+	continue;
+      
+      if(aabb1.min.x > aabb2.max.x || aabb1.max.x < aabb2.min.x
+	 ||aabb1.min.z > aabb2.max.z || aabb1.max.z < aabb2.min.z
+	 ||aabb1.min.y > aabb2.max.y || aabb1.max.y < aabb2.min.y)
+	continue;
       u32 entity2 = entities[j];
+      bool grav2 = get_gravity_affects(entity2);
+      if(!(grav1 || grav2))
+	continue;
+      
       entity_data * ed2 = index_table_lookup(gd.entities, entity2);
       if(ed2 == NULL)
 	continue;
