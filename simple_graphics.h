@@ -31,6 +31,7 @@ typedef struct{
   u32 model;
   u32 polygon_offset;
   u32 vertex_offset;
+  u32 material;
 }entity_local_data;
 
 typedef struct{
@@ -115,6 +116,8 @@ typedef struct{
 CREATE_TABLE_DECL2(loaded_polygon, u32, loaded_polygon_data);
 CREATE_TABLE_DECL2(simple_game_interactions, u32, interact_fcn);
 CREATE_TABLE_DECL2(simple_game_editor_fcn, u32, simple_graphics_editor_fcn);
+CREATE_TABLE_DECL2(ghost_material, u32, bool);
+
 struct _graphics_context{
   index_table * entities;
   index_table * models;
@@ -132,6 +135,7 @@ struct _graphics_context{
   index_table * loaded_modules;
   simple_game_interactions_table * interactions;
   simple_game_editor_fcn_table * editor_functions;
+  ghost_material_table * ghost_table;
 };
 
 

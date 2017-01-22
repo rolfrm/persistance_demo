@@ -63,6 +63,8 @@ CREATE_TABLE2(gravity_affects, u64, bool);
 CREATE_TABLE2(current_impulse, u64, vec3);
 CREATE_MULTI_TABLE2(entity_2_collisions, u32, u32);
 
+CREATE_TABLE2(ghost_material, u32, bool);
+
 typedef u32 polygon_id;
 polygon_id polygon_create(graphics_context * ctx);
 void polygon_add_vertex2f(graphics_context * ctx, polygon_id polygon, vec2 offset);
@@ -138,6 +140,7 @@ void graphics_context_load(graphics_context * ctx){
   module_name * modules = index_table_all(ctx->loaded_modules, &cnt);
   for(u32 i = 0; i < cnt; i++)
     load_module(ctx, modules[i].name);
+  ctx->ghost_table = ghost_material_table_create("simple/ghost_material");
   
 }
 CREATE_TABLE_DECL2(current_loaded_modules, u32, u32);
@@ -1032,7 +1035,21 @@ static void command_entered(u64 id, char * command){
 	    sscanf(buf, "%f", &v);
 	    set_simple_graphics_editor_grid_width(control, v);
 	  }
+	}
+	if(snd("ghost") && editor.selection_kind == SELECTED_POLYGON && editor.selected_index != 0){
+
 	  
+	  int v = 0;
+	  char buf[10] = {0};
+	  if(copy_nth(command, 2, buf, sizeof(buf))){
+	    sscanf(buf, "%i", &v);
+	  }
+	  polygon_data * pd = index_table_lookup(ctx.polygon, editor.selected_index);
+	  logd("Setting is ghost.. for %i material: %i\n", editor.selected_index, pd->material);
+	  if(v)
+	    ghost_material_set(ctx.ghost_table, pd->material, true);
+	  else
+	    ghost_material_unset(ctx.ghost_table, pd->material);
 	}
 	
 	
@@ -1642,10 +1659,12 @@ void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index
 		cd.entity1.model = ed->model;
 		cd.entity1.polygon_offset = md->polygons.index + i;
 		cd.entity1.vertex_offset = k1;
+		cd.entity1.material = pd[i].material;
 		cd.entity2.entity = entity2;
 		cd.entity2.model = ed2->model;
 		cd.entity2.polygon_offset = md2->polygons.index + i;
 		cd.entity2.vertex_offset = k2;
+		cd.entity2.material = pd2[j].material;
 		u32 idx = index_table_alloc(result_table);
 		*((collision_data *)index_table_lookup(result_table, idx)) = cd;
 	      }
@@ -1657,6 +1676,8 @@ void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index
   }
 }
 
+CREATE_TABLE_DECL2(entity_index_lookup, u32, u32);
+CREATE_TABLE_NP(entity_index_lookup, u32, u32);
 void simple_grid_render(u64 id){
   game_data _gd = get_simple_game_data(id);
   vec2 offset = _gd.offset;
@@ -1686,6 +1707,11 @@ void simple_grid_render(u64 id){
   bool moved[count];
   bool unused[count];
   idx = 0;
+  static entity_index_lookup_table * entity_lookup = NULL;
+  if(entity_lookup == NULL)
+    entity_lookup = entity_index_lookup_table_create(NULL);
+  entity_index_lookup_clear(entity_lookup);
+  
   entity_2_collisions_clear(gd.collisions_2_table);
 
   active_entities_iter_all(gd.active_entities, entities, unused, count, &idx);
@@ -1693,6 +1719,7 @@ void simple_grid_render(u64 id){
     for(u32 i = 0; i < count ;i ++){
       moved[i] = false;
       u32 entity = entities[i];
+      entity_index_lookup_set(entity_lookup, entity, i);
       vec3 target;
       if(try_get_entity_target(entity, &target)){
 	entity_data * ed = index_table_lookup(gd.entities, entity);
@@ -1717,31 +1744,21 @@ void simple_grid_render(u64 id){
       u64 collisions = 0;
 
       collision_data * cd = index_table_all(gd.collision_table, &collisions);
-      u32 e1[collisions];
-      u32 e2[collisions];
       for(u32 i = 0; i < collisions; i++){
-	e1[i] = cd[i].entity1.entity;
-	e2[i] = cd[i].entity2.entity;
-      }
-      int keycmp32(const u32 * k1,const  u32 * k2){
-	if(*k1 > *k2)
-	  return 1;
-	else if(*k1 == *k2)
-	  return 0;
-	else return -1;
-      }
-      
-      qsort(e1, collisions, sizeof(*e1), (void *)keycmp32);
-      qsort(e2, collisions, sizeof(*e2), (void *)keycmp32);
-      entity_2_collisions_insert(gd.collisions_2_table, e1, e2, collisions);
-      entity_2_collisions_insert(gd.collisions_2_table, e2, e1, collisions);
-      for(u32 i = 0; i < count; i++){
-	if(moved[i] == false) continue;
-	if(bsearch(entities + i, e1, collisions, sizeof(entities[i]), (void *) keycmp32)
-	   ||bsearch(entities + i, e2, collisions, sizeof(entities[i]), (void *) keycmp32)){
-	  entity_data * ed = index_table_lookup(gd.entities, entities[i]);
-	  ed->position = prevp[i];
-	}	
+	collision_data cd1 = cd[i];
+
+	if(ghost_material_get(gd.ghost_table, cd1.entity1.material)
+	   || ghost_material_get(gd.ghost_table, cd1.entity2.material))
+	  continue;
+	
+	for(int _i = 0; _i < 2; _i++){
+	  u32 idx = entity_index_lookup_get(entity_lookup, cd1.entity1.entity);
+	  if(moved[idx]){
+	    entity_data * ed = index_table_lookup(gd.entities, cd1.entity1.entity);
+	    ed->position = prevp[idx];
+	  }
+	  SWAP(cd1.entity1, cd1.entity2);
+	}
       }
     }
   }
@@ -1994,8 +2011,9 @@ void simple_game_point_collision(graphics_context ctx, u32 * entities, u32 entit
 	    entity_local_data * d =index_table_lookup(collisiontable, idx);
 	    d->entity = entities[i];
 	    d->model = ed->model;
-	    d->polygon_offset = j;
+	    d->polygon_offset = md->polygons.index + j;
 	    d->vertex_offset = k;
+	    d->material = pd[j].material;
 	  }
 	}
       }
