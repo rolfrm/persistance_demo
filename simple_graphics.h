@@ -67,9 +67,6 @@ typedef enum{
   INTERACTION_ERROR,
 }interaction_status;
 
-
-
-
 typedef interaction_status (* interact_fcn)(graphics_context *ctx, u32 interactor, u32 interactee, bool checkavail);
 
 
@@ -99,7 +96,7 @@ typedef struct{
 }editor_context;
 
 typedef bool (* simple_graphics_editor_fcn)(graphics_context * ctx, editor_context * editor, char * command);
-
+typedef void (* simple_game_update_fcn)(graphics_context * ctx);
 void set_desc_text2(u32 idx, u32 group, const char * str);
 bool get_desc_text2(u32 idx, u32 group, char * buf, u32 bufsize);
 CREATE_TABLE_DECL2(active_entities, u32, bool);
@@ -116,7 +113,27 @@ typedef struct{
 CREATE_TABLE_DECL2(loaded_polygon, u32, loaded_polygon_data);
 CREATE_TABLE_DECL2(simple_game_interactions, u32, interact_fcn);
 CREATE_TABLE_DECL2(simple_game_editor_fcn, u32, simple_graphics_editor_fcn);
+CREATE_TABLE_DECL2(simple_game_update, u32, simple_game_update_fcn);
 CREATE_TABLE_DECL2(ghost_material, u32, bool);
+
+typedef enum{
+  GAME_EVENT_MOUSE_BUTTON
+}game_event_kind;
+
+typedef struct{
+  game_event_kind kind;
+  union{
+    struct{
+      int button;
+      vec2 game_position;
+      bool pressed;
+    }mouse_button;
+    char reserved[28];
+  };
+}game_event;
+
+u32 game_event_index_new();
+CREATE_TABLE_DECL2(game_event, u32, game_event);
 
 struct _graphics_context{
   index_table * entities;
@@ -135,9 +152,12 @@ struct _graphics_context{
   index_table * loaded_modules;
   simple_game_interactions_table * interactions;
   simple_game_editor_fcn_table * editor_functions;
+  simple_game_update_table * game_update_functions;
   ghost_material_table * ghost_table;
 };
 
 
 void graphics_context_load_interaction(graphics_context * ctx, interact_fcn f, u32 id);
+void graphics_context_load_update(graphics_context * ctx, simple_game_update_fcn f, u32 id);
 void simple_game_editor_load_func(graphics_context * ctx, simple_graphics_editor_fcn f, u32 id);
+void simple_game_point_collision(graphics_context ctx, u32 * entities, u32 entity_count, vec2 loc, index_table * collisiontable);

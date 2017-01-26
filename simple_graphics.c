@@ -135,6 +135,7 @@ void graphics_context_load(graphics_context * ctx){
   ctx->collision_table = index_table_create(NULL, sizeof(collision_data));
   ctx->collisions_2_table = entity_2_collisions_table_create(NULL);
   ctx->interactions = simple_game_interactions_table_create(NULL);
+  ctx->game_update_functions = simple_game_update_table_create(NULL);
   ctx->editor_functions = simple_game_editor_fcn_table_create(NULL);
   u64 cnt = 0;
   module_name * modules = index_table_all(ctx->loaded_modules, &cnt);
@@ -190,9 +191,14 @@ int load_module(graphics_context * ctx, char * name){
 }
 
 CREATE_TABLE_NP(simple_game_interactions, u32, interact_fcn);
+CREATE_TABLE_NP(simple_game_update, u32, simple_game_update_fcn);
 CREATE_TABLE_NP(simple_game_editor_fcn, u32, simple_graphics_editor_fcn);
 void graphics_context_load_interaction(graphics_context * ctx, interact_fcn f, u32 id){
   simple_game_interactions_set(ctx->interactions, id, f);
+}
+
+void graphics_context_load_update(graphics_context * ctx, simple_game_update_fcn f, u32 id){
+  simple_game_update_set(ctx->game_update_functions, id, f);
 }
 
 void simple_game_editor_load_func(graphics_context * ctx, simple_graphics_editor_fcn f, u32 id){
@@ -1841,7 +1847,8 @@ void simple_grid_render(u64 id){
       }
     }
   }
-  {
+  
+  { // interaction functions. (disabled for now).
     interact_fcn fcns[30];
     u32 fcn_id[array_count(fcns)];
     u64 idx = 0;
@@ -1869,6 +1876,17 @@ void simple_grid_render(u64 id){
 	}
       exit_loop:;
 	
+      }
+    }
+  }
+  { // update functions
+    simple_game_update_fcn fcns[30];
+    u32 fcn_id[array_count(fcns)];
+    u64 idx = 0;
+    u64 update_fcns = 0;
+    while((update_fcns = simple_game_update_iter_all(gd.game_update_functions, fcn_id, fcns, array_count(fcns), &idx))){
+      for(u32 i = 0; i < update_fcns; i++){
+	fcns[i](&gd);
       }
     }
   }
@@ -1919,6 +1937,7 @@ void simple_grid_render(u64 id){
   u32 error = glGetError();
   if(error > 0)
     logd("GL ERROR: %i\n", error);
+  clear_game_event();
 }
 
 void simple_grid_game_mouse_over_func(u64 grid_id, double x, double y, u64 method){
@@ -2021,6 +2040,17 @@ void simple_game_point_collision(graphics_context ctx, u32 * entities, u32 entit
   }
 }
 
+CREATE_TABLE2(game_event, u32, game_event);
+u32 game_event_index_new(){
+  static u32 * ptr = NULL;
+  if(ptr == NULL){
+    auto area = create_mem_area("simple/game_event_number");
+    mem_area_realloc(area, sizeof(u32));
+    ptr = area->ptr;
+  }
+  return (*ptr)++;
+}
+
 void simple_grid_game_mouse_down_func(u64 grid_id, double x, double y, u64 method){
   UNUSED(method);
   u64 ctl = get_alternative_control(grid_id);
@@ -2028,6 +2058,8 @@ void simple_grid_game_mouse_down_func(u64 grid_id, double x, double y, u64 metho
   game_data gd = get_simple_game_data(grid_id);
   vec2 p = graphics_context_pixel_to_screen(ctx, vec2_new(x, y));
   p = vec2_scale(p, gd.zoom);
+  vec2 v2 = vec2_add(p, gd.offset);
+  set_game_event(game_event_index_new(), (game_event){.kind = GAME_EVENT_MOUSE_BUTTON, .mouse_button.game_position = v2});
   if(mouse_button_button == mouse_button_right && mouse_button_action != mouse_button_repeat){
     if(gd.mouse_state){
       //vec2 lastp = gd.last_mouse_position;
