@@ -376,6 +376,8 @@ void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 came
   
   vec4 color = vec4_zero;
   polygon_color_try_get(ctx.poly_color, pd->material, &color);
+  if(color.w <= 0.0f)
+    return;
   if(depth > -100){
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);

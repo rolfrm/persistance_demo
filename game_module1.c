@@ -129,41 +129,15 @@ void door_update(graphics_context * ctx){
   //logd("Door update..\n");
 }
 
-void game1_interactions_update(graphics_context * ctx){
-  
-  UNUSED(ctx);
-  u32 evt_key[10];
-  game_event ge[10];
-  u64 idx = 0;
-  u64 count = iter_all_game_event(evt_key, ge, array_count(ge), &idx);
-  ASSERT(count < array_count(ge));
-  for(u32 i = 0; i < count; i++){
-    logd("%i %f %f %i %i\n", evt_key[i], ge[i].mouse_button.game_position.x, ge[i].mouse_button.game_position.y, ge[i].mouse_button.button, count);
-    u32 entities[10];
-    bool status[10];
-    u64 idx2 = 0;
-    u32 cnt = iter_all_door_status(entities, status, array_count(status), &idx2);
-    static index_table * tab = NULL;
-    if(tab == NULL) tab = index_table_create(NULL, sizeof(entity_local_data));
-    index_table_clear(tab);
-    logd("Door count: %i\n", cnt);
-    simple_game_point_collision(*ctx, entities, cnt, ge[i].mouse_button.game_position, tab);
-    u64 door_cnt = 0;
-    entity_local_data * ed = index_table_all(tab, &door_cnt);
-    logd("Hit doors: %i\n", door_cnt);
-    for(u32 i = 0; i < door_cnt; i++){
-      logd("ed: %i\n", ed[i].entity);
-    }
-
-  }
-}
-
 typedef struct{
   u32 polygon1, polygon2;
 }visctrl;
 
 CREATE_TABLE_DECL2(vision_control, u32, visctrl);
 CREATE_TABLE2(vision_control, u32, visctrl);
+CREATE_TABLE_DECL2(vision_controlled, u32, u32);
+CREATE_MULTI_TABLE2(vision_controlled, u32, u32);
+
 
 bool enterctrl_edit(graphics_context * gctx, editor_context * ctx, char * commands){
   UNUSED(gctx);
@@ -204,10 +178,42 @@ bool enterctrl_edit(graphics_context * gctx, editor_context * ctx, char * comman
       
       return true;
     }else if(strcmp(part1, "set_visctrl") == 0){
-      logd("Set vision control\n");
-        return true;
+      u32 control = 0, controlled = 0;
+      char poly1buf[10];
+      char poly2buf[10];
+      if(copy_nth(commands, 1, poly1buf, sizeof(poly1buf))
+	 && copy_nth(commands, 2, poly2buf, sizeof(poly2buf))){
+	sscanf(poly1buf, "%i", &control);
+	sscanf(poly2buf, "%i", &controlled);
+	if(control == 0 || controlled == 0){
+	  logd("Fail..\n");
+	  return true;
+	}
+	polygon_data * pd = index_table_lookup(gctx->polygon, controlled);
+	{
+	  visctrl dummy;
+	  vec4 dummy2;
+
+
+	  
+	  if(false == try_get_vision_control(control, &dummy)
+	     || pd == NULL 
+	     || false ==polygon_color_try_get(gctx->poly_color, pd->material, &dummy2)){
+	    logd("Fail2\n");
+	    return true;
+	  }
+	  
+	}
+	set_vision_controlled(control, pd->material);
+
+	logd("Set vision control %i %i\n", control, controlled);
+	return true;
+      }	
+
+
     }else if(strcmp(part1, "list_visctrl") == 0){
       u32 entities[10];
+      u32 controlled[10];
       visctrl vis[10];
       u64 idx2 = 0;
       u32 cnt = 0;
@@ -217,17 +223,140 @@ bool enterctrl_edit(graphics_context * gctx, editor_context * ctx, char * comman
 	  logd("%i:  %i %i\n", entities[i], vis[i].polygon1, vis[i].polygon2);
 	}
       }
-	    
-      
+
+      idx2 = 0;
+      logd("Listing vision controlled items\n");
+      while((cnt = iter_all_vision_controlled(entities, controlled, array_count(controlled), &idx2))){
+	for(u32 i = 0; i < cnt; i++){
+	  logd("%i: %i %i\n", i, entities[i], controlled[i]);
+	}
+      }
       
       return true;
     }
     
   }
   return false;
-
 }
 
+bool nth_parse_u32(char * commands, u32 idx, u32 * result){
+  static char buffer[30];
+  if(copy_nth(commands, idx, buffer, sizeof(buffer))){
+    if(sscanf(buffer, "%i", result))
+      return true;
+  }
+  return false;
+}
+
+bool nth_str_cmp(char * commands, u32 idx, const char * comp){
+  static char buffer[100];
+  if(copy_nth(commands, idx, buffer, sizeof(buffer))) {
+    return strcmp(buffer, comp) == 0;
+  }
+  return false;
+}
+
+CREATE_TABLE_DECL2(selected_unit, u32, bool);
+CREATE_MULTI_TABLE2(selected_unit, u32, bool);
+
+bool game1_set_selected_units(graphics_context * gctx, editor_context * ctx, char * commands){
+  UNUSED(gctx);UNUSED(ctx);
+  clear_selected_unit();
+  if(nth_str_cmp(commands, 0, "set_selected")){
+    for(u32 i = 1;true;i++){
+      u32 v;
+      if(nth_parse_u32(commands, i, &v)){
+	set_selected_unit(v, true);
+	logd("Selecting %i\n", v);
+      }else{
+	break;
+      }
+    }
+    return true;
+  }
+  return false;
+}
+
+void game1_interactions_update(graphics_context * ctx){
+  
+  UNUSED(ctx);
+  u32 evt_key[10];
+  game_event ge[10];
+  u64 idx = 0;
+  u64 count = iter_all_game_event(evt_key, ge, array_count(ge), &idx);
+  ASSERT(count < array_count(ge));
+  for(u32 i = 0; i < count; i++){
+    logd("%i %f %f %i %i\n", evt_key[i], ge[i].mouse_button.game_position.x, ge[i].mouse_button.game_position.y, ge[i].mouse_button.button, count);
+    u32 entities[10];
+    bool status[10];
+    u64 idx2 = 0;
+    u32 cnt = iter_all_door_status(entities, status, array_count(status), &idx2);
+    static index_table * tab = NULL;
+    if(tab == NULL) tab = index_table_create(NULL, sizeof(entity_local_data));
+    index_table_clear(tab);
+    logd("Door count: %i\n", cnt);
+    simple_game_point_collision(*ctx, entities, cnt, ge[i].mouse_button.game_position, tab);
+    u64 door_cnt = 0;
+    entity_local_data * ed = index_table_all(tab, &door_cnt);
+    logd("Hit doors: %i\n", door_cnt);
+    for(u32 i = 0; i < door_cnt; i++){
+      logd("ed: %i\n", ed[i].entity);
+    }
+  }
+
+  {
+    u32 entities[10];
+    visctrl entities2[10];
+    bool status[10];
+    u64 idx = 0;
+    u32 cnt = 0;
+    u32 materials[10];
+    while(0 < (cnt = iter_all_vision_controlled(entities, materials, array_count(materials), &idx))){
+      for(u32 i = 0; i < cnt; i++){
+	u32 material = materials[i];
+	vec4 color = vec4_zero;
+	if(polygon_color_try_get(ctx->poly_color, material, &color)){
+	  color.w = 1.0;
+	  polygon_color_set(ctx->poly_color, material, color);
+	}
+      }
+    }
+
+    idx =0;
+    cnt = iter_all_selected_unit(entities, status, array_count(entities), &idx);
+    idx = 0;
+    u32 nxt = iter_all_vision_control(entities + cnt, entities2, array_count(entities) - cnt, &idx);
+    
+    static index_table * coltab = NULL;
+    if(coltab == NULL)
+      coltab = index_table_create(NULL, sizeof(collision_data));
+    index_table_clear(coltab);
+
+    detect_collisions(entities, nxt + cnt, *ctx, coltab);
+    u64 cnt2 = 0;
+    collision_data * cd = index_table_all(coltab, &cnt2);
+    
+    for(u32 i = 0; i < cnt2; i++){
+      u32 e[] = {cd[i].entity1.entity, cd[i].entity2.entity};
+      for(u32 j = 0; j < array_count(e) ; j++){
+	visctrl x;
+	if(try_get_vision_control(e[j], &x)){
+	  u32 controlled[10];
+	  u64 idx = 0;
+	  u32 cnt = iter2_vision_controlled(e[j], controlled, array_count(controlled), &idx);
+	  for(u32 i = 0; i < cnt; i++){
+	    u32 material = controlled[i];
+	    vec4 color = vec4_zero;
+	    if(polygon_color_try_get(ctx->poly_color, material, &color)){
+	      color.w = 0.0;
+	      polygon_color_set(ctx->poly_color, material, color);
+	    }
+	  }
+	}	
+      }
+    }
+  } 
+}
 
 void init_module(graphics_context * ctx){
   UNUSED(ctx);
@@ -243,4 +372,5 @@ void init_module(graphics_context * ctx){
   graphics_context_load_update(ctx, door_update, intern_string("mod1/door_update"));
   graphics_context_load_update(ctx, game1_interactions_update, intern_string("mod1/interactions"));
   simple_game_editor_load_func(ctx, enterctrl_edit, intern_string("mod1/set_vis_ctrl"));
+  simple_game_editor_load_func(ctx, game1_set_selected_units, intern_string("mod1/set_selected_units"));
 }
