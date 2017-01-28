@@ -123,7 +123,7 @@ typedef struct{
   game_event_kind kind;
   union{
     struct{
-      int button;
+      u32 button;
       vec2 game_position;
       bool pressed;
     }mouse_button;

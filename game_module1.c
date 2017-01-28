@@ -248,6 +248,15 @@ bool nth_parse_u32(char * commands, u32 idx, u32 * result){
   return false;
 }
 
+bool nth_parse_f32(char * commands, u32 idx, f32 * result){
+  static char buffer[30];
+  if(copy_nth(commands, idx, buffer, sizeof(buffer))){
+    if(sscanf(buffer, "%f", result))
+      return true;
+  }
+  return false;
+}
+
 bool nth_str_cmp(char * commands, u32 idx, const char * comp){
   static char buffer[100];
   if(copy_nth(commands, idx, buffer, sizeof(buffer))) {
@@ -260,6 +269,11 @@ bool nth_str_cmp(char * commands, u32 idx, const char * comp){
 CREATE_TABLE_DECL2(selected_unit, u32, bool);
 CREATE_MULTI_TABLE2(selected_unit, u32, bool);
 
+CREATE_TABLE_DECL2(material_heat, u32, float);
+CREATE_TABLE2(material_heat, u32, float);
+
+CREATE_TABLE_DECL2(heated_entity, u32, bool);
+CREATE_TABLE2(heated_entity, u32, bool);
 bool game1_set_selected_units(graphics_context * gctx, editor_context * ctx, char * commands){
   UNUSED(gctx);UNUSED(ctx);
   clear_selected_unit();
@@ -275,17 +289,51 @@ bool game1_set_selected_units(graphics_context * gctx, editor_context * ctx, cha
     }
     return true;
   }
+  
+  if(nth_str_cmp(commands, 0, "set_heat")){
+    u32 polygon = 0;
+    float newheat = 0;
+    if(nth_parse_u32(commands, 1, &polygon)
+       && nth_parse_f32(commands, 2, &newheat)){
+      ASSERT(index_table_contains(gctx->polygon, polygon));
+      polygon_data * pd = index_table_lookup(gctx->polygon, polygon);
+      set_material_heat(pd->material, newheat);
+    }
+    return true;
+  }
+  
+  if(nth_str_cmp(commands, 0, "heated")){
+    u32 entity = 0;
+    if(nth_parse_u32(commands, 1, &entity)){
+      bool is = false;
+      ASSERT(index_table_contains(gctx->entities, entity));
+      if(try_get_heated_entity(entity, &is)){
+	  unset_heated_entity(entity);
+      }else{
+	logd("Setting heated: %i\n", entity);
+	set_heated_entity(entity, true);
+      }
+    }
+    return true;
+  }
+  
   return false;
 }
+
+
 CREATE_TABLE_DECL2(hit_queue, u32, u32);
 CREATE_TABLE2(hit_queue, u32, u32);
 
+
+const float ambient_heat = -10;
+
 void game1_interactions_update(graphics_context * ctx){
-  u32 * evt_key = get_keys_game_event();
+  float heat = ambient_heat;
   game_event * ge = get_values_game_event();
   u64 count = get_count_game_event();
   for(u32 i = 0; i < count; i++){
-    logd("%i %f %f %i %i\n", evt_key[i], ge[i].mouse_button.game_position.x, ge[i].mouse_button.game_position.y, ge[i].mouse_button.button, count);
+    if(ge[i].mouse_button.button != mouse_button_left)
+      continue;
     u32 entities[10];
     bool status[10];
     u64 idx2 = 0;
@@ -293,15 +341,11 @@ void game1_interactions_update(graphics_context * ctx){
     static index_table * tab = NULL;
     if(tab == NULL) tab = index_table_create(NULL, sizeof(entity_local_data));
     index_table_clear(tab);
-    logd("Door count: %i\n", cnt);
     vec2 p = ge[i].mouse_button.game_position;
     simple_game_point_collision(*ctx, entities, cnt, ge[i].mouse_button.game_position, tab);
     u64 door_cnt = 0;
     entity_local_data * ed = index_table_all(tab, &door_cnt);
-    logd("Hit doors: %i\n", door_cnt);
-    for(u32 i = 0; i < door_cnt; i++){
-      logd("ed: %i\n", ed[i].entity);
-    }
+    
     u32 * selected_units = get_keys_selected_unit();
     u32 selected_unit_cnt = get_count_selected_unit();
     if(door_cnt > 0){
@@ -317,7 +361,6 @@ void game1_interactions_update(graphics_context * ctx){
     for(u32 i = 0; i < selected_unit_cnt; i++){
       entity_data * ed = index_table_lookup(ctx->entities, selected_units[i]);
       set_entity_target(selected_units[i], vec3_new(p.x, ed->position.y, p.y));
-      logd("Setting target..\n");
     }
   }
 
@@ -364,6 +407,24 @@ void game1_interactions_update(graphics_context * ctx){
 	}
       }
     }
+
+    
+    {//heated:
+      index_table_clear(coltab);
+      u32 * heated = get_keys_heated_entity();
+      u32  cnt = get_count_heated_entity();
+      detect_collisions_one_way(*ctx, selected_units, selected_unit_cnt, heated, cnt, coltab);
+      u64 cnt2 = 0;
+      collision_data * cd = index_table_all(coltab, &cnt2);
+      for(u32 i = 0; i < cnt2; i++){
+	float thisheat = 0.0;
+	if(try_get_material_heat(cd[i].entity2.material, &thisheat)){
+	  heat = MAX(thisheat, heat);
+	}
+      }
+      
+    }
+    
   }
 
   { // update hit queue
@@ -406,6 +467,7 @@ void game1_interactions_update(graphics_context * ctx){
     }
     remove_hit_queue(hits, j);
   }
+  logd("Temperature: %f\n", heat);
 }
 
 void init_module(graphics_context * ctx){

@@ -1190,6 +1190,7 @@ static void command_entered(u64 id, char * command){
       if(copy_nth(command,2, buf, array_count(buf))){
 	sscanf(buf, "%i", &polygon);
       }
+      logd("Recenter: %i %i\n", model, polygon);
       if(model == 0){
 	loge("ERROR: model == 0");
 	return;
@@ -1199,7 +1200,7 @@ static void command_entered(u64 id, char * command){
 	loge("ERROR: polygon == 0");
 	return;
       }
-      vec2 avg = vec2_zero;
+      vec2 avg = vec2_infinity;
       {
 	polygon_data * pd = index_table_lookup(ctx.polygon, polygon);
 	vertex_data * v = index_table_lookup_sequence(ctx.vertex, pd->vertexes);
@@ -1210,6 +1211,12 @@ static void command_entered(u64 id, char * command){
       }
       model_data * md = index_table_lookup(ctx.models, model);
       polygon_data * pd = index_table_lookup_sequence(ctx.polygon, md->polygons);
+      vec2_print(avg);logd("\n");
+      if(avg.x == f32_infinity || avg.y == f32_infinity){
+	ASSERT(false);
+	return;
+      }
+      
       for(u32 i = 0; i < md->polygons.count; i++){
 	index_table_sequence seq = pd[i].vertexes;
 	vertex_data * v = index_table_lookup_sequence(ctx.vertex, seq);
@@ -1464,6 +1471,8 @@ struct detect_collision_aabb{
   };
 
 void simple_game_build_aabb_table(u32 * entities, u32 entitycnt, graphics_context gd, index_table * aabb_table){
+  if(entitycnt == 0)
+    return;
   index_table_clear(aabb_table);
   index_table_sequence aabbseq = index_table_alloc_sequence(aabb_table, entitycnt);
   struct detect_collision_aabb * aabbs = index_table_lookup_sequence(aabb_table, aabbseq);
@@ -2111,7 +2120,9 @@ void simple_grid_game_mouse_down_func(u64 grid_id, double x, double y, u64 metho
   vec2 p = graphics_context_pixel_to_screen(ctx, vec2_new(x, y));
   p = vec2_scale(p, gd.zoom);
   vec2 v2 = vec2_add(p, gd.offset);
-  set_game_event(game_event_index_new(), (game_event){.kind = GAME_EVENT_MOUSE_BUTTON, .mouse_button.game_position = v2});
+  if(mouse_button_action != mouse_button_repeat)
+    set_game_event(game_event_index_new(), (game_event){.kind = GAME_EVENT_MOUSE_BUTTON, .mouse_button.game_position = v2, .mouse_button.button = mouse_button_button,
+	  .mouse_button.pressed = mouse_button_action == mouse_button_press});
   if(mouse_button_button == mouse_button_right && mouse_button_action != mouse_button_repeat){
     if(gd.mouse_state){
       //vec2 lastp = gd.last_mouse_position;
@@ -2181,7 +2192,7 @@ void simple_graphics_editor_load(u64 id, u64 win_id){
   
   //if(once(game)){
     game_data _gd = get_simple_game_data(game);
-    _gd.zoom = 0.5;
+    _gd.zoom = 0.4;
     set_simple_game_data(game, _gd);
     //}
   
