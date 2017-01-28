@@ -324,7 +324,8 @@ bool game1_set_selected_units(graphics_context * gctx, editor_context * ctx, cha
 CREATE_TABLE_DECL2(hit_queue, u32, u32);
 CREATE_TABLE2(hit_queue, u32, u32);
 
-
+CREATE_TABLE_DECL2(entity_temperature, u32, float);
+CREATE_TABLE2(entity_temperature, u32, float);
 const float ambient_heat = -10;
 
 void game1_interactions_update(graphics_context * ctx){
@@ -423,6 +424,23 @@ void game1_interactions_update(graphics_context * ctx){
 	}
       }
       
+      logd("Temperature: %f\n", heat);
+      for(u32 i = 0; i < selected_unit_cnt; i++){
+	float temp = 38;
+	try_get_entity_temperature(selected_units[i], &temp);
+	if(heat < 10){
+	  float dh = heat - 10; 
+	  temp = MAX(heat, temp + dh * 0.0001);
+	}else if(heat > 15){
+	  float dh = heat - 15;
+	  temp = MIN(38, temp + dh * 0.1);
+	}
+	if(temp == 38.0f)
+	  unset_entity_temperature(selected_units[i]);
+	else
+	  set_entity_temperature(selected_units[i], temp);
+	logd("Entity temperature: %f\n", temp);
+      }
     }
     
   }
@@ -467,7 +485,7 @@ void game1_interactions_update(graphics_context * ctx){
     }
     remove_hit_queue(hits, j);
   }
-  logd("Temperature: %f\n", heat);
+
 }
 
 void init_module(graphics_context * ctx){
