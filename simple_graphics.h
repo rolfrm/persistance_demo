@@ -134,6 +134,14 @@ typedef struct{
 u32 game_event_index_new();
 CREATE_TABLE_DECL2(game_event, u32, game_event);
 
+typedef struct {
+  u32 selected_entity;
+  vec2 offset;
+  bool mouse_state;
+  vec2 last_mouse_position;
+  float zoom;
+}game_data;
+
 struct _graphics_context{
   index_table * entities;
   index_table * models;
@@ -153,6 +161,7 @@ struct _graphics_context{
   simple_game_editor_fcn_table * editor_functions;
   simple_game_update_table * game_update_functions;
   ghost_material_table * ghost_table;
+  game_data * game_data;
 };
 
 

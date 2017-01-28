@@ -704,13 +704,6 @@ bool copy_nth(const char * _str, u32 index, char * buffer, u32 buffer_size){
 CREATE_TABLE_DECL2(simple_graphics_control, u64, u64);
 CREATE_TABLE_NP(simple_graphics_control, u64, u64);
 
-typedef struct {
-  u32 selected_entity;
-  vec2 offset;
-  bool mouse_state;
-  vec2 last_mouse_position;
-  float zoom;
-}game_data;
 
 
 CREATE_TABLE2(entity_target, u32, vec3);
@@ -1749,6 +1742,7 @@ void simple_grid_render(u64 id){
   game_data _gd = get_simple_game_data(id);
   vec2 offset = _gd.offset;
   graphics_context gd = get_graphics_context(get_alternative_control(id));
+  gd.game_data = &_gd;
   {
     u64 cnt = 0;
     u32 * items = index_table_all(gd.polygons_to_delete, &cnt);
@@ -1909,37 +1903,6 @@ void simple_grid_render(u64 id){
     }
   }
   
-  /*{ // interaction functions. (disabled for now).
-    interact_fcn fcns[30];
-    u32 fcn_id[array_count(fcns)];
-    u64 idx = 0;
-    u64 interact_fcns = simple_game_interactions_iter_all(gd.interactions, fcn_id, fcns, array_count(fcns), &idx);
-    for(u64 i = 0;i < count; i++){
-      u32 entity = entities[i];
-      u32 to_hit = get_hit_queue(entity);
-      if(to_hit != 0){
-	size_t idx = 0;
-	u32 count = 0;
-	u32 e2[10];
-	while(0 < (count = entity_2_collisions_iter2(gd.collisions_2_table, entity, e2, array_count(e2), &idx))){
-	  //logd("CC: %i\n", count);
-	  for(u32 i = 0; i < count; i++){
-	    if(e2[i] == to_hit){
-	      for(u32 idx = 0; idx < interact_fcns; idx++){
-		if(INTERACTION_WAIT != fcns[idx](&gd, entity, e2[i], false)){
-	      	  unset_hit_queue(entity);
-		  continue;
-		}
-	      }
-	      goto exit_loop;
-	    }
-	  }
-	}
-      exit_loop:;
-	
-      }
-    }
-    }*/
   { // update functions
     simple_game_update_fcn fcns[30];
     u32 fcn_id[array_count(fcns)];
@@ -1950,6 +1913,7 @@ void simple_grid_render(u64 id){
 	fcns[i](&gd);
       }
     }
+    set_simple_game_data(id, *gd.game_data);
   }
 
   // depth is used for simple depth sorting

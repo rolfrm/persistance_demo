@@ -328,7 +328,45 @@ CREATE_TABLE_DECL2(entity_temperature, u32, float);
 CREATE_TABLE2(entity_temperature, u32, float);
 const float ambient_heat = -10;
 
+
 void game1_interactions_update(graphics_context * ctx){
+  static bool wasJoyActive = false;
+  { // handle joystick
+
+
+    
+    int count;
+    const float* axes = glfwGetJoystickAxes(GLFW_JOYSTICK_1, &count);
+    /*for(int i = 0; i < count; i++){
+      logd("%f ", axes[i]);
+      
+    }
+    logd("\n");*/
+
+    u32 * selected_units = get_keys_selected_unit();
+    u32 selected_unit_cnt = get_count_selected_unit();
+    float x = axes[0];
+    float y = -axes[1];
+    if(x < 0.2 && x > - 0.2)
+      x = 0;
+    if(y < 0.2 && y > -0.2)
+      y = 0;
+    if(y != 0 || x != 0 || wasJoyActive){
+      for(u32 i = 0; i < selected_unit_cnt; i++){
+	entity_data * ed = index_table_lookup(ctx->entities, selected_units[i]);
+	set_entity_target(selected_units[i], vec3_new(ed->position.x + x, ed->position.y, ed->position.z + y));
+	ctx->game_data->offset.x += x * 0.01;
+	ctx->game_data->offset.y += y * 0.01;
+      }
+    }
+    if(x == 0 && y == 0)
+      wasJoyActive = false;
+    else wasJoyActive = true;
+
+    
+  }
+
+  
   float heat = ambient_heat;
   game_event * ge = get_values_game_event();
   u64 count = get_count_game_event();
