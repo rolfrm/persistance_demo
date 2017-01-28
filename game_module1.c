@@ -256,6 +256,7 @@ bool nth_str_cmp(char * commands, u32 idx, const char * comp){
   return false;
 }
 
+// selected unit is actually the player unit.
 CREATE_TABLE_DECL2(selected_unit, u32, bool);
 CREATE_MULTI_TABLE2(selected_unit, u32, bool);
 
@@ -278,13 +279,9 @@ bool game1_set_selected_units(graphics_context * gctx, editor_context * ctx, cha
 }
 
 void game1_interactions_update(graphics_context * ctx){
-  
-  UNUSED(ctx);
-  u32 evt_key[10];
-  game_event ge[10];
-  u64 idx = 0;
-  u64 count = iter_all_game_event(evt_key, ge, array_count(ge), &idx);
-  ASSERT(count < array_count(ge));
+  u32 * evt_key = get_keys_game_event();
+  game_event * ge = get_values_game_event();
+  u64 count = get_count_game_event();
   for(u32 i = 0; i < count; i++){
     logd("%i %f %f %i %i\n", evt_key[i], ge[i].mouse_button.game_position.x, ge[i].mouse_button.game_position.y, ge[i].mouse_button.button, count);
     u32 entities[10];
@@ -305,54 +302,44 @@ void game1_interactions_update(graphics_context * ctx){
   }
 
   {
-    u32 entities[10];
-    visctrl entities2[10];
-    bool status[10];
-    u64 idx = 0;
-    u32 cnt = 0;
-    u32 materials[10];
-    while(0 < (cnt = iter_all_vision_controlled(entities, materials, array_count(materials), &idx))){
-      for(u32 i = 0; i < cnt; i++){
-	u32 material = materials[i];
-	vec4 color = vec4_zero;
-	if(polygon_color_try_get(ctx->poly_color, material, &color)){
-	  color.w = 1.0;
-	  polygon_color_set(ctx->poly_color, material, color);
-	}
+    u32 * materials = get_values_vision_controlled();
+    u32 vision_controlled_count = get_count_vision_controlled();
+    for(u32 i = 0; i < vision_controlled_count; i++){
+      u32 material = materials[i];
+      vec4 color = vec4_zero;
+      if(polygon_color_try_get(ctx->poly_color, material, &color)){
+	color.w = 1.0;
+	polygon_color_set(ctx->poly_color, material, color);	
       }
     }
 
-    idx =0;
-    cnt = iter_all_selected_unit(entities, status, array_count(entities), &idx);
-    idx = 0;
-    u32 nxt = iter_all_vision_control(entities + cnt, entities2, array_count(entities) - cnt, &idx);
+    u32 * selected_units = get_keys_selected_unit();
+    u32 selected_unit_cnt = get_count_selected_unit();
+
+    u32 * vision_controls = get_keys_vision_control();
+    u32 vision_control_cnt = get_count_vision_control();
     
     static index_table * coltab = NULL;
     if(coltab == NULL)
       coltab = index_table_create(NULL, sizeof(collision_data));
     index_table_clear(coltab);
 
-    detect_collisions(entities, nxt + cnt, *ctx, coltab);
+    detect_collisions_one_way(*ctx, selected_units, selected_unit_cnt, vision_controls, vision_control_cnt, coltab);
+    
     u64 cnt2 = 0;
     collision_data * cd = index_table_all(coltab, &cnt2);
     
     for(u32 i = 0; i < cnt2; i++){
-      u32 e[] = {cd[i].entity1.entity, cd[i].entity2.entity};
-      for(u32 j = 0; j < array_count(e) ; j++){
-	visctrl x;
-	if(try_get_vision_control(e[j], &x)){
-	  u32 controlled[10];
-	  u64 idx = 0;
-	  u32 cnt = iter2_vision_controlled(e[j], controlled, array_count(controlled), &idx);
-	  for(u32 i = 0; i < cnt; i++){
-	    u32 material = controlled[i];
-	    vec4 color = vec4_zero;
-	    if(polygon_color_try_get(ctx->poly_color, material, &color)){
-	      color.w = 0.0;
-	      polygon_color_set(ctx->poly_color, material, color);
-	    }
-	  }
-	}	
+      u32 controlled[10];
+      u64 idx = 0;
+      u32 cnt = iter2_vision_controlled(cd[i].entity2.entity, controlled, array_count(controlled), &idx);
+      for(u32 i = 0; i < cnt; i++){
+	u32 material = controlled[i];
+	vec4 color = vec4_zero;
+	if(polygon_color_try_get(ctx->poly_color, material, &color)){
+	  color.w = 0.0;
+	  polygon_color_set(ctx->poly_color, material, color);
+	}
       }
     }
   } 

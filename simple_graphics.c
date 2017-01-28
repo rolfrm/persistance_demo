@@ -1457,21 +1457,20 @@ static void game_handle_key(u64 console, int key, int mods, int action){
   }
   UNUSED(mods);
 }
-
-void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index_table * result_table){
-  struct detect_collision_aabb{
+struct detect_collision_aabb{
     vec3 min, max;
   };
-  index_table * aabb_table = NULL;
-  if(aabb_table == NULL)
-    aabb_table = index_table_create(NULL, sizeof(struct detect_collision_aabb));
+
+void simple_game_build_aabb_table(u32 * entities, u32 entitycnt, graphics_context gd, index_table * aabb_table){
   index_table_clear(aabb_table);
   index_table_sequence aabbseq = index_table_alloc_sequence(aabb_table, entitycnt);
   struct detect_collision_aabb * aabbs = index_table_lookup_sequence(aabb_table, aabbseq);
   memset(aabbs, 0, aabbseq.count * sizeof(struct detect_collision_aabb));
-  const float bigval = 100000.0f;
+
   for(u64 i = 0; i < entitycnt; i++){
     u64 entity = entities[i];
+    if(entity == 0)
+      continue;
     entity_data * ed = index_table_lookup(gd.entities, entity);
     if(ed == NULL)
       continue;
@@ -1481,7 +1480,7 @@ void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index
     if(md == NULL) continue;
     polygon_data * pd = index_table_lookup_sequence(gd.polygon, md->polygons);
     if(pd == NULL) continue;
-    vec3 min = vec3_new1(bigval), max = vec3_new1(-bigval);
+    vec3 min = vec3_new1(f32_infinity), max = vec3_new1(f32_negative_infinity);
     u64 pdcnt = md->polygons.count;
     bool any = false;
     for(u32 i = 0; i < pdcnt; i++){
@@ -1511,178 +1510,226 @@ void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index
       aabbs[i].max = max;
     }
   }
-  for(u64 i = 0; i < entitycnt; i++){
+}
 
-    auto aabb1 = aabbs[i];
-    if(aabb1.min.x == bigval)
-      continue;
-    u64 entity = entities[i];
-    bool grav1 = get_gravity_affects(entity);
-    entity_data * ed = index_table_lookup(gd.entities, entity);
-    if(ed == NULL)
-      continue;
-    if(ed->model == 0) continue;      
-    model_data * md = index_table_lookup(gd.models, ed->model);
-    u64 pdcnt = md->polygons.count;
-    polygon_data * pd = index_table_lookup_sequence(gd.polygon, md->polygons);
-    
-    vec3 position = ed->position;
-    for(u64 j = i + 1; j < entitycnt; j++){
-      auto aabb2 = aabbs[j];
-      if(aabb2.min.x == bigval)
-	continue;
-      if(aabb2.min.x == aabb2.max.x)
-	continue;
-      
-      if(aabb1.min.x > aabb2.max.x || aabb1.max.x < aabb2.min.x
-	 ||aabb1.min.z > aabb2.max.z || aabb1.max.z < aabb2.min.z
-	 ||aabb1.min.y > aabb2.max.y || aabb1.max.y < aabb2.min.y)
-	continue;
-      u32 entity2 = entities[j];
-      bool grav2 = get_gravity_affects(entity2);
-      if(!(grav1 || grav2))
-	continue;
-      
-      entity_data * ed2 = index_table_lookup(gd.entities, entity2);
-      if(ed2 == NULL)
-	continue;
-      if(ed == ed2) continue;
-      vec3 position2 = ed2->position;
-      if(ed2->model == 0) continue;
-      model_data * md2 = index_table_lookup(gd.models, ed2->model);
-      u64 pd2cnt = md2->polygons.count;
-      polygon_data * pd2 = index_table_lookup_sequence(gd.polygon, md2->polygons);
-      if(pd2 == NULL) continue;
-      for(u32 i = 0; i < pdcnt; i++){
-	if(pd[i].physical_height == 0.0f) continue;
-	for(u32 j = 0; j < pd2cnt; j++){
-	  if(pd2[j].physical_height == 0.0f) continue;
-	  u64 vcnt1 = pd[i].vertexes.count;
-	  u64 vcnt2 = pd2[j].vertexes.count;
+bool detect_collision(graphics_context gd, u32 entity1, struct detect_collision_aabb aabb1, u32 entity2, struct detect_collision_aabb aabb2, index_table * result_table){
+  if(aabb2.min.x == f32_infinity)
+    return false;
+  if(aabb2.min.x == aabb2.max.x)
+    return false;
+  if(aabb1.min.x == f32_infinity)
+    return false;
+  if(aabb1.max.x == aabb1.min.x)
+    return false;
+  if(aabb1.min.x > aabb2.max.x || aabb1.max.x < aabb2.min.x
+     ||aabb1.min.z > aabb2.max.z || aabb1.max.z < aabb2.min.z
+     ||aabb1.min.y > aabb2.max.y || aabb1.max.y < aabb2.min.y)
+    return false;
+  
+  bool grav1 = get_gravity_affects(entity1);
+  bool grav2 = get_gravity_affects(entity2);
+  if(!(grav1 || grav2))
+    return false;
+  entity_data * ed2 = index_table_lookup(gd.entities, entity2);
+  if(ed2 == NULL)
+    return false;
+  entity_data * ed = index_table_lookup(gd.entities, entity1);
+  if(ed == NULL)
+    return false;
+  if(ed->model == 0) return false;      
+  model_data * md = index_table_lookup(gd.models, ed->model);
+  u64 pdcnt = md->polygons.count;
+  polygon_data * pd = index_table_lookup_sequence(gd.polygon, md->polygons);
+  vec3 position = ed->position;
+  
+  vec3 position2 = ed2->position;
+  if(ed2->model == 0) return false;
+  model_data * md2 = index_table_lookup(gd.models, ed2->model);
+  u64 pd2cnt = md2->polygons.count;
+  polygon_data * pd2 = index_table_lookup_sequence(gd.polygon, md2->polygons);
+  
+  if(pd2 == NULL) return false;
+  bool any_collided = false;
+  for(u32 i = 0; i < pdcnt; i++){
+    if(pd[i].physical_height == 0.0f) continue;
+    for(u32 j = 0; j < pd2cnt; j++){
+      if(pd2[j].physical_height == 0.0f) continue;
+      u64 vcnt1 = pd[i].vertexes.count;
+      u64 vcnt2 = pd2[j].vertexes.count;
 
-	  vertex_data * vd1 = index_table_lookup_sequence(gd.vertex, pd[i].vertexes);
-	  vertex_data * vd2 = index_table_lookup_sequence(gd.vertex, pd2[j].vertexes);
+      vertex_data * vd1 = index_table_lookup_sequence(gd.vertex, pd[i].vertexes);
+      vertex_data * vd2 = index_table_lookup_sequence(gd.vertex, pd2[j].vertexes);
 
-	  if(vd1 == NULL || vd2 == NULL) continue;
-	  bool cw1 = true;
-	  vec3 offset = vec3_sub(position, position2);
-	  {
-	    // detect collisions along the y axis.
-	    float y1 = 0, y2 = pd2[j].physical_height,
-	      y3 = offset.y, y4 = offset.y + pd[i].physical_height;
-	    if(y2 < y1) SWAP(y2, y1);
-	    if(y4 < y3) SWAP(y4, y3);
-	    if(y1 > y4 || y2 < y3)
-	      continue;
+      if(vd1 == NULL || vd2 == NULL) continue;
+      bool cw1 = true;
+      vec3 offset = vec3_sub(position, position2);
+      {
+	// detect collisions along the y axis.
+	float y1 = 0, y2 = pd2[j].physical_height,
+	  y3 = offset.y, y4 = offset.y + pd[i].physical_height;
+	if(y2 < y1) SWAP(y2, y1);
+	if(y4 < y3) SWAP(y4, y3);
+	if(y1 > y4 || y2 < y3)
+	  continue;
+      }
+
+      for(u64 k1 = 2; k1 < vcnt1; k1++){
+	vec2 verts1[3];
+	if(cw1){
+	  verts1[0] = vd1[k1 - 2].position;
+	  verts1[1] = vd1[k1 - 1].position;
+	  verts1[2] = vd1[k1].position;
+	  cw1 = false;
+	}else{
+	  verts1[0] = vd1[k1].position;
+	  verts1[1] = vd1[k1 - 1].position;
+	  verts1[2] = vd1[k1 - 2].position;
+	  cw1 = true;
+	}
+		
+	for(u32 kk = 0; kk < 3; kk++){
+	  vec2 off = {.x = offset.x, .y = offset.z};
+	  verts1[kk] = vec2_add(verts1[kk], off);
+	}
+		
+	bool cw2 = true;
+	for(u64 k2 = 2; k2 < vcnt2; k2++){
+	  vec2 verts2[3];
+	  if(cw2){
+	    verts2[0] = vd2[k2 - 2].position;
+	    verts2[1] = vd2[k2 - 1].position;
+	    verts2[2] = vd2[k2].position;
+	    cw2 = false;
+	  }else{
+	    verts2[0] = vd2[k2].position;
+	    verts2[1] = vd2[k2 - 1].position;
+	    verts2[2] = vd2[k2 - 2].position;
+	    cw2 = true;
 	  }
-
-	  for(u64 k1 = 2; k1 < vcnt1; k1++){
-	    vec2 verts1[3];
-	    if(cw1){
-	      verts1[0] = vd1[k1 - 2].position;
-	      verts1[1] = vd1[k1 - 1].position;
-	      verts1[2] = vd1[k1].position;
-	      cw1 = false;
-	    }else{
-	      verts1[0] = vd1[k1].position;
-	      verts1[1] = vd1[k1 - 1].position;
-	      verts1[2] = vd1[k1 - 2].position;
-	      cw1 = true;
+	  // verts1 and verts2 are two triangles.
+	  int cols = 0;
+	  for(u32 ii = 0; ii < 3; ii++){
+	    u32 ii2 = ii == 2 ? 0 : ii + 1;
+	    u32 ii3 = ii == 0 ? 2 : ii - 1;
+	    vec2 a = verts1[ii];
+	    vec2 b = verts1[ii2];
+	    vec2 d = vec2_normalize(vec2_sub(b, a));
+	    d = vec2_new(d.y, -d.x);
+	    vec2 e = verts1[ii3];
+	    float xe = vec2_mul_inner(d, vec2_sub(e, a));
+	    bool gotcol = false;
+	    for(u32 jj = 0; jj < 3; jj++){
+	      u32 jj2 = jj == 2 ? 0 : jj + 1;
+	      vec2 a2 = vec2_sub(verts2[jj], a);
+	      vec2 b2 = vec2_sub(verts2[jj2], a);
+	      float x = vec2_mul_inner(d, a2);
+	      float y = vec2_mul_inner(d, b2);
+	      if(x > y)
+		SWAP(x, y);
+	      if(x < xe && y > 0)
+		gotcol = true;
 	    }
-		
-	    for(u32 kk = 0; kk < 3; kk++){
-	      vec2 off = {.x = offset.x, .y = offset.z};
-	      verts1[kk] = vec2_add(verts1[kk], off);
-	    }
-		
-	    bool cw2 = true;
-	    for(u64 k2 = 2; k2 < vcnt2; k2++){
-	      vec2 verts2[3];
-	      if(cw2){
-		verts2[0] = vd2[k2 - 2].position;
-		verts2[1] = vd2[k2 - 1].position;
-		verts2[2] = vd2[k2].position;
-		cw2 = false;
-	      }else{
-		verts2[0] = vd2[k2].position;
-		verts2[1] = vd2[k2 - 1].position;
-		verts2[2] = vd2[k2 - 2].position;
-		cw2 = true;
-	      }
-	      // verts1 and verts2 are two triangles.
-	      int cols = 0;
-	      for(u32 ii = 0; ii < 3; ii++){
-		u32 ii2 = ii == 2 ? 0 : ii + 1;
-		u32 ii3 = ii == 0 ? 2 : ii - 1;
-		vec2 a = verts1[ii];
-		vec2 b = verts1[ii2];
-		vec2 d = vec2_normalize(vec2_sub(b, a));
-		d = vec2_new(d.y, -d.x);
-		vec2 e = verts1[ii3];
-		float xe = vec2_mul_inner(d, vec2_sub(e, a));
-		bool gotcol = false;
-		for(u32 jj = 0; jj < 3; jj++){
-		  u32 jj2 = jj == 2 ? 0 : jj + 1;
-		  vec2 a2 = vec2_sub(verts2[jj], a);
-		  vec2 b2 = vec2_sub(verts2[jj2], a);
-		  float x = vec2_mul_inner(d, a2);
-		  float y = vec2_mul_inner(d, b2);
-		  if(x > y)
-		    SWAP(x, y);
-		  if(x < xe && y > 0)
-		    gotcol = true;
-		}
-		if(gotcol)
-		  cols += 1;
-	      }
+	    if(gotcol)
+	      cols += 1;
+	  }
 	      
-	      for(u32 ii = 0; ii < 3; ii++){
-		u32 ii2 = ii == 2 ? 0 : ii + 1;
-		u32 ii3 = ii == 0 ? 2 : ii - 1;
-		vec2 a = verts2[ii];
-		vec2 b = verts2[ii2];
-		vec2 d = vec2_normalize(vec2_sub(b, a));
-		d = vec2_new(d.y, -d.x);
-		vec2 e = verts2[ii3];
-		float xe = vec2_mul_inner(d, vec2_sub(e, a));
-		bool gotcol = false;
-		for(u32 jj = 0; jj < 3; jj++){
-		  u32 jj2 = jj == 2 ? 0 : jj + 1;
-		  vec2 a2 = vec2_sub(verts1[jj], a);
-		  vec2 b2 = vec2_sub(verts1[jj2], a);
-		  float x = vec2_mul_inner(d, a2);
-		  float y = vec2_mul_inner(d, b2);
-		  if(x > y)
-		    SWAP(x, y);
-		  if(x < xe && y > 0){
-		    gotcol = true;
-		  }
-		}
-		if(gotcol)
-		  cols += 1;
-	      }
-	      if(cols == 6){
-		collision_data cd;
-		cd.entity1.entity = entity;
-		cd.entity1.model = ed->model;
-		cd.entity1.polygon_offset = md->polygons.index + i;
-		cd.entity1.vertex_offset = k1;
-		cd.entity1.material = pd[i].material;
-		cd.entity2.entity = entity2;
-		cd.entity2.model = ed2->model;
-		cd.entity2.polygon_offset = md2->polygons.index + i;
-		cd.entity2.vertex_offset = k2;
-		cd.entity2.material = pd2[j].material;
-		u32 idx = index_table_alloc(result_table);
-		*((collision_data *)index_table_lookup(result_table, idx)) = cd;
+	  for(u32 ii = 0; ii < 3; ii++){
+	    u32 ii2 = ii == 2 ? 0 : ii + 1;
+	    u32 ii3 = ii == 0 ? 2 : ii - 1;
+	    vec2 a = verts2[ii];
+	    vec2 b = verts2[ii2];
+	    vec2 d = vec2_normalize(vec2_sub(b, a));
+	    d = vec2_new(d.y, -d.x);
+	    vec2 e = verts2[ii3];
+	    float xe = vec2_mul_inner(d, vec2_sub(e, a));
+	    bool gotcol = false;
+	    for(u32 jj = 0; jj < 3; jj++){
+	      u32 jj2 = jj == 2 ? 0 : jj + 1;
+	      vec2 a2 = vec2_sub(verts1[jj], a);
+	      vec2 b2 = vec2_sub(verts1[jj2], a);
+	      float x = vec2_mul_inner(d, a2);
+	      float y = vec2_mul_inner(d, b2);
+	      if(x > y)
+		SWAP(x, y);
+	      if(x < xe && y > 0){
+		gotcol = true;
 	      }
 	    }
+	    if(gotcol)
+	      cols += 1;
+	  }
+	  if(cols == 6){ // Found collision on all 6 axis
+	    collision_data cd;
+	    cd.entity1.entity = entity1;
+	    cd.entity1.model = ed->model;
+	    cd.entity1.polygon_offset = md->polygons.index + i;
+	    cd.entity1.vertex_offset = k1;
+	    cd.entity1.material = pd[i].material;
+	    cd.entity2.entity = entity2;
+	    cd.entity2.model = ed2->model;
+	    cd.entity2.polygon_offset = md2->polygons.index + i;
+	    cd.entity2.vertex_offset = k2;
+	    cd.entity2.material = pd2[j].material;
+	    u32 idx = index_table_alloc(result_table);
+	    *((collision_data *)index_table_lookup(result_table, idx)) = cd;
+	    any_collided = true;
 	  }
 	}
       }
     }
   }
+  return any_collided;
 }
+void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index_table * result_table){
+  
+  static index_table * aabb_table = NULL;
+  if(aabb_table == NULL)
+    aabb_table = index_table_create(NULL, sizeof(struct detect_collision_aabb));
+  simple_game_build_aabb_table(entities, entitycnt, gd, aabb_table);
+  u64 cnt = 0;
+  struct detect_collision_aabb * aabbs = index_table_all(aabb_table, &cnt);
+  ASSERT(cnt == entitycnt);
+  
+  for(u64 i = 0; i < entitycnt; i++){
+    for(u64 j = i + 1; j < entitycnt; j++){
+      detect_collision(gd, entities[i], aabbs[i], entities[j], aabbs[j],result_table);
+    }
+  }
+}
+
+void detect_collisions_one_way(graphics_context gd, u32 * entities1, u32 entity1_cnt, u32 * entities2, u32 entity2_cnt, index_table * result_table){
+  struct detect_collision_aabb * aabbs1 = NULL;
+  struct detect_collision_aabb * aabbs2 = NULL;
+
+  { // build aabb_table 1
+    static index_table * aabb_table = NULL;
+    if(aabb_table == NULL)
+      aabb_table = index_table_create(NULL, sizeof(struct detect_collision_aabb));
+    simple_game_build_aabb_table(entities1, entity1_cnt, gd, aabb_table);
+    u64 cnt = 0;
+
+    aabbs1 = index_table_all(aabb_table, &cnt);
+    ASSERT(cnt == entity1_cnt);
+  }
+
+  { // build aabb_table 2
+    static index_table * aabb_table = NULL;
+    if(aabb_table == NULL)
+      aabb_table = index_table_create(NULL, sizeof(struct detect_collision_aabb));
+    simple_game_build_aabb_table(entities2, entity2_cnt, gd, aabb_table);
+    u64 cnt = 0;
+
+    aabbs2 = index_table_all(aabb_table, &cnt);
+    ASSERT(cnt == entity2_cnt);
+  } 
+
+  for(u64 i = 0; i < entity1_cnt; i++){
+    for(u64 j = 0; j < entity2_cnt; j++){
+      detect_collision(gd, entities1[i], aabbs1[i], entities2[j], aabbs2[j],result_table);
+    }
+  }
+}
+
 
 CREATE_TABLE_DECL2(entity_index_lookup, u32, u32);
 CREATE_TABLE_NP(entity_index_lookup, u32, u32);

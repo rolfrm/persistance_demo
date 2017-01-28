@@ -37,6 +37,9 @@ void sorttable_destroy(sorttable * table);
   bool try_get_ ## Name(KeyType key, ValueType * value);		\
   void clear_ ## Name();							\
   void unset_ ## Name(KeyType key);\
+  KeyType * get_keys_ ## Name();\
+  ValueType * get_values_ ## Name();\
+  u64 get_count_ ## Name();\
   ValueType * ref_at_ ## Name(u64 index);\
   void remove_at_ ## Name(u64 * index, size_t cnt); \
   typedef struct { sorttable * ptr; } Name ## _table; \
@@ -154,6 +157,18 @@ void sorttable_destroy(sorttable * table);
     void unset_ ## Name(KeyType key){		\
     remove_ ## Name(&key, 1);\
     }			     \
+    KeyType * get_keys_ ## Name(){					\
+      sorttable * area = Name ## _initialize();				\
+      return ((KeyType *)area->key_area->ptr) + 1;				\
+    }									\
+    ValueType * get_values_ ## Name(){					\
+      sorttable * area = Name ## _initialize();				\
+      return ((ValueType *)area->value_area->ptr) + 1;			\
+    }									\
+    u64 get_count_ ## Name(){						\
+       u64 c = (Name ## _initialize())->key_area->size / sizeof(KeyType);\
+       return c == 0 ? 0 : (c - 1);					\
+    }									\
     u64 iter_ ## Name(KeyType * keys, size_t key_cnt, void * out_keys, u64 * out_indexes, size_t idx_cnt, size_t * idx){ \
       sorttable * table = Name ## _initialize();			\
       return sorttable_iter(table, keys, key_cnt, out_keys, out_indexes, idx_cnt, idx); \
