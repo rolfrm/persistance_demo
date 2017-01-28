@@ -277,6 +277,8 @@ bool game1_set_selected_units(graphics_context * gctx, editor_context * ctx, cha
   }
   return false;
 }
+CREATE_TABLE_DECL2(hit_queue, u32, u32);
+CREATE_TABLE2(hit_queue, u32, u32);
 
 void game1_interactions_update(graphics_context * ctx){
   u32 * evt_key = get_keys_game_event();
@@ -292,6 +294,7 @@ void game1_interactions_update(graphics_context * ctx){
     if(tab == NULL) tab = index_table_create(NULL, sizeof(entity_local_data));
     index_table_clear(tab);
     logd("Door count: %i\n", cnt);
+    vec2 p = ge[i].mouse_button.game_position;
     simple_game_point_collision(*ctx, entities, cnt, ge[i].mouse_button.game_position, tab);
     u64 door_cnt = 0;
     entity_local_data * ed = index_table_all(tab, &door_cnt);
@@ -299,17 +302,36 @@ void game1_interactions_update(graphics_context * ctx){
     for(u32 i = 0; i < door_cnt; i++){
       logd("ed: %i\n", ed[i].entity);
     }
+    u32 * selected_units = get_keys_selected_unit();
+    u32 selected_unit_cnt = get_count_selected_unit();
+    if(door_cnt > 0){
+      for(u32 i = 0; i < selected_unit_cnt; i++){
+	set_hit_queue(selected_units[i], ed[0].entity);
+      }
+    }else{
+      for(u32 i = 0; i < selected_unit_cnt; i++){
+	unset_hit_queue(selected_units[i]);
+      }
+    }
+    
+    for(u32 i = 0; i < selected_unit_cnt; i++){
+      entity_data * ed = index_table_lookup(ctx->entities, selected_units[i]);
+      set_entity_target(selected_units[i], vec3_new(p.x, ed->position.y, p.y));
+      logd("Setting target..\n");
+    }
   }
 
-  {
-    u32 * materials = get_values_vision_controlled();
-    u32 vision_controlled_count = get_count_vision_controlled();
-    for(u32 i = 0; i < vision_controlled_count; i++){
-      u32 material = materials[i];
-      vec4 color = vec4_zero;
-      if(polygon_color_try_get(ctx->poly_color, material, &color)){
-	color.w = 1.0;
+  { // vision controllers
+    { // reset all vision controlled materials.
+      u32 * materials = get_values_vision_controlled();
+      u32 vision_controlled_count = get_count_vision_controlled();
+      for(u32 i = 0; i < vision_controlled_count; i++){
+	u32 material = materials[i];
+	vec4 color = vec4_zero;
+	if(polygon_color_try_get(ctx->poly_color, material, &color)){
+	  color.w = 1.0;
 	polygon_color_set(ctx->poly_color, material, color);	
+	}
       }
     }
 
@@ -342,7 +364,48 @@ void game1_interactions_update(graphics_context * ctx){
 	}
       }
     }
-  } 
+  }
+
+  { // update hit queue
+    static index_table * coltab = NULL;
+    if(coltab == NULL)
+      coltab = index_table_create(NULL, sizeof(collision_data));
+    index_table_clear(coltab);
+    u32 hit_queue_cnt = get_count_hit_queue();
+    u32 * entities = get_keys_hit_queue();
+    u32 * targets = get_values_hit_queue();
+    u64 cnt2 = 0;
+    for(u32 i = 0; i < hit_queue_cnt; i++){
+
+
+      detect_collisions_one_way(*ctx, entities + i, 1, targets + i, 1, coltab);
+
+      u32 saved = cnt2;
+      index_table_all(coltab, &cnt2);
+      if(saved != cnt2){
+	{ // toggle door
+	  bool door_status;
+	  if(try_get_door_status(targets[i], &door_status)){
+	    door_status = !door_status;
+	    set_door_status(targets[i], door_status);
+	    door_models models = get_door_model(targets[i]);
+	    u32 model = !door_status ? models.closed : models.open;
+	    ((entity_data * )index_table_lookup(ctx->entities, targets[i]))->model = model;
+	  }
+	}
+      }
+    }
+
+    u32 hits[cnt2];
+    collision_data * cd = index_table_all(coltab, &cnt2);
+    u32 j = 0;
+    for(u32 i = 0; i < cnt2; i++){
+      u32 e = cd[i].entity1.entity;
+      if(j == 0 || (hits[j - 1] != e))
+	hits[j++] = e;
+    }
+    remove_hit_queue(hits, j);
+  }
 }
 
 void init_module(graphics_context * ctx){

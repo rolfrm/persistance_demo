@@ -55,7 +55,6 @@ typedef enum{
 
 CREATE_TABLE_DECL2(entity_type, u64, ENTITY_TYPE);
 CREATE_TABLE_DECL2(desc_text, u64, name_data);
-CREATE_TABLE_DECL2(hit_queue, u32, u32);
 
 struct _graphics_context;
 typedef struct _graphics_context graphics_context;
@@ -115,7 +114,7 @@ CREATE_TABLE_DECL2(simple_game_interactions, u32, interact_fcn);
 CREATE_TABLE_DECL2(simple_game_editor_fcn, u32, simple_graphics_editor_fcn);
 CREATE_TABLE_DECL2(simple_game_update, u32, simple_game_update_fcn);
 CREATE_TABLE_DECL2(ghost_material, u32, bool);
-
+CREATE_TABLE_DECL2(entity_target, u32, vec3);
 typedef enum{
   GAME_EVENT_MOUSE_BUTTON
 }game_event_kind;

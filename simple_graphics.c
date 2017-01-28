@@ -17,7 +17,6 @@
 
 CREATE_TABLE2(desc_text, u64, name_data);
 CREATE_TABLE2(entity_type, u64, ENTITY_TYPE);
-CREATE_TABLE2(hit_queue, u32, u32);
 
 void set_desc_text2(u32 idx, u32 group, const char * str){
   u64 id = ((u64)idx) | ( ((u64)group) << 32);
@@ -713,7 +712,7 @@ typedef struct {
   float zoom;
 }game_data;
 
-CREATE_TABLE_DECL2(entity_target, u32, vec3);
+
 CREATE_TABLE2(entity_target, u32, vec3);
 CREATE_TABLE_DECL2(simple_game_data, u64, game_data);
 CREATE_TABLE2(simple_game_data, u64, game_data);
@@ -1053,11 +1052,14 @@ static void command_entered(u64 id, char * command){
 	    sscanf(buf, "%i", &v);
 	  }
 	  polygon_data * pd = index_table_lookup(ctx.polygon, editor.selected_index);
-	  logd("Setting is ghost.. for %i material: %i\n", editor.selected_index, pd->material);
-	  if(v)
+
+	  if(v){
+	    logd("Setting is ghost.. for %i material: %i\n", editor.selected_index, pd->material);
 	    ghost_material_set(ctx.ghost_table, pd->material, true);
-	  else
+	  }else{
+	    logd("Unsetting is ghost.. for %i material: %i\n", editor.selected_index, pd->material);
 	    ghost_material_unset(ctx.ghost_table, pd->material);
+	  }
 	}
 	
 	
@@ -1698,6 +1700,7 @@ void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index
 }
 
 void detect_collisions_one_way(graphics_context gd, u32 * entities1, u32 entity1_cnt, u32 * entities2, u32 entity2_cnt, index_table * result_table){
+  ASSERT(result_table != NULL);
   struct detect_collision_aabb * aabbs1 = NULL;
   struct detect_collision_aabb * aabbs2 = NULL;
 
@@ -1897,7 +1900,7 @@ void simple_grid_render(u64 id){
     }
   }
   
-  { // interaction functions. (disabled for now).
+  /*{ // interaction functions. (disabled for now).
     interact_fcn fcns[30];
     u32 fcn_id[array_count(fcns)];
     u64 idx = 0;
@@ -1927,7 +1930,7 @@ void simple_grid_render(u64 id){
 	
       }
     }
-  }
+    }*/
   { // update functions
     simple_game_update_fcn fcns[30];
     u32 fcn_id[array_count(fcns)];
@@ -2128,48 +2131,6 @@ void simple_grid_game_mouse_down_func(u64 grid_id, double x, double y, u64 metho
     }
     set_simple_game_data(grid_id, gd);
     return;
-  }
-  
-  else if(mouse_button_button == mouse_button_left && mouse_button_action == mouse_button_press)
-  {
-    static index_table * tab = NULL;
-    if(tab == NULL) tab = index_table_create(NULL, sizeof(entity_local_data));
-    u64 count = active_entities_count(ctx.active_entities);
-    u32 entities[count];
-    
-    bool unused[count];
-    u64 idx = 0;
-    active_entities_iter_all(ctx.active_entities, entities, unused, count, &idx);
-    u64 cnt = 0;
-
-    index_table_clear(tab);
-    for(u32 i = 0 ; i < count; i++){
-      if(!get_entity_type(entities[i]))
-	entities[i] = 0;
-    }
-    simple_game_point_collision(ctx, entities, count, vec2_add(p, gd.offset), tab);
-    entity_local_data * all = index_table_all(tab, &cnt);    
-    if(cnt > 0 && gd.selected_entity != all->entity){
-      if(get_entity_type(all->entity) == ENTITY_TYPE_PLAYER){
-	gd.selected_entity = all->entity;
-	set_simple_game_data(grid_id, gd);
-      }
-      if(get_entity_type(gd.selected_entity) == ENTITY_TYPE_PLAYER
-	 && get_entity_type(all->entity) != 0){
-	vec2 v = vec2_add(p, gd.offset);
-	entity_data * ed = index_table_lookup(ctx.entities, gd.selected_entity);
-	set_entity_target(gd.selected_entity, vec3_new(v.x, ed->position.y, v.y));
-	set_hit_queue(gd.selected_entity, all->entity);
-      }
-    }else{
-      // Assumed we did not hit something.
-      if(gd.selected_entity != 0){
-	vec2 v = vec2_add(p, gd.offset);
-	entity_data * ed = index_table_lookup(ctx.entities, gd.selected_entity);
-	//logd("Target: ");vec2_print(v);logd("\n");
-	set_entity_target(gd.selected_entity, vec3_new(v.x, ed->position.y, v.y));
-      }
-    }
   }
 }
 
