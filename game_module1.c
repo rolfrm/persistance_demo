@@ -462,7 +462,6 @@ void game1_interactions_update(graphics_context * ctx){
 	}
       }
       
-      logd("Temperature: %f\n", heat);
       for(u32 i = 0; i < selected_unit_cnt; i++){
 	float temp = 38;
 	try_get_entity_temperature(selected_units[i], &temp);
@@ -477,7 +476,6 @@ void game1_interactions_update(graphics_context * ctx){
 	  unset_entity_temperature(selected_units[i]);
 	else
 	  set_entity_temperature(selected_units[i], temp);
-	logd("Entity temperature: %f\n", temp);
       }
 
     }
@@ -486,7 +484,6 @@ void game1_interactions_update(graphics_context * ctx){
       static u32 * bar_entity = NULL;
       if(bar_entity == NULL){
 	auto bar_entity_area = create_mem_area("bar_entity");
-	logd("Loading bar entity..\n");
 	bar_entity = bar_entity_area->ptr;
 	if(bar_entity_area->size == 0 || bar_entity[0] == 0){
 	  mem_area_realloc(bar_entity_area, sizeof(u32));
@@ -503,7 +500,6 @@ void game1_interactions_update(graphics_context * ctx){
 	  e->model = m1;
 	  model_data * m = index_table_lookup(ctx->models, m1);
 	  index_table_resize_sequence(ctx->polygon, &(m->polygons), 2);
-	  logd("Reload..\n");
 	  u32 p1 = m->polygons.index;
 	  {
 	    polygon_add_vertex2f(ctx, p1, vec2_new(0, 0));
@@ -548,18 +544,27 @@ void game1_interactions_update(graphics_context * ctx){
 	}
       }
       *orig_width = 0.1;
-      if(selected_unit_cnt > 0){
-	float temp = 38.0;
-	try_get_entity_temperature(selected_units[0], &temp);
-	float scale = (temp + 10.0) / (38.0 + 10.0);
-	logd("scale: %f\n", scale);
-	logd("%f \n", *orig_width * scale);
-	v[2].position.x = *orig_width * scale;
-	v[3].position.x = *orig_width * scale;
-	graphics_context_reload_polygon(*ctx, m->polygons.index + 1);
+      float temp = 38.0;
+      try_get_entity_temperature(selected_units[0], &temp);
+      if(temp != 38){
+	if(selected_unit_cnt > 0){
+
+	  float scale = (temp + 10.0) / (38.0 + 10.0);
+	  float newp = *orig_width * scale;
+	  //logd("newp %f\n", fabs(newp - v[2].position.x));
+	  if(fabs(newp - v[2].position.x) > 0.0001){
+
+	    v[2].position.x = newp;
+	    v[3].position.x = newp;
+	    graphics_context_reload_polygon(*ctx, m->polygons.index + 1);
+	  }
       }
-      vec2 offset = ctx->game_data->offset;
-      e->position = vec3_new(offset.x - 0.38, 10, offset.y - 10 + 0.37);
+	vec2 offset = ctx->game_data->offset;
+	e->position = vec3_new(offset.x - 0.38, 10, offset.y - 10 + 0.37);
+      }else{
+	vec2 offset = ctx->game_data->offset;
+	e->position = vec3_new(offset.x - 0.38 - 1000, 10, offset.y - 10 + 0.37);
+      }
 
       //logd("BAR POSITION: %i", bar_entity[0]); vec3_print(e->position);logd("\n");
     }
