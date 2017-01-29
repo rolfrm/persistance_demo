@@ -171,3 +171,5 @@ void simple_game_editor_load_func(graphics_context * ctx, simple_graphics_editor
 void simple_game_point_collision(graphics_context ctx, u32 * entities, u32 entity_count, vec2 loc, index_table * collisiontable);
 void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index_table * result_table);
 void detect_collisions_one_way(graphics_context gd, u32 * entities1, u32 entity1_cnt, u32 * entities2, u32 entity2_cnt, index_table * result_table);
+void polygon_add_vertex2f(graphics_context * ctx, u32 polygon, vec2 offset);
+void graphics_context_reload_polygon(graphics_context ctx, u32 polygon);

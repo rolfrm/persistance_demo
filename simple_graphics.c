@@ -66,7 +66,7 @@ CREATE_TABLE2(ghost_material, u32, bool);
 
 typedef u32 polygon_id;
 polygon_id polygon_create(graphics_context * ctx);
-void polygon_add_vertex2f(graphics_context * ctx, polygon_id polygon, vec2 offset);
+
 
 void graphics_context_reload_polygon(graphics_context ctx, u32 polygon){
   polygon_data * pd = index_table_lookup(ctx.polygon, polygon);

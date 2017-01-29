@@ -15,7 +15,6 @@
 #include "console.h"
 #include "simple_graphics.h"
 
-
 bool is_whitespace(char c){
   return c == ' ' || c == '\t';
   
@@ -40,6 +39,32 @@ bool copy_nth(const char * _str, u32 index, char * buffer, u32 buffer_size){
       return true;
     }
     index--;
+  }
+  return false;
+}
+
+bool nth_parse_u32(char * commands, u32 idx, u32 * result){
+  static char buffer[30];
+  if(copy_nth(commands, idx, buffer, sizeof(buffer))){
+    if(sscanf(buffer, "%i", result))
+      return true;
+  }
+  return false;
+}
+
+bool nth_parse_f32(char * commands, u32 idx, f32 * result){
+  static char buffer[30];
+  if(copy_nth(commands, idx, buffer, sizeof(buffer))){
+    if(sscanf(buffer, "%f", result))
+      return true;
+  }
+  return false;
+}
+
+bool nth_str_cmp(char * commands, u32 idx, const char * comp){
+  static char buffer[100];
+  if(copy_nth(commands, idx, buffer, sizeof(buffer))) {
+    return strcmp(buffer, comp) == 0;
   }
   return false;
 }
@@ -239,31 +264,6 @@ bool enterctrl_edit(graphics_context * gctx, editor_context * ctx, char * comman
   return false;
 }
 
-bool nth_parse_u32(char * commands, u32 idx, u32 * result){
-  static char buffer[30];
-  if(copy_nth(commands, idx, buffer, sizeof(buffer))){
-    if(sscanf(buffer, "%i", result))
-      return true;
-  }
-  return false;
-}
-
-bool nth_parse_f32(char * commands, u32 idx, f32 * result){
-  static char buffer[30];
-  if(copy_nth(commands, idx, buffer, sizeof(buffer))){
-    if(sscanf(buffer, "%f", result))
-      return true;
-  }
-  return false;
-}
-
-bool nth_str_cmp(char * commands, u32 idx, const char * comp){
-  static char buffer[100];
-  if(copy_nth(commands, idx, buffer, sizeof(buffer))) {
-    return strcmp(buffer, comp) == 0;
-  }
-  return false;
-}
 
 // selected unit is actually the player unit.
 CREATE_TABLE_DECL2(selected_unit, u32, bool);
@@ -468,7 +468,7 @@ void game1_interactions_update(graphics_context * ctx){
 	try_get_entity_temperature(selected_units[i], &temp);
 	if(heat < 10){
 	  float dh = heat - 10; 
-	  temp = MAX(heat, temp + dh * 0.0001);
+	  temp = MAX(heat, temp + dh * 0.001);
 	}else if(heat > 15){
 	  float dh = heat - 15;
 	  temp = MIN(38, temp + dh * 0.1);
@@ -479,8 +479,90 @@ void game1_interactions_update(graphics_context * ctx){
 	  set_entity_temperature(selected_units[i], temp);
 	logd("Entity temperature: %f\n", temp);
       }
+
     }
-    
+    const bool render_temperature_bar = true;
+    if(render_temperature_bar){
+      static u32 * bar_entity = NULL;
+      if(bar_entity == NULL){
+	auto bar_entity_area = create_mem_area("bar_entity");
+	logd("Loading bar entity..\n");
+	bar_entity = bar_entity_area->ptr;
+	if(bar_entity_area->size == 0 || bar_entity[0] == 0){
+	  mem_area_realloc(bar_entity_area, sizeof(u32));
+	  bar_entity = bar_entity_area->ptr;
+	  
+	  u32 e1 = bar_entity[0];
+	  if(bar_entity[0] == 0){
+	    e1 = index_table_alloc(ctx->entities);
+	    bar_entity[0] = e1;
+	  }
+	  active_entities_set(ctx->active_entities, e1, true);
+	  entity_data * e = index_table_lookup(ctx->entities, e1);
+	  u32 m1 = index_table_alloc(ctx->models);
+	  e->model = m1;
+	  model_data * m = index_table_lookup(ctx->models, m1);
+	  index_table_resize_sequence(ctx->polygon, &(m->polygons), 2);
+	  logd("Reload..\n");
+	  u32 p1 = m->polygons.index;
+	  {
+	    polygon_add_vertex2f(ctx, p1, vec2_new(0, 0));
+	    polygon_add_vertex2f(ctx, p1, vec2_new(0, 0.05));
+	    polygon_add_vertex2f(ctx, p1, vec2_new(0.1, 0));
+	    polygon_add_vertex2f(ctx, p1, vec2_new(0.1, 0.05));
+
+	    polygon_data * pd = index_table_lookup(ctx->polygon, p1);
+	    if(pd->material == 0)
+	      pd->material = get_unique_number();
+	    polygon_color_set(ctx->poly_color, pd->material, vec4_new(0.4, 0.4, 1.0, 1.0));
+	  }
+
+	  u32 p2 = p1 + 1;
+	  {
+	    polygon_add_vertex2f(ctx, p2, vec2_new(0, 0));
+	    polygon_add_vertex2f(ctx, p2, vec2_new(0, 0.05));
+	    polygon_add_vertex2f(ctx, p2, vec2_new(0.1, 0));
+	    polygon_add_vertex2f(ctx, p2, vec2_new(0.1, 0.05));
+	    polygon_data * pd2 = index_table_lookup(ctx->polygon, p2);
+	    if(pd2->material == 0)
+	      pd2->material = get_unique_number();
+	    polygon_color_set(ctx->poly_color, pd2->material, vec4_new(0.5, 0.5, 1.0, 1.0));
+	  }
+	}
+      }
+
+      entity_data * e = index_table_lookup(ctx->entities, *bar_entity);
+      model_data * m = index_table_lookup(ctx->models, e->model);
+      polygon_data * p = index_table_lookup(ctx->polygon, m->polygons.index + 1);
+      vertex_data * v = index_table_lookup_sequence(ctx->vertex, p->vertexes);
+      
+      static float * orig_width = NULL;
+      if(orig_width == NULL){
+	auto orig_width_area = create_mem_area("bar_entity_orig_width");
+	if(orig_width_area->size == 0){
+	  mem_area_realloc(orig_width_area, sizeof(f32));
+	  orig_width = orig_width_area->ptr;
+	  *orig_width = v[2].position.x;
+	}else{
+	  orig_width = orig_width_area->ptr;
+	}
+      }
+      *orig_width = 0.1;
+      if(selected_unit_cnt > 0){
+	float temp = 38.0;
+	try_get_entity_temperature(selected_units[0], &temp);
+	float scale = (temp + 10.0) / (38.0 + 10.0);
+	logd("scale: %f\n", scale);
+	logd("%f \n", *orig_width * scale);
+	v[2].position.x = *orig_width * scale;
+	v[3].position.x = *orig_width * scale;
+	graphics_context_reload_polygon(*ctx, m->polygons.index + 1);
+      }
+      vec2 offset = ctx->game_data->offset;
+      e->position = vec3_new(offset.x - 0.38, 10, offset.y - 10 + 0.37);
+
+      //logd("BAR POSITION: %i", bar_entity[0]); vec3_print(e->position);logd("\n");
+    }
   }
 
   { // update hit queue
