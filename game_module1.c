@@ -15,60 +15,6 @@
 #include "console.h"
 #include "simple_graphics.h"
 
-bool is_whitespace(char c){
-  return c == ' ' || c == '\t';
-  
-}
-
-bool copy_nth(const char * _str, u32 index, char * buffer, u32 buffer_size){
-  char * str = (char *) _str;
-  while(*str != 0){
-    while(is_whitespace(*str))
-      str++;
-    
-    while(*str != 0 && is_whitespace(*str) == false){
-      if(index == 0){
-	*buffer = *str;
-	buffer_size -= 1;
-	buffer++;
-      }
-      str++;
-    }
-    if(index == 0){
-      *buffer = 0;
-      return true;
-    }
-    index--;
-  }
-  return false;
-}
-
-bool nth_parse_u32(char * commands, u32 idx, u32 * result){
-  static char buffer[30];
-  if(copy_nth(commands, idx, buffer, sizeof(buffer))){
-    if(sscanf(buffer, "%i", result))
-      return true;
-  }
-  return false;
-}
-
-bool nth_parse_f32(char * commands, u32 idx, f32 * result){
-  static char buffer[30];
-  if(copy_nth(commands, idx, buffer, sizeof(buffer))){
-    if(sscanf(buffer, "%f", result))
-      return true;
-  }
-  return false;
-}
-
-bool nth_str_cmp(char * commands, u32 idx, const char * comp){
-  static char buffer[100];
-  if(copy_nth(commands, idx, buffer, sizeof(buffer))) {
-    return strcmp(buffer, comp) == 0;
-  }
-  return false;
-}
-
 CREATE_TABLE_DECL2(door_status, u32, bool);
 CREATE_TABLE2(door_status, u32, bool);
 
@@ -274,6 +220,11 @@ CREATE_TABLE2(material_heat, u32, float);
 
 CREATE_TABLE_DECL2(heated_entity, u32, bool);
 CREATE_TABLE2(heated_entity, u32, bool);
+
+CREATE_TABLE_DECL2(zombie_entity, u32, bool);
+CREATE_TABLE2(zombie_entity, u32, bool);
+
+    
 bool game1_set_selected_units(graphics_context * gctx, editor_context * ctx, char * commands){
   UNUSED(gctx);UNUSED(ctx);
   clear_selected_unit();
@@ -316,6 +267,15 @@ bool game1_set_selected_units(graphics_context * gctx, editor_context * ctx, cha
     }
     return true;
   }
+  if(nth_str_cmp(commands, 0, "set_zombie")){
+    u32 entity = 0;
+    if(ctx->selection_kind == SELECTED_ENTITY){
+      entity = ctx->selected_index;
+    }
+    nth_parse_u32(commands, 1, &entity);
+    set_zombie_entity(entity, true);
+    return true;
+  }
   
   return false;
 }
@@ -330,21 +290,15 @@ const float ambient_heat = -10;
 
 
 void game1_interactions_update(graphics_context * ctx){
-  static bool wasJoyActive = false;
+  u32 * selected_units = get_keys_selected_unit();
+  u32 selected_unit_cnt = get_count_selected_unit();
+
   { // handle joystick
-
-
-    
+    static bool wasJoyActive = false;
     int count;
     const float* axes = glfwGetJoystickAxes(GLFW_JOYSTICK_1, &count);
-    /*for(int i = 0; i < count; i++){
-      logd("%f ", axes[i]);
-      
-    }
-    logd("\n");*/
 
-    u32 * selected_units = get_keys_selected_unit();
-    u32 selected_unit_cnt = get_count_selected_unit();
+
     float x = axes[0];
     float y = -axes[1];
     if(x < 0.2 && x > - 0.2)
@@ -362,45 +316,46 @@ void game1_interactions_update(graphics_context * ctx){
     if(x == 0 && y == 0)
       wasJoyActive = false;
     else wasJoyActive = true;
-
     
   }
 
-  
   float heat = ambient_heat;
   game_event * ge = get_values_game_event();
   u64 count = get_count_game_event();
   for(u32 i = 0; i < count; i++){
     if(ge[i].mouse_button.button != mouse_button_left)
       continue;
-    u32 entities[10];
-    bool status[10];
-    u64 idx2 = 0;
-    u32 cnt = iter_all_door_status(entities, status, array_count(status), &idx2);
-    static index_table * tab = NULL;
-    if(tab == NULL) tab = index_table_create(NULL, sizeof(entity_local_data));
-    index_table_clear(tab);
-    vec2 p = ge[i].mouse_button.game_position;
-    simple_game_point_collision(*ctx, entities, cnt, ge[i].mouse_button.game_position, tab);
-    u64 door_cnt = 0;
-    entity_local_data * ed = index_table_all(tab, &door_cnt);
-    
-    u32 * selected_units = get_keys_selected_unit();
-    u32 selected_unit_cnt = get_count_selected_unit();
-    if(door_cnt > 0){
-      for(u32 i = 0; i < selected_unit_cnt; i++){
-	set_hit_queue(selected_units[i], ed[0].entity);
+
+    if(selected_unit_cnt == 0)
+      break;
+    void update_hit_queue(u32 * entities, u32 cnt){
+      
+      static index_table * tab = NULL;
+      if(tab == NULL) tab = index_table_create(NULL, sizeof(entity_local_data));
+      index_table_clear(tab);
+      vec2 p = ge[i].mouse_button.game_position;
+      simple_game_point_collision(*ctx, entities, cnt, ge[i].mouse_button.game_position, tab);
+      u64 door_cnt = 0;
+      entity_local_data * ed = index_table_all(tab, &door_cnt);
+      
+      if(door_cnt > 0){
+	for(u32 i = 0; i < selected_unit_cnt; i++)
+	  set_hit_queue(selected_units[i], ed[0].entity);
       }
-    }else{
+      
       for(u32 i = 0; i < selected_unit_cnt; i++){
-	unset_hit_queue(selected_units[i]);
+	entity_data * ed = index_table_lookup(ctx->entities, selected_units[i]);
+	set_entity_target(selected_units[i], vec3_new(p.x, ed->position.y, p.y));
       }
     }
-    
+
     for(u32 i = 0; i < selected_unit_cnt; i++){
-      entity_data * ed = index_table_lookup(ctx->entities, selected_units[i]);
-      set_entity_target(selected_units[i], vec3_new(p.x, ed->position.y, p.y));
+      unset_hit_queue(selected_units[i]);
     }
+    
+    update_hit_queue(get_keys_door_status(), get_count_door_status());
+    update_hit_queue(get_keys_zombie_entity(), get_count_zombie_entity());
+    
   }
 
   { // vision controllers
@@ -419,7 +374,7 @@ void game1_interactions_update(graphics_context * ctx){
 
     u32 * selected_units = get_keys_selected_unit();
     u32 selected_unit_cnt = get_count_selected_unit();
-
+    if(selected_unit_cnt == 0) return;
     u32 * vision_controls = get_keys_vision_control();
     u32 vision_control_cnt = get_count_vision_control();
     
@@ -570,6 +525,31 @@ void game1_interactions_update(graphics_context * ctx){
     }
   }
 
+  if(true){ // update zombies
+    u32 * zombies = get_keys_zombie_entity();
+    u32 zcnt = get_count_zombie_entity();
+    for(u32 i = 0; i < zcnt; i++){
+      entity_data * z = index_table_lookup(ctx->entities, zombies[i]);
+      float d = f32_infinity;
+      vec3 target = z->position;
+      for(u32 j = 0; j < selected_unit_cnt; j++){
+	entity_data * u = index_table_lookup(ctx->entities, selected_units[j]);
+	float _d = vec3_len(vec3_sub(z->position, u->position));
+	if(_d < d){
+	  d = _d;
+	  target = u->position;
+	}
+      }
+      
+      if(d == f32_infinity || d > 0.1){
+	unset_entity_target(zombies[i]);
+      }else{
+	logd("setting target: "); vec3_print(target);logd("\n");
+	set_entity_target(zombies[i], target);
+      }
+    }
+  }
+
   { // update hit queue
     static index_table * coltab = NULL;
     if(coltab == NULL)
@@ -595,6 +575,10 @@ void game1_interactions_update(graphics_context * ctx){
 	    door_models models = get_door_model(targets[i]);
 	    u32 model = !door_status ? models.closed : models.open;
 	    ((entity_data * )index_table_lookup(ctx->entities, targets[i]))->model = model;
+	  }
+	  bool dummy;
+	  if(try_get_zombie_entity(targets[i], &dummy)){
+	    logd("Hit zombie..\n");
 	  }
 	}
       }

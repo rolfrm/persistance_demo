@@ -62,6 +62,7 @@ CREATE_TABLE2(gravity_affects, u64, bool);
 CREATE_TABLE2(current_impulse, u64, vec3);
 CREATE_MULTI_TABLE2(entity_2_collisions, u32, u32);
 
+CREATE_TABLE2(entity_speed, u32, f32);
 CREATE_TABLE2(ghost_material, u32, bool);
 
 typedef u32 polygon_id;
@@ -97,6 +98,7 @@ void graphics_context_load(graphics_context * ctx){
   ctx->gpu_poly = loaded_polygon_table_create(NULL);
   ctx->poly_color = polygon_color_table_create("simple/polygon_color");
   ctx->active_entities = active_entities_table_create("simple/active_entities");
+  ctx->entity_speed = entity_speed_table_create("simple/entity_speed");
   { // find cursor.
     u64 cnt = 0;
     polygon_data * pd = index_table_all(ctx->polygon, &cnt);
@@ -672,39 +674,8 @@ void simple_graphics_editor_render(u64 id){
   }
 }
 
-bool is_whitespace(char c){
-  return c == ' ' || c == '\t';
-  
-}
-
-bool copy_nth(const char * _str, u32 index, char * buffer, u32 buffer_size){
-  char * str = (char *) _str;
-  while(*str != 0){
-    while(is_whitespace(*str))
-      str++;
-    
-    while(*str != 0 && is_whitespace(*str) == false){
-      if(index == 0){
-	*buffer = *str;
-	buffer_size -= 1;
-	buffer++;
-      }
-      str++;
-    }
-    if(index == 0){
-      *buffer = 0;
-      return true;
-    }
-    index--;
-  }
-  return false;
-}
-
-
 CREATE_TABLE_DECL2(simple_graphics_control, u64, u64);
 CREATE_TABLE_NP(simple_graphics_control, u64, u64);
-
-
 
 CREATE_TABLE2(entity_target, u32, vec3);
 CREATE_TABLE_DECL2(simple_game_data, u64, game_data);
@@ -1036,6 +1007,7 @@ static void command_entered(u64 id, char * command){
 	    set_simple_graphics_editor_grid_width(control, v);
 	  }
 	}
+
 	if(snd("ghost") && editor.selection_kind == SELECTED_POLYGON && editor.selected_index != 0){
 
 	  
@@ -1053,6 +1025,11 @@ static void command_entered(u64 id, char * command){
 	    logd("Unsetting is ghost.. for %i material: %i\n", editor.selected_index, pd->material);
 	    ghost_material_unset(ctx.ghost_table, pd->material);
 	  }
+	}
+	if(snd("speed") && editor.selection_kind == SELECTED_ENTITY && editor.selected_index != 0){
+	  
+	  
+
 	}
 	
 	
@@ -1790,7 +1767,8 @@ void simple_grid_render(u64 id){
 	if(l <= 0.01){
 	  unset_entity_target(entity);
 	}else{
-	  auto p2 = vec3_add(ed->position, vec3_scale(d, 0.01 / l));
+	  float speed = entity_speed_get(gd.entity_speed, entity);
+	  auto p2 = vec3_add(ed->position, vec3_scale(d, speed / l));
 	  prevp[i] = ed->position;
 	  ed->position = p2;
 	  moved[i] = true;

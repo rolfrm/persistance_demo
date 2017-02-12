@@ -115,6 +115,7 @@ CREATE_TABLE_DECL2(simple_game_editor_fcn, u32, simple_graphics_editor_fcn);
 CREATE_TABLE_DECL2(simple_game_update, u32, simple_game_update_fcn);
 CREATE_TABLE_DECL2(ghost_material, u32, bool);
 CREATE_TABLE_DECL2(entity_target, u32, vec3);
+CREATE_TABLE_DECL2(entity_speed, u32, f32);
 typedef enum{
   GAME_EVENT_MOUSE_BUTTON
 }game_event_kind;
@@ -162,6 +163,7 @@ struct _graphics_context{
   simple_game_update_table * game_update_functions;
   ghost_material_table * ghost_table;
   game_data * game_data;
+  entity_speed_table * entity_speed;
 };
 
 
@@ -173,3 +175,10 @@ void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index
 void detect_collisions_one_way(graphics_context gd, u32 * entities1, u32 entity1_cnt, u32 * entities2, u32 entity2_cnt, index_table * result_table);
 void polygon_add_vertex2f(graphics_context * ctx, u32 polygon, vec2 offset);
 void graphics_context_reload_polygon(graphics_context ctx, u32 polygon);
+
+// editor utils
+bool copy_nth(const char * _str, u32 index, char * buffer, u32 buffer_size);
+bool nth_parse_u32(char * commands, u32 idx, u32 * result);
+bool nth_parse_f32(char * commands, u32 idx, f32 * result);
+bool nth_str_cmp(char * commands, u32 idx, const char * comp);
+bool is_whitespace(char c);
