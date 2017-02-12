@@ -541,7 +541,7 @@ void game1_interactions_update(graphics_context * ctx){
 	}
       }
       
-      if(d == f32_infinity || d > 0.1){
+      if(d == f32_infinity || d > 0.5){
 	unset_entity_target(zombies[i]);
       }else{
 	logd("setting target: "); vec3_print(target);logd("\n");

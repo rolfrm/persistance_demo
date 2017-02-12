@@ -1027,7 +1027,11 @@ static void command_entered(u64 id, char * command){
 	  }
 	}
 	if(snd("speed") && editor.selection_kind == SELECTED_ENTITY && editor.selected_index != 0){
-	  
+	  f32 f;
+	  if(nth_parse_f32(command, 2, &f)){
+	    entity_speed_set(ctx.entity_speed, editor.selected_index, f);
+	    logd("Set speed for %i to %f\n", editor.selected_index, f);
+	  }
 	  
 
 	}
