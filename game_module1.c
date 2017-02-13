@@ -292,7 +292,13 @@ const float ambient_heat = -10;
 void game1_interactions_update(graphics_context * ctx){
   u32 * selected_units = get_keys_selected_unit();
   u32 selected_unit_cnt = get_count_selected_unit();
+  if(selected_unit_cnt > 0){
+    entity_data * ed = index_table_lookup(ctx->entities, selected_units[0]);
+    ctx->game_data->offset.x = ed->position.x;
+    ctx->game_data->offset.y = ed->position.z;
 
+  }
+  
   { // handle joystick
     static bool wasJoyActive = false;
     int count;
@@ -307,10 +313,12 @@ void game1_interactions_update(graphics_context * ctx){
       y = 0;
     if(y != 0 || x != 0 || wasJoyActive){
       for(u32 i = 0; i < selected_unit_cnt; i++){
-	entity_data * ed = index_table_lookup(ctx->entities, selected_units[i]);
-	set_entity_target(selected_units[i], vec3_new(ed->position.x + x, ed->position.y, ed->position.z + y));
-	ctx->game_data->offset.x += x * 0.01;
-	ctx->game_data->offset.y += y * 0.01;
+	vec2 d = vec2_new(x, y);
+	float len = vec2_len(d);
+	if(len < 0.1){
+	  unset_entity_direction(selected_units[i]);
+	}else
+	  set_entity_direction(selected_units[i], vec2_scale(d, 1.0f / len));
       }
     }
     if(x == 0 && y == 0)

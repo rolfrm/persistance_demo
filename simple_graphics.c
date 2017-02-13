@@ -57,13 +57,14 @@ CREATE_TABLE2(game_window, u64, u64);
 CREATE_TABLE_NP(active_entities, u32, bool);
 CREATE_TABLE_NP(loaded_polygon, u32, loaded_polygon_data);
 CREATE_TABLE2(polygon_color, u32, vec4);
-CREATE_TABLE_DECL2(gravity_affects, u64, bool);
 CREATE_TABLE2(gravity_affects, u64, bool);
 CREATE_TABLE2(current_impulse, u64, vec3);
 CREATE_MULTI_TABLE2(entity_2_collisions, u32, u32);
 
 CREATE_TABLE2(entity_speed, u32, f32);
 CREATE_TABLE2(ghost_material, u32, bool);
+CREATE_TABLE2(entity_direction, u32, vec2);
+
 
 typedef u32 polygon_id;
 polygon_id polygon_create(graphics_context * ctx);
@@ -1763,7 +1764,16 @@ void simple_grid_render(u64 id){
       u32 entity = entities[i];
       entity_index_lookup_set(entity_lookup, entity, i);
       vec3 target;
-      if(try_get_entity_target(entity, &target)){
+      vec2 direction;
+      if(try_get_entity_direction(entity, &direction)){
+	entity_data * ed = index_table_lookup(gd.entities, entity);
+	float speed = entity_speed_get(gd.entity_speed, entity);
+	vec3 d = vec3_new(direction.x, 0, direction.y);
+	auto p2 = vec3_add(ed->position, vec3_scale(d, speed));
+	prevp[i] = ed->position;
+	ed->position = p2;
+	moved[i] = true;
+      }else if(try_get_entity_target(entity, &target)){
 	entity_data * ed = index_table_lookup(gd.entities, entity);
 	target.y = ed->position.y;
 	vec3 d = vec3_sub(target, ed->position);

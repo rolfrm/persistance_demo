@@ -117,6 +117,7 @@ CREATE_TABLE_DECL2(ghost_material, u32, bool);
 CREATE_TABLE_DECL2(entity_target, u32, vec3);
 CREATE_TABLE_DECL2(entity_speed, u32, f32);
 CREATE_TABLE_DECL2(gravity_affects, u64, bool);
+CREATE_TABLE_DECL2(entity_direction, u32, vec2);
 typedef enum{
   GAME_EVENT_MOUSE_BUTTON
 }game_event_kind;
