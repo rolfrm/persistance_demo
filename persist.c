@@ -35,13 +35,16 @@ persisted_mem_area * get_mem_area_by_ptr(const void * ptr){
 persisted_mem_area * create_mem_area(const char * name){
   return create_mem_area2(name, false);
 }
+static const char * data_directory = "data";
+void mem_area_set_data_directory(char * data_dir){
+  data_directory = data_dir;
+}
 
 persisted_mem_area * create_mem_area2(const char * name, bool only_32bit){
   int fd = 0;
   u64 size = 0;
   if(name != NULL){
     ASSERT(name[0] != '/' && name[0] != 0);
-    const char * data_directory = "data";
     mkdir(data_directory, 0777);
     
     {
@@ -55,7 +58,7 @@ persisted_mem_area * create_mem_area2(const char * name, bool only_32bit){
 	  strcpy(s, name);
 	  s[size] = 0;
 	  char buf[100];
-	  sprintf(buf, "data/%s", s);
+	  sprintf(buf, "%s/%s", data_directory, s);
 	  mkdir(buf, 0777);
 	}
 	pt = slash + 1;
@@ -125,7 +128,6 @@ void * persist_alloc2(const char * name, size_t min_size, size_t * out_size){
     }
   }
   
-  const char * data_directory = "data";
   mkdir(data_directory, 0777);
   char path[100];
   sprintf(path, "%s/%s",data_directory, name);

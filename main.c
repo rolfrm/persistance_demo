@@ -478,7 +478,7 @@ bool index_table_test(){
 
   }
   
-  if(true){// first test.
+  if(false){// first test.
     for(int k = 1; k < 5;k++){
       logd("K: %i\n", k);
       index_table * t = index_table_create(NULL, sizeof(i64));
@@ -541,7 +541,7 @@ bool index_table_test(){
     }
   }
   
-  {
+  if(false){
     
     board_data2_table * table = board_data2_table_create(NULL);
     voxel_board_data bd = {.voxels = index_table_create("voxeltable2", sizeof(u32) * 8),
@@ -558,70 +558,70 @@ bool index_table_test(){
   
   //return TEST_SUCCESS;
   // the index table can be used for voxels.
-  index_table * tab = index_table_create("voxeltable", sizeof(u32) * 8);
-  index_table * colors = index_table_create("colortable", 4);
-  u32 black = index_table_alloc(colors);
-  u32 white = index_table_alloc(colors);
-  *((u32 *) index_table_lookup(colors, black)) = 0x00FF00FF;
-  *((u32 *)index_table_lookup(colors, white)) = 0xFFF00FFF;
+  if(false){
+    index_table * tab = index_table_create("voxeltable", sizeof(u32) * 8);
+    index_table * colors = index_table_create("colortable", 4);
+    u32 black = index_table_alloc(colors);
+    u32 white = index_table_alloc(colors);
+    *((u32 *) index_table_lookup(colors, black)) = 0x00FF00FF;
+    *((u32 *)index_table_lookup(colors, white)) = 0xFFF00FFF;
 
-  // Allocate 5 2x2x2 voxel chunks
-  u32 x1 = index_table_alloc(tab);
-  u32 x2 = index_table_alloc(tab);
-  u32 x3 = index_table_alloc(tab);
-  u32 x4 = index_table_alloc(tab);
-  u32 x5 = index_table_alloc(tab);
-  
-  voxel_board_data vboard = {
-    .index = x1,
-    .materials = colors,
-    .voxels = tab
-  };
+    // Allocate 5 2x2x2 voxel chunks
+    u32 x1 = index_table_alloc(tab);
+    u32 x2 = index_table_alloc(tab);
+    u32 x3 = index_table_alloc(tab);
+    u32 x4 = index_table_alloc(tab);
+    u32 x5 = index_table_alloc(tab);
+    
+    voxel_board_data vboard = {
+      .index = x1,
+      .materials = colors,
+      .voxels = tab
+    };
+    
+    UNUSED(x4), UNUSED(x5);
+    u32 * d = index_table_lookup(tab, x1);
+    // insert the IDs.
+    d[0] = x2;
+    d[1] = x3;
+    d[3] = x2;
+    d[6] = x2;
+    d[2] = ~black;
+    calc_voxel_surface(tab, x1);
+    //  return TEST_SUCCESS;
+    //lookup the arrays for x2 x3  
+    u32 * d1 = index_table_lookup(tab, x2);
+    //u32 * d2 = index_table_lookup(tab, x3);
+    
+    // put in black and white colors.
+    for(int i = 0; i < 8; i++){
+      if((rand() % 2) == 0) continue;
+      //d1[i] = (rand()%2) == 0 ? ~white : ~black;
+      //d2[i] = (rand()%2) == 1 ? ~white : ~black;
+    }
+    d1[7] = x4;
+    d1[2] = x4;
+    d1[0] = x4;
+    u32 * d3 = index_table_lookup(tab, x4);
+    d3[7] = x5;
+    d3[2] = x5;
+    d3[0] = x5;
+    u32 * d4 = index_table_lookup(tab, x5);
+    d4[0] = ~white;
+    d4[7] = ~black;
+    
+    u32 count = iterate_voxel_chunk(tab, x1);
+    logd("Count: %i\n", count);
 
-  UNUSED(x4), UNUSED(x5);
-  u32 * d = index_table_lookup(tab, x1);
-  // insert the IDs.
-  d[0] = x2;
-  d[1] = x3;
-  d[3] = x2;
-  d[6] = x2;
-  d[2] = ~black;
-  calc_voxel_surface(tab, x1);
-  //  return TEST_SUCCESS;
-  //lookup the arrays for x2 x3  
-  u32 * d1 = index_table_lookup(tab, x2);
-  //u32 * d2 = index_table_lookup(tab, x3);
-
-  // put in black and white colors.
-  for(int i = 0; i < 8; i++){
-    if((rand() % 2) == 0) continue;
-    //d1[i] = (rand()%2) == 0 ? ~white : ~black;
-    //d2[i] = (rand()%2) == 1 ? ~white : ~black;
+    //TEST(simple_graphics_editor_test);
+    u64 voxel_board = intern_string("voxel board");
+    set_board_data2(voxel_board, vboard);
+    
+    mat4_print(get_camera_3d_position(voxel_board));
   }
-  d1[7] = x4;
-  d1[2] = x4;
-  d1[0] = x4;
-  u32 * d3 = index_table_lookup(tab, x4);
-  d3[7] = x5;
-  d3[2] = x5;
-  d3[0] = x5;
-  u32 * d4 = index_table_lookup(tab, x5);
-  d4[0] = ~white;
-  d4[7] = ~black;
-
-  u32 count = iterate_voxel_chunk(tab, x1);
-  logd("Count: %i\n", count);
   init_gui();
-  //TEST(simple_graphics_editor_test);
-  u64 voxel_board = intern_string("voxel board");
-  set_board_data2(voxel_board, vboard);
-
-  mat4_print(get_camera_3d_position(voxel_board));
-  //define_method(voxel_board, render_control_method, (method)render_voxel_grid);
-  //define_method(voxel_board, measure_control_method, (method)measure_voxel_grid);
+  u64 game_board = intern_string("voxel board");
   u64 win_id = intern_string("voxel window");
-  //simple_grid_initialize(voxel_board);
-  //simple_grid_renderer_create(voxel_board);
   u64 fpstextline = 0;
   {
     fpstextline = intern_string("text_line_1");
@@ -631,7 +631,7 @@ bool index_table_test(){
     set_vertical_alignment(fpstextline, VALIGN_TOP);
   }
   
-  simple_graphics_editor_load(voxel_board, win_id);
+  simple_graphics_editor_load(game_board, win_id);
   make_window(win_id);
 
   if(once(win_id + 0xFFFFFFFF134123)){
@@ -648,13 +648,13 @@ bool index_table_test(){
     for(u32 j = 0; j < array_count(ptrs); j++)
       dealloc(ptrs[j]);
   }
-  while(!get_should_exit(voxel_board)){
+  while(!get_should_exit(game_board)){
     u64 ts = timestamp(); // for fps calculation.
     mat4 p = mat4_perspective(0.8, 1, 0.1, 10);
     i += 0.03;
     mat4 t = mat4_rotate(mat4_translate(0.5,0.5,0),1,0.23,0.1,i);//mat4_rotate(mat4_translate(-0.0,-1.5,-4 + 0 * sin(i)),0,1,1, 0.0 * i);
     t = mat4_mul(t, mat4_translate(0,0,4));
-    set_camera_3d_position(voxel_board, mat4_mul(p, mat4_invert(t)));
+    set_camera_3d_position(game_board, mat4_mul(p, mat4_invert(t)));
     //iron_sleep(0.03);
     glfwPollEvents();
     u64 ts2 = timestamp(); // for fps calculation.
@@ -670,7 +670,7 @@ bool index_table_test(){
 	
     
   }
-  unset_should_exit(voxel_board);
+  unset_should_exit(game_board);
   return TEST_SUCCESS;
 }
 
@@ -811,8 +811,40 @@ void test_coroutines(){
   }
   goto loop;
 }
+
+int iteration = 0;
+void test_tsk2(){
+  while(true){
+    iteration += 1;
+    ccyield();
+  }
+}
+void test_coroutines2(){
+  const u64 items =1000000;
+  coroutine ** ccs = alloc0(items * sizeof(coroutine *));
+  for(u64 i = 0; i < items; i++){
+    ccs[i] = ccstart(test_tsk2); 
+  }
+  logd("Start..\n");
+  for(int j = 0; j < 20; j++){
+    for(u64 i = 0; i < items; i++){
+      ccstep(ccs[i]);
+    }
+  }
+
+  logd("IT: %i\n", iteration);
+
+}
+
 void test_hydra();
-int main(){
+//int main2();
+int main(int argc, char ** argv){
+  if(argc == 2){
+    logd("Setting data dir: %s\n", argv[1]);
+    mem_area_set_data_directory(argv[1]);
+  }
+  //test_coroutines2();
+  //return 0;
   //test_hydra();
   //return 0;
   //test_coroutines();

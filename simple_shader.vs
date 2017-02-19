@@ -6,6 +6,7 @@ in vec2 vertex;
 
 void main(){
      vec4 p = camera * vec4(vertex, 0, 1);
-     p.z = depth * 0.001;
-       gl_Position = p;
+      p.z -= depth * 10;
+     //p.z = depth * 0.001;
+     gl_Position = p;
 }

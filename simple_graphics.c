@@ -365,11 +365,6 @@ void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 came
     return;
   polygon_data * pd = index_table_lookup(ctx.polygon, polygon_id);
   glEnable( GL_BLEND );
-  if(pd->physical_height != 0.0f){
-
-    depth += loaded.depth;
-  }
-  //logd("%i %f\n", polygon_id, depth);  
   glBindBuffer(GL_ARRAY_BUFFER, loaded.gl_ref);  
   simple_grid_shader shader = simple_grid_shader_get();
   glFrontFace(GL_CW);
@@ -380,16 +375,14 @@ void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 came
   polygon_color_try_get(ctx.poly_color, pd->material, &color);
   if(color.w <= 0.0f)
     return;
-  if(depth > -100){
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LEQUAL);
-  }else{
-    glDisable(GL_DEPTH_TEST);
-  }
+  glEnable(GL_DEPTH_TEST);
+  glDepthFunc(GL_LEQUAL);
   glUseProgram(shader.shader);
   glUniformMatrix4fv(shader.camera_loc,1,false, &(camera.data[0][0]));
+  
   glUniform4f(shader.color_loc, color.x, color.y, color.z, color.w);
-  glUniform1f(shader.depth_loc, (depth + 10));
+  //logd("Depth: %f\n", depth);
+  glUniform1f(shader.depth_loc, depth);
   glEnableVertexAttribArray(shader.vertex_loc);
   glVertexAttribPointer(shader.vertex_loc, 2, GL_FLOAT, false, 0, 0);
   
@@ -400,7 +393,7 @@ void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 came
   }
   glDisableVertexAttribArray(shader.vertex_loc);
   glDisable(GL_CULL_FACE);
-  glDisable( GL_DEPTH_TEST );
+  //glDisable( GL_DEPTH_TEST );
 }
 
 
@@ -534,7 +527,7 @@ void simple_graphics_editor_render(u64 id){
     model_data * model = index_table_lookup(gd.models, ed.focused_item);
     for(u32 j = 0; j < model->polygons.count; j++){
       u32 index = j + model->polygons.index;
-      simple_grid_render_gl(gd, index, mat4_identity(), true, 0.5);
+      simple_grid_render_gl(gd, index, mat4_identity(), true, 0);
     }
   }
 
@@ -556,7 +549,7 @@ void simple_graphics_editor_render(u64 id){
 	model_data * model = index_table_lookup(gd.models, ed->model);
 	for(u32 j = 0; j < model->polygons.count; j++){
 	  u32 index = j + model->polygons.index;
-	  simple_grid_render_gl(gd, index, tform, true, p.z);
+	  simple_grid_render_gl(gd, index, tform, true, 0);
 	}
       }
     }
@@ -579,10 +572,10 @@ void simple_graphics_editor_render(u64 id){
       offset = mat4_mul_vec4(editor_tform, p).xyz.xy;
     }
     auto tf = mat4_translate(offset.x, offset.y, 0);
-    simple_grid_render_gl(gd, gd.pointer_index, tf, false, -1000);
+    simple_grid_render_gl(gd, gd.pointer_index, tf, false, 0);
     polygon_color_set(gd.poly_color, pd->material, vec4_new(1, 1, 1, 1));
     simple_grid_render_gl(gd, gd.pointer_index,
-			  mat4_mul(tf,  mat4_scaled(0.5, 0.5, 0.5)), false, -1000); 
+			  mat4_mul(tf,  mat4_scaled(0.5, 0.5, 0.5)), false, 0); 
   }
 
   { // Here grid lines are rendered
@@ -1415,8 +1408,8 @@ static void game_handle_key(u64 console, int key, int mods, int action){
     u64 parent_id = control_pair_get_parent(console);
     control_pair * p = gui_get_control(parent_id, console);
     p->child_id = get_alternative_control(console);
-    u64 keybuf[10];
-    u64 valuebuf[10];
+    u64 keybuf[10] = {0};
+    u64 valuebuf[10] = {0};
     u64 idx = 0;
     u64 cnt = 0;
     while(0 != (cnt = iter_all_simple_graphics_control(keybuf, valuebuf, array_count(keybuf), &idx))){
@@ -1744,7 +1737,6 @@ void simple_grid_render(u64 id){
 
   u64 count = active_entities_count(gd.active_entities);
   u32 entities[count];
-  u32 indexes[count];
 
   vec3 prevp[count];
   bool moved[count];
@@ -1803,7 +1795,7 @@ void simple_grid_render(u64 id){
 	if(ghost_material_get(gd.ghost_table, cd1.entity1.material)
 	   || ghost_material_get(gd.ghost_table, cd1.entity2.material))
 	  continue;
-	
+
 	for(int _i = 0; _i < 2; _i++){
 	  u32 idx = entity_index_lookup_get(entity_lookup, cd1.entity1.entity);
 	  if(moved[idx]){
@@ -1866,11 +1858,18 @@ void simple_grid_render(u64 id){
       collision_data * cd = index_table_all(gd.collision_table, &collisions);
       u32 e1[collisions];
       u32 e2[collisions];
+      int offset = 0;
       for(u32 i = 0; i < collisions; i++){
-	e1[i] = cd[i].entity1.entity;
-	e2[i] = cd[i].entity2.entity;
+	collision_data cd1 = cd[i];
+	if(ghost_material_get(gd.ghost_table, cd1.entity1.material)
+	   || ghost_material_get(gd.ghost_table, cd1.entity2.material)){
+	  offset += 1;
+	  continue;
+	}
+	e1[i - offset] = cd[i].entity1.entity;
+	e2[i - offset] = cd[i].entity2.entity;
       }
-
+      collisions -= offset;
       //entity_2_collisions_insert(gd.collisions_2_table, e1, e2, collisions);
       //entity_2_collisions_insert(gd.collisions_2_table, e2, e1, collisions);
 
@@ -1886,6 +1885,7 @@ void simple_grid_render(u64 id){
       qsort(e2, collisions, sizeof(*e2), (void *)keycmp32);
       for(u32 i = 0; i < count; i++){
 	if(moved[i] == false) continue;
+
 	if(bsearch(entities + i, e1, collisions, sizeof(entities[i]), (void *) keycmp32)
 	   ||bsearch(entities + i, e2, collisions, sizeof(entities[i]), (void *) keycmp32)){
 	  entity_data * ed = index_table_lookup(gd.entities, entities[i]);
@@ -1908,45 +1908,59 @@ void simple_grid_render(u64 id){
     set_simple_game_data(id, *gd.game_data);
   }
 
-  // depth is used for simple depth sorting
-  // this is important to get correct alpha blending.
-  float depth[count];
   idx = 0;
-  mat4 cammat = mat4_identity();
-  cammat.m22 = 0;
-  cammat.m12 = 0;
-  cammat.m02 = 0;
-  cammat.m21 = 1;
-  cammat = mat4_mul(cammat, mat4_scaled(1.0 / _gd.zoom, 1.0 / _gd.zoom,1.0 / _gd.zoom));
-  for(u64 i = 0; i < count; i++){
-    entity_data * ed = index_table_lookup(gd.entities, entities[i]);
-    depth[i] = ed->position.y;
-    indexes[i] = i;
-  }
 
-  int ecmp(const u32 * k1,const  u32 * k2){
-    if(depth[*k1] > depth[*k2])
-      return 1;
-      else if(depth[*k1] == depth[*k2])
-	return 0;
-      else return -1;
-  }
-  qsort(indexes, count, sizeof(indexes[0]), (void *)ecmp);
+  mat4 shuffle_flat = mat4_identity();
+  shuffle_flat.m22 = 0;
+  shuffle_flat.m21 = 1;
+  shuffle_flat.m11 = 0;
+  shuffle_flat.m12 = 1;
+
+  mat4 shuffle_tall = mat4_identity();
+  
+  //mat4_print(shuffle_flat);logd("\n");
+  mat4 proj_mat = mat4_identity();
+  
+  proj_mat.m22 = 0.01;//-0.1;
+  proj_mat.m21 = 1;
+  proj_mat.m12 = -0.01;
+  proj_mat.m32 = -0.0;
+  proj_mat.m02 = 0;
+  proj_mat.m21 = 1;
+  
+  mat4 scale = mat4_scaled(1.0 / _gd.zoom, 1.0 / _gd.zoom,1.0 / _gd.zoom);
   
   for(u64 i = 0; i < count; i++){
-    u32 entity = entities[indexes[i]];
+    u32 entity = entities[i];
     
     entity_data * ed = index_table_lookup(gd.entities, entity);
     
     vec3 p = ed->position;
-    mat4 tform = mat4_translate(p.x - offset.x, p.y - offset.y, p.z);
-    tform = mat4_mul(cammat, tform);
+
     if(ed->model != 0){
       model_data * model = index_table_lookup(gd.models, ed->model);
-      
-      for(u32 j = 0; j < model->polygons.count; j++){
-	u32 index = j + model->polygons.index;	
-	simple_grid_render_gl(gd, index, tform, false, p.z);
+      float bias = 0;
+      for(u32 j = model->polygons.count - 1;true; --j){
+	u32 index = j + model->polygons.index;
+	mat4 tform = mat4_translate(p.x - offset.x, p.y, p.z - offset.y);
+
+	mat4 mat;
+	polygon_data * pd = index_table_lookup(gd.polygon, index);
+	if(pd->physical_height != 0.0f){
+	  mat = shuffle_flat;
+	}else{
+	  mat = shuffle_tall;
+	}
+	
+	mat = mat4_mul(tform, mat);
+	mat = mat4_mul(scale, mat);
+	mat = mat4_mul(proj_mat, mat);
+
+	//logd("%i %i\n", entity, index);
+	simple_grid_render_gl(gd, index, mat, false, bias);
+	if(j == 0)
+	  break;
+	bias -= 0.000001;
       }   
     }
   }

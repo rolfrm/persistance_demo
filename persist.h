@@ -9,7 +9,7 @@ typedef struct{
 }persisted_mem_area;
 
 typedef persisted_mem_area mem_area;
-
+void mem_area_set_data_directory(char * data_dir);
 persisted_mem_area * create_mem_area(const char * name);
 persisted_mem_area * create_mem_area2(const char * name, bool only32bit);
 persisted_mem_area * create_non_persisted_mem_area();
