@@ -364,7 +364,7 @@ void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 came
   if(loaded.gl_ref == 0)
     return;
   polygon_data * pd = index_table_lookup(ctx.polygon, polygon_id);
-  glEnable( GL_BLEND );
+
   glBindBuffer(GL_ARRAY_BUFFER, loaded.gl_ref);  
   simple_grid_shader shader = simple_grid_shader_get();
   glFrontFace(GL_CW);
@@ -375,8 +375,8 @@ void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 came
   polygon_color_try_get(ctx.poly_color, pd->material, &color);
   if(color.w <= 0.0f)
     return;
-  glEnable(GL_DEPTH_TEST);
-  glDepthFunc(GL_LEQUAL);
+  
+  
   glUseProgram(shader.shader);
   glUniformMatrix4fv(shader.camera_loc,1,false, &(camera.data[0][0]));
   
@@ -393,7 +393,6 @@ void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 came
   }
   glDisableVertexAttribArray(shader.vertex_loc);
   glDisable(GL_CULL_FACE);
-  //glDisable( GL_DEPTH_TEST );
 }
 
 
@@ -507,55 +506,131 @@ void simple_graphics_editor_render(u64 id){
       index_table_clear(gd.polygons_to_delete);
     }
   }
-
-  u32 entities[10];
-  bool unused[10];
-  u64 idx = 0;
-  u64 cnt = 0;
-
+  u64 count = active_entities_count(gd.active_entities);
+  u32 * entities = active_entities_get_keys(gd.active_entities);
+  
   editor_context ed = get_simple_graphics_editor_context(id);
   mat4 editor_tform = mat4_translate(ed.offset.x, ed.offset.y, 0);
-  if(ed.focused_item_kind == SELECTED_ENTITY){
-    if(ed.focused_item != 0){
-      entity_data * ed2 = index_table_lookup(gd.entities, ed.focused_item);
-      if(ed2 != NULL){
-	vec3 p = ed2->position;;
-	editor_tform = mat4_mul(editor_tform, mat4_translate(-p.x, -p.y , -p.z));
-      }
-    }
-  }else if(false && ed.focused_item_kind == SELECTED_MODEL){
-    model_data * model = index_table_lookup(gd.models, ed.focused_item);
-    for(u32 j = 0; j < model->polygons.count; j++){
-      u32 index = j + model->polygons.index;
-      simple_grid_render_gl(gd, index, mat4_identity(), true, 0);
-    }
-  }
-
-  editor_tform = mat4_mul(mat4_scaled(ed.zoom, ed.zoom, ed.zoom), editor_tform);
-
-  mat4 cammat = mat4_identity();
-  cammat.m22 = 0;
-  cammat.m21 = 1;
   
-  while(0 != (cnt = active_entities_iter_all(gd.active_entities, entities,unused, array_count(unused), &idx))){
-
-    for(u64 i = 0; i < cnt; i++){
-      u32 entity = entities[i];
-      entity_data * ed = index_table_lookup(gd.entities, entity);
-      vec3 p = ed->position;
-      mat4 tform = mat4_translate(p.x, p.y, p.z);
-      tform = mat4_mul(cammat, mat4_mul(editor_tform, tform));
-      if(ed->model != 0){
-	model_data * model = index_table_lookup(gd.models, ed->model);
+    {
+      if(ed.focused_item_kind == SELECTED_ENTITY){
+	if(ed.focused_item != 0){
+	  entity_data * ed2 = index_table_lookup(gd.entities, ed.focused_item);
+	  if(ed2 != NULL){
+	    vec3 p = ed2->position;;
+	    editor_tform = mat4_mul(editor_tform, mat4_translate(-p.x, -p.y , -p.z));
+	  }
+	}
+      }else if(false && ed.focused_item_kind == SELECTED_MODEL){
+	model_data * model = index_table_lookup(gd.models, ed.focused_item);
 	for(u32 j = 0; j < model->polygons.count; j++){
 	  u32 index = j + model->polygons.index;
-	  simple_grid_render_gl(gd, index, tform, true, 0);
+	  simple_grid_render_gl(gd, index, mat4_identity(), true, 0);
+    }
+      }
+      
+      editor_tform = mat4_mul(mat4_scaled(ed.zoom, ed.zoom, ed.zoom), editor_tform);
+
+      mat4 shuffle_flat = mat4_identity();
+      shuffle_flat.m22 = 0;
+      shuffle_flat.m21 = 1;
+      shuffle_flat.m11 = 0;
+      shuffle_flat.m12 = 1;
+      
+      mat4 shuffle_tall = mat4_identity();
+      mat4 proj_mat = mat4_identity();
+      
+      proj_mat.m22 = 0.01;
+      proj_mat.m21 = 1;
+      proj_mat.m12 = -0.01;
+      proj_mat.m32 = -0.0;
+      proj_mat.m02 = 0;
+      proj_mat.m21 = 1;
+      glDisable(GL_BLEND);
+      glEnable(GL_DEPTH_TEST);
+      glDepthFunc(GL_LEQUAL);      
+      for(u64 i = 0; i < count; i++){
+	u32 entity = entities[i];
+	
+	entity_data * ed = index_table_lookup(gd.entities, entity);
+    
+	vec3 p = ed->position;
+	
+	if(ed->model != 0){
+	  model_data * model = index_table_lookup(gd.models, ed->model);
+	  float bias = 0;
+	  for(u32 j = model->polygons.count;j > 0;){
+	    j--;
+	    u32 index = j + model->polygons.index;
+	    mat4 tform = mat4_translate(p.x, p.y, p.z);
+	    
+	    mat4 mat;
+	    polygon_data * pd = index_table_lookup(gd.polygon, index);
+	    if(pd->physical_height != 0.0f){
+	      mat = shuffle_flat;
+	    }else{
+	      mat = shuffle_tall;
+	    }
+	    
+	    mat = mat4_mul(tform, mat);
+	    mat = mat4_mul(editor_tform, mat);
+	    mat = mat4_mul(proj_mat, mat);
+	    
+	    vec4 color = vec4_zero;
+	    if(polygon_color_try_get(gd.poly_color, pd->material, &color) && color.w != 1.0f)
+	      continue;
+	    simple_grid_render_gl(gd, index, mat, true, bias);
+	    bias -= 0.000001;
+	    if(j == 0)
+	      break;
+	  }   
 	}
       }
+    
+      glEnable(GL_BLEND);  
+      for(u64 i = 0; i < count; i++){
+	u32 entity = entities[i];
+    
+	entity_data * ed = index_table_lookup(gd.entities, entity);
+    
+	vec3 p = ed->position;
+    
+	if(ed->model != 0){
+	  model_data * model = index_table_lookup(gd.models, ed->model);
+	  float bias = 0;
+      
+	  for(u32 j = model->polygons.count;j > 0;){
+	    j--;
+	    u32 index = j + model->polygons.index;
+	    mat4 tform = mat4_translate(p.x, p.y, p.z);
+
+	    mat4 mat;
+	    polygon_data * pd = index_table_lookup(gd.polygon, index);
+	    if(pd->physical_height != 0.0f){
+	      mat = shuffle_flat;
+	    }else{
+	      mat = shuffle_tall;
+	    }
+	
+	    mat = mat4_mul(tform, mat);
+	    mat = mat4_mul(editor_tform, mat);
+	    mat = mat4_mul(proj_mat, mat);
+
+	    vec4 color = vec4_zero;
+	    if(false == (polygon_color_try_get(gd.poly_color, pd->material, &color) && color.w > 0.0f && color.w < 1.0f))
+	      continue;
+	    simple_grid_render_gl(gd, index, mat, true, bias);
+
+	    bias -= 0.000001;
+	    if(j == 0)
+	      break;
+	  }   
+	}
+      }
+      glDisable( GL_DEPTH_TEST );
     }
-  }
   
-  {
+  { // render grid
     float grid_width = 0.1;
     if(!try_get_simple_graphics_editor_grid_width(id, &grid_width))
       grid_width = 0.1;
@@ -1733,15 +1808,12 @@ void simple_grid_render(u64 id){
       index_table_clear(gd.polygons_to_delete);
     }
   }
-  u64 idx = 0;
-
   u64 count = active_entities_count(gd.active_entities);
-  u32 entities[count];
+  u32 * entities = active_entities_get_keys(gd.active_entities);
 
   vec3 prevp[count];
   bool moved[count];
-  bool unused[count];
-  idx = 0;
+  
   static entity_index_lookup_table * entity_lookup = NULL;
   if(entity_lookup == NULL)
     entity_lookup = entity_index_lookup_table_create(NULL);
@@ -1749,7 +1821,6 @@ void simple_grid_render(u64 id){
   
   entity_2_collisions_clear(gd.collisions_2_table);
 
-  active_entities_iter_all(gd.active_entities, entities, unused, count, &idx);
   { // check collisions due to move.
     for(u32 i = 0; i < count ;i ++){
       moved[i] = false;
@@ -1908,7 +1979,6 @@ void simple_grid_render(u64 id){
     set_simple_game_data(id, *gd.game_data);
   }
 
-  idx = 0;
 
   mat4 shuffle_flat = mat4_identity();
   shuffle_flat.m22 = 0;
@@ -1929,18 +1999,19 @@ void simple_grid_render(u64 id){
   proj_mat.m21 = 1;
   
   mat4 scale = mat4_scaled(1.0 / _gd.zoom, 1.0 / _gd.zoom,1.0 / _gd.zoom);
-  
+  glDisable(GL_BLEND);
+  glEnable(GL_DEPTH_TEST);
+  glDepthFunc(GL_LEQUAL);
   for(u64 i = 0; i < count; i++){
     u32 entity = entities[i];
-    
     entity_data * ed = index_table_lookup(gd.entities, entity);
-    
     vec3 p = ed->position;
 
     if(ed->model != 0){
       model_data * model = index_table_lookup(gd.models, ed->model);
       float bias = 0;
-      for(u32 j = model->polygons.count - 1;true; --j){
+      for(u32 j = model->polygons.count;j > 0;){
+	j--;
 	u32 index = j + model->polygons.index;
 	mat4 tform = mat4_translate(p.x - offset.x, p.y, p.z - offset.y);
 
@@ -1956,14 +2027,58 @@ void simple_grid_render(u64 id){
 	mat = mat4_mul(scale, mat);
 	mat = mat4_mul(proj_mat, mat);
 
-	//logd("%i %i\n", entity, index);
+	vec4 color = vec4_zero;
+	if(polygon_color_try_get(gd.poly_color, pd->material, &color) && color.w != 1.0f)
+	  continue;
 	simple_grid_render_gl(gd, index, mat, false, bias);
+	bias -= 0.000001;
 	if(j == 0)
 	  break;
-	bias -= 0.000001;
       }   
     }
   }
+  
+  glEnable(GL_BLEND);  
+  for(u64 i = 0; i < count; i++){
+    u32 entity = entities[i];
+    
+    entity_data * ed = index_table_lookup(gd.entities, entity);
+    
+    vec3 p = ed->position;
+    
+    if(ed->model != 0){
+      model_data * model = index_table_lookup(gd.models, ed->model);
+      float bias = 0;
+      
+      for(u32 j = model->polygons.count;j > 0;){
+	j--;
+	u32 index = j + model->polygons.index;
+	mat4 tform = mat4_translate(p.x - offset.x, p.y, p.z - offset.y);
+
+	mat4 mat;
+	polygon_data * pd = index_table_lookup(gd.polygon, index);
+	if(pd->physical_height != 0.0f){
+	  mat = shuffle_flat;
+	}else{
+	  mat = shuffle_tall;
+	}
+	
+	mat = mat4_mul(tform, mat);
+	mat = mat4_mul(scale, mat);
+	mat = mat4_mul(proj_mat, mat);
+
+	vec4 color = vec4_zero;
+	if(false == (polygon_color_try_get(gd.poly_color, pd->material, &color) && color.w > 0.0f && color.w < 1.0f))
+	  continue;
+	simple_grid_render_gl(gd, index, mat, false, bias);
+
+	bias -= 0.000001;
+	if(j == 0)
+	  break;
+      }   
+    }
+  }
+  glDisable( GL_DEPTH_TEST );
 
   u32 error = glGetError();
   if(error > 0)
