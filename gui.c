@@ -13,6 +13,8 @@
 GLFWwindow * find_glfw_window(u64 id);
 
 CREATE_TABLE(once,u64,u8);
+CREATE_TABLE2(size, u64, vec2);
+CREATE_TABLE2(window_position, u64, vec2);
 
 bool once(u64 itemid){
   int v = get_once(itemid);
@@ -70,10 +72,11 @@ window * get_window_ref(GLFWwindow * glwindow){
 
 void window_pos_callback(GLFWwindow* glwindow, int xpos, int ypos)
 {
-  window * w = get_window_ref(glwindow);
-  w->x = xpos;
-  w->y = ypos;
-  glfwGetWindowPos(glwindow, &w->x, &w->y);
+  UNUSED(xpos);UNUSED(ypos);
+  int x, y;
+  glfwGetWindowPos(glwindow, &x, &y);
+  
+  set_window_position(get_window(glwindow), vec2_new(x, y));
 
 }
 
@@ -207,27 +210,35 @@ void window_close_callback(GLFWwindow * glwindow){
 
 
 void load_window(u64 id){
-  
+
+  vec2 size;
+  if(false == try_get_size(id, &size) || size.x < 1.0 || size.y < 1.0){
+    size = vec2_new(300, 300);
+  }
   window w;
   if(try_get_window_state(id, &w) == false){
-    w = (window){.width = 640, .height = 640};
     sprintf(w.title, "%s", "Test Window");
   }
-  if(w.height <= 0) w.height = 200;
-  if(w.width <= 0) w.width = 200;
+
   static GLFWwindow * ctx = NULL;
-  logd("Window size:  %s %i %i\n", w.title, w.width, w.height);
+  logd("Window size:  %s %i %i\n", w.title, (int)size.x, (int)size.y);
   glfwWindowHint(GLFW_SAMPLES, 16);
   glfwWindowHint(GLFW_DEPTH_BITS, 32);
-  GLFWwindow * window = glfwCreateWindow(w.width, w.height, w.title, NULL, ctx);
+  GLFWwindow * window = glfwCreateWindow((int)size.x, (int)size.y, w.title, NULL, ctx);
   ASSERT(window != NULL);
   if(ctx == NULL){
     ctx = window;
     glfwMakeContextCurrent(window);
     glewInit();
   }
-  glfwSetWindowPos(window, w.x, w.y);
-  glfwSetWindowSize(window, w.width, w.height);
+
+  vec2 position;
+  if(!try_get_window_position(id, &position)){
+    position = vec2_new(0, 0);
+  }
+  
+  glfwSetWindowPos(window, position.x, position.y);
+  glfwSetWindowSize(window, (int)size.x, (int)size.y);
   list_push(windows.window_id, windows.cnt, id);
   list_push2(windows.glfw_window, windows.cnt, window);
 
@@ -889,7 +900,7 @@ void measure_stackpanel(u64 stk_id, vec2 * s){
 }
 
 
-CREATE_TABLE2(size, u64, vec2);
+
 
 void render_window(u64 window_id){
   window win = get_window_state(window_id);
@@ -898,25 +909,28 @@ void render_window(u64 window_id){
     if(win == NULL)
       load_window(window_id);
   }
-  vec2 size;
-  if(try_get_size(window_id, &size)){
-    vec2_print(size);
-    logd(" Happens..\n");
-    win.width = size.x;
-    win.height = size.y;
-  }
+  
   bool last = true;
   thickness margin = get_margin(window_id);
   //margin.left += 0.05f;
+  
   GLFWwindow * glfwWin = find_glfw_window(window_id);
   glfwSetWindowTitle(glfwWin, win.title);
-  glfwGetWindowSize(glfwWin, &win.width, &win.height);
+  int width, height;
+  glfwGetWindowSize(glfwWin, &width, &height);
+  set_size(window_id, vec2_new(width, height));
   glfwMakeContextCurrent(glfwWin);
   glViewport(0, 0, win.width, win.height);
   window_size = vec2_new(win.width, win.height);
+  vec3 color;
+  vec4 color2;
+  if(try_get_color(window_id, &color))
+    glClearColor(color.x, color.y, color.z, 1);
+  else if(try_get_color_alpha(window_id, &color2))
+    glClearColor(color2.x, color2.y, color2.z, color2.w);
+  else
+    glClearColor(0, 0, 0, 1);
   
-  vec3 color = get_color(window_id);
-  glClearColor(color.x, color.y, color.z, 1);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   shared_offset = vec2_new(margin.left, margin.up);
   shared_size = vec2_new(win.width - margin.left - margin.right, win.height - margin.up - margin.down);

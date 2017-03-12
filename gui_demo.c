@@ -71,15 +71,21 @@ void register_sortable(sorttable * table){
 cl_object clgui_get_sortable_count(){
   if(sortable_table == NULL)
     return ecl_make_fixnum(0);
-  return ecl_make_fixnum(index_table_count(sortable_table));
+  return ecl_make_fixnum(index_table_count(sortable_table) - 1);
 }
-
+#include <ctype.h>
 
 cl_object clgui_get_sortable_data(cl_object ptr){
-  auto fixnum = ecl_to_fixnum(ptr);
+  auto fixnum = ecl_to_fixnum(ptr) + 1;
   sorttable ** _table = index_table_lookup(sortable_table, fixnum);
   auto table = _table[0];
-  return cl_list(5,c_string_to_object(table->name), c_string_to_object(table->key_type),
+  char buf[strlen(table->name) + 1];
+  for(u32 i = 0; i < sizeof(buf) - 1; i++){
+    buf[i] = toupper(table->name[i]);
+  }
+  buf[sizeof(buf) - 1] = 0;
+  
+  return cl_list(5,ecl_make_keyword(buf), c_string_to_object(table->key_type),
 		 c_string_to_object(table->value_type), ecl_make_fixnum(table->key_size),
 		 ecl_make_fixnum(table->value_size));
 }
@@ -171,7 +177,7 @@ cl_object vec4_to_cl_object(vec4 v){
 
 
 cl_object clgui_set_property(cl_object sortable, cl_object name, cl_object value){
-  auto fixnum = ecl_to_fixnum(sortable);
+  auto fixnum = ecl_to_fixnum(sortable) + 1;
   sorttable ** _table = index_table_lookup(sortable_table, fixnum);
   auto table = _table[0];
   
@@ -208,11 +214,11 @@ cl_object clgui_set_property(cl_object sortable, cl_object name, cl_object value
     ASSERT(false);
   }
   
-  return OBJNULL;
+  return name;
 }
 
 cl_object clgui_get_property(cl_object sortable,cl_object name){
-  auto fixnum = ecl_to_fixnum(sortable);
+  auto fixnum = ecl_to_fixnum(sortable) + 1;
   sorttable ** _table = index_table_lookup(sortable_table, fixnum);
   auto table = _table[0];
   auto idx = ecl_to_fixnum(name);
@@ -247,7 +253,7 @@ cl_object clgui_get_property(cl_object sortable,cl_object name){
     logd("Unsupported type: '%s'\n", table->value_type);
     ASSERT(false);
   }
-  return OBJNULL;
+  return name;
   
 }
 /*
@@ -285,6 +291,7 @@ void gui_demo(){
   ecl_def_c_function(ecl_make_symbol("SET-PROPERTY", "CL-GUI-BASE"), (cl_objectfn_fixed) clgui_set_property, 3);
   ecl_def_c_function(ecl_make_symbol("GET-PROPERTY", "CL-GUI-BASE"), (cl_objectfn_fixed) clgui_get_property, 2);
   ecl_def_c_function(ecl_make_symbol("MAKE-WINDOW", "CL-GUI-BASE"), (cl_objectfn_fixed) clgui_load_window, 1);
+
   //ecl_def_c_function(ecl_make_symbol("STRING-ID", "CL-GUI-BASE"), (cl_objectfn_fixed) clgui_string_id, 1);
   
   
@@ -306,7 +313,8 @@ void gui_demo(){
   register_sortable(size_initialize());
   //register_sortable(color_initialize());
   register_sortable(color_alpha_initialize());
-  cl_eval(c_string_to_object("(load \"test.lisp\")"));
+  register_sortable(window_position_initialize());
+  cl_eval(c_string_to_object("(load \"prev-test.lisp\")"));
 
   
   while(true){//!get_should_exit(game_board)){
