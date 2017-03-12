@@ -55,6 +55,8 @@ typedef enum{
 
 CREATE_TABLE_DECL2(entity_type, u64, ENTITY_TYPE);
 CREATE_TABLE_DECL2(desc_text, u64, name_data);
+CREATE_TABLE_DECL2(entity_velocity, u64, vec3);
+CREATE_TABLE_DECL2(entity_acceleration, u64, vec3);
 
 struct _graphics_context;
 typedef struct _graphics_context graphics_context;
@@ -88,6 +90,7 @@ typedef struct{
   union {
     struct {
       bool snap_to_grid;
+      float grid_width;
     };
     
     u32 reserved[16];
@@ -118,6 +121,8 @@ CREATE_TABLE_DECL2(entity_target, u32, vec3);
 CREATE_TABLE_DECL2(entity_speed, u32, f32);
 CREATE_TABLE_DECL2(gravity_affects, u64, bool);
 CREATE_TABLE_DECL2(entity_direction, u32, vec2);
+CREATE_TABLE_DECL2(material_y_offset, u32, f32);
+
 typedef enum{
   GAME_EVENT_MOUSE_BUTTON
 }game_event_kind;
@@ -166,12 +171,18 @@ struct _graphics_context{
   ghost_material_table * ghost_table;
   game_data * game_data;
   entity_speed_table * entity_speed;
+  material_y_offset_table * material_y_offset;
+  entity_acceleration_table * entity_acceleration;
+  entity_velocity_table * entity_velocity;
+  
+  u32 game_id;
 };
 
 
 void graphics_context_load_interaction(graphics_context * ctx, interact_fcn f, u32 id);
 void graphics_context_load_update(graphics_context * ctx, simple_game_update_fcn f, u32 id);
 void simple_game_editor_load_func(graphics_context * ctx, simple_graphics_editor_fcn f, u32 id);
+void simple_game_editor_invoke_command(graphics_context * ctx, editor_context * editor, char * command);
 void simple_game_point_collision(graphics_context ctx, u32 * entities, u32 entity_count, vec2 loc, index_table * collisiontable);
 void detect_collisions(u32 * entities, u32 entitycnt, graphics_context gd, index_table * result_table);
 void detect_collisions_one_way(graphics_context gd, u32 * entities1, u32 entity1_cnt, u32 * entities2, u32 entity2_cnt, index_table * result_table);
