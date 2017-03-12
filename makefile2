@@ -1,5 +1,5 @@
 OPT = -g3 -O0 -fPIC 
-LIB_SOURCES = game_module1.c iron/log.c
+LIB_SOURCES = game_module1.c 
 CC = gcc
 TARGET = game_module1.so
 LIB_OBJECTS =$(LIB_SOURCES:.c=.o)

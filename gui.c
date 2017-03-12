@@ -889,6 +889,8 @@ void measure_stackpanel(u64 stk_id, vec2 * s){
 }
 
 
+CREATE_TABLE2(size, u64, vec2);
+
 void render_window(u64 window_id){
   window win = get_window_state(window_id);
   {
@@ -896,7 +898,13 @@ void render_window(u64 window_id){
     if(win == NULL)
       load_window(window_id);
   }
-  
+  vec2 size;
+  if(try_get_size(window_id, &size)){
+    vec2_print(size);
+    logd(" Happens..\n");
+    win.width = size.x;
+    win.height = size.y;
+  }
   bool last = true;
   thickness margin = get_margin(window_id);
   //margin.left += 0.05f;

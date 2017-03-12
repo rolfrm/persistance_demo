@@ -68,7 +68,7 @@ extern const u32 mouse_button_release;
 extern const u32 mouse_button_repeat;
 
 void make_window(u64 id);
-
+CREATE_TABLE_DECL2(size, u64, vec2);
 CREATE_TABLE_DECL(margin, u64, thickness);
 CREATE_TABLE_DECL(corner_roundness, u64, thickness);
 CREATE_TABLE_DECL(color, u64, vec3);

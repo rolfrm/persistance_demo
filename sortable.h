@@ -2,6 +2,7 @@ typedef struct{
   mem_area * key_area;
   mem_area * value_area;
   size_t key_size, value_size;
+  const char * key_type, * value_type, * name;
   int (*cmp)(const void * k1, const void * k2);
   bool is_multi_table;
 }sorttable;
@@ -75,6 +76,9 @@ void sorttable_destroy(sorttable * table);
       initialized = true;			\
       table = create_sorttable(sizeof(KeyType), sizeof(ValueType), IS_PERSISTED ? #Name : NULL); \
       table.is_multi_table = IS_MULTI_TABLE;				\
+      table.key_type = #KeyType;					\
+      table.value_type = #ValueType;					\
+      table.name = #Name;						\
     }									\
     return &table;							\
   }									\
@@ -82,6 +86,9 @@ void sorttable_destroy(sorttable * table);
     sorttable table;							\
     table = create_sorttable(sizeof(KeyType), sizeof(ValueType), persisted_path); \
     table.is_multi_table = IS_MULTI_TABLE;				\
+    table.key_type = #KeyType;						\
+    table.value_type = #ValueType;					\
+    table.name = #Name;							\
     Name ## _table _table = {.ptr = IRON_CLONE(table)};			\
     return IRON_CLONE(_table);						\
   }									\

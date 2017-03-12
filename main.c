@@ -41,11 +41,13 @@ u32 _index_table_free_index_count(index_table * table){
 void _index_table_free_index_count_set(index_table * table, u32 cnt){
   ((u32 *) table->free_indexes->ptr)[0] = cnt;
 }
+
 void * index_table_all(index_table * table, u64 * cnt){
   // return count -1 and a pointer from the placeholder element.
   *cnt = index_table_count(table) - 1;
   return table->area->ptr + table->element_size * 5;
 }
+
 void index_table_clear(index_table * table){
   index_table_count_set(table, 1);
   _index_table_free_index_count_set(table, 0);
@@ -329,7 +331,6 @@ void calc_voxel_surface(index_table * vox, u32 idx){
     was_initialized = true;
   }
   clear_voxel_collider();
-  UNUSED(vox);UNUSED(idx);
 
   void insert_surface(u32 idx2, int x, int y, int z, int lod){
     
@@ -835,14 +836,20 @@ void test_coroutines2(){
   logd("IT: %i\n", iteration);
 
 }
-
+#include <ecl/ecl.h>
 void test_hydra();
+
+
+void gui_demo();
 //int main2();
 int main(int argc, char ** argv){
+  
+
   if(argc == 2){
     logd("Setting data dir: %s\n", argv[1]);
     mem_area_set_data_directory(argv[1]);
   }
+
   //test_coroutines2();
   //return 0;
   //test_hydra();
@@ -864,6 +871,8 @@ int main(int argc, char ** argv){
   
   if (!glfwInit())
     return -1;
+  gui_demo();
+  return 0;
   TEST(index_table_test);
   //test_gui();
   return 0;
