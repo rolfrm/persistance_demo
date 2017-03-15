@@ -41,7 +41,6 @@ char * ecl_string_to_c_heap(cl_object val){
     
   }else{
     ERROR("Not a string type");
-
   }
   return NULL;
 }

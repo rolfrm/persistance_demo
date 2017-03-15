@@ -3,6 +3,7 @@
 
 (defpackage :test (:use :cl) (:export :button :cos2 :test :test-cfun :clgui-object))
 (in-package :test)
+(defmacro comment (&rest body) ())
 (format t "test loaded~%")
 
 (defun plist-get (list sym)
@@ -17,69 +18,43 @@
 	(cons (car list) (plist-collect (cdr list)))
 	(plist-collect (cddr list)))))
 
-(defun window (&rest body )
-  (let ((width (or (plist-get body :width) 50))
-	(height (or (plist-get body :height) 50))
-	(title (or (plist-get body :title) "Name me"))
-	(id (or (plist-get body :id) "testwin"))
-	(collect (plist-collect body)));(assert false))))
-    
-    (flet ((load (id)
-	     (let ((obj (cl-gui:new-gui-object id)))
-	       (cl-gui:setprop obj :size  '(150 150))
-	       (cl-gui:setprop obj :title  "My test window") 
-	       (cl-gui:setprop obj :color-alpha '(1 0.8 0.2 1))
-	       (let ((collectiter collect))
-		 (loop while collectiter do
-		      (print (list "iter: " (caar collectiter)))
-		      (progn
-			(when (functionp (caar collectiter))
-			  (setf (caar collectiter) (funcall (caar collectiter) (+ (cl-gui:getid obj) 10000))))
-			(setf collectiter (cdr collectiter)))))
-	       obj
+(defun load-ids (form)
+  (let ((id (or (plist-get form :id) (error "root form must have an id"))))
+    (labels ((load-form (form id)
+	     (let ((collect (plist-collect (cdr form)))
+		   (cnt 0))
+	       (print (list "form id: " id))
+	       (cons :obj (cons (cl-gui:new-gui-object id) form))
+
+	       (loop while collect do
+		    (print (car collect))
+		    (load-form (car collect) (format nil "~a.~a" id cnt))
+		    (setf collect (cdr collect))
+		    (incf cnt))
 	       )))
-      
-      (apply #'list (if id (load id) #'load) :title title :height height :width width collect))))
+      (load-form form id))))
+    
+    
+    
+    
 
-(defun textblock(&rest body)
-  (let ((text (plist-get body :text))
-	(id (plist-get body :id)))
-    (flet ((load (id)
-	     (let ((obj (cl-gui:new-gui-object id)))
-	       (cl-gui:setprop obj :text  "My test window")
-	       (let ((collect (plist-collect body)))
-	       (apply #'list (if id (load id) #'load)
-		      collect))))))))
 
-(defun button (&rest body)
-  (let ((click (plist-get body :click))
-	(content (or (plist-get body :content) "button"))
-	(id (plist-get body :id)))
-    (flet ((load (id)
-	     (let ((obj (cl-gui:new-gui-object id)))
-	       (setf content
-		     (if (stringp content)
-			 (setf content (textblock :text content))
-			 content))
-	       obj)))
-
-      (apply #'list (if id (load id) #'load)
-	     :click click
-	     :content content
-	     (plist-collect body)))))
-
-(defparameter win (window :id "win1" :title "My Window" :width 200 :height
-		    200 (button :content "Click me!")))
-(print win);
-
-(defstruct reference
+(defstruct (reference
+	     (:print-function
+	      (lambda (struct stream depth)
+		(format stream "<ref to '~a'(~a)>" (reference-name struct) (funcall (reference-get struct)))))
+	     )
+	       
   (set ())
-  (get ()))
+  (get ())
+  (name ())
+  )
 
 (defmacro ref(x)
   `(make-reference
     :set (lambda (value) (setf ,x value))
-    :get (lambda () ,x)))
+    :get (lambda () ,x)
+    :name ',x))
 
 (defun deref (ref)
   (funcall (reference-get ref)))
@@ -87,18 +62,40 @@
 (defun (setf deref) (value ref)
   (funcall (reference-set ref) value))
 
-(let ((y-ref
-       (let ((y 10))
-	 (ref y))))
-  (setf (deref y-ref) 15)
-  (incf (deref y-ref))
-  (print (deref y-ref)))
-    
+(defun window (&rest body )
+  (cons 'window body))
+(defun textblock(&rest body)
+  (cons 'textblock body))
+(defun button (&rest body)
+  (cons 'button body))
+(defun grid (&rest body)
+  (cons 'grid body))
 
 
-(defmacro comment (&rest body) ())
+(let ((width 100) (height 100))
+  (defparameter win
+    (window
+     :id "win1" :title "My Window" :width (ref width) :height (ref height)
+     (grid
+      (textblock :grid-row 0 :text "Just click the button")
+      (button
+       :grid-row 1 :content "Click me!"
+       :click (lambda () (incf width 10) (incf height 100))
+       )
+      )
+     )
+    )
+  
+  (print win);
+  (load-ids win)
+  )
 
 (comment 
+
+
+
+
+
 (import :ffi)
 (ffi:clines "
 #include <GL/glew.h>
