@@ -37,10 +37,10 @@ char * ecl_string_to_c_heap(cl_object val){
   }else if(basestr){
     auto s = val->base_string;
     UNUSED(s);
-    ASSERT(false);
+    ERROR("Base string type not supported.");
     
   }else{
-    ASSERT(false);
+    ERROR("Not a string type");
 
   }
   return NULL;
@@ -58,6 +58,7 @@ cl_object clgui_string_id(cl_object name){
 }
 
 static index_table * sortable_table = NULL;
+
 
 void register_sortable(sorttable * table){
   if(sortable_table == NULL){
@@ -265,9 +266,35 @@ clgui_unset_property(cl_object sortable_ptr, cl_object name){
 cl_object clgui_load_window(cl_object winid){
   u64 id = (u64)cl_object_to_i64(winid);
   make_window(id);
-  return OBJNULL;
+  return ECL_NIL;
 }
 
+cl_object clgui_go_draw_windows(){
+  //while(true){//!get_should_exit(game_board)){
+    u64 window_count = get_count_window_state();
+    u64 * windows = get_keys_window_state();
+    for(u64 i = 0; i < window_count; i++){
+      u64 win_id = windows[i];
+      auto method = get_method(win_id, render_control_method);
+      u64 ts = timestamp(); // for fps calculation.
+      i += 0.03;
+      
+      //iron_sleep(0.03);
+      glfwPollEvents();
+      u64 ts2 = timestamp(); // for fps calculation.
+      method(win_id);
+      {
+	u64 tsend = timestamp();
+	u64 msdiff = tsend - ts;
+	char fpsbuf[100];
+	sprintf(fpsbuf, "%3.0f / %3.0f FPS", 1.0 / (1e-6 * (tsend - ts2)), 1.0 / (1e-6 * msdiff));
+	//remove_text(fpstextline);
+	//set_text(fpstextline, fpsbuf);
+      }
+    }
+    return ECL_NIL;
+    //}
+}
 
 void gui_demo(){
 
@@ -291,6 +318,7 @@ void gui_demo(){
   ecl_def_c_function(ecl_make_symbol("SET-PROPERTY", "CL-GUI-BASE"), (cl_objectfn_fixed) clgui_set_property, 3);
   ecl_def_c_function(ecl_make_symbol("GET-PROPERTY", "CL-GUI-BASE"), (cl_objectfn_fixed) clgui_get_property, 2);
   ecl_def_c_function(ecl_make_symbol("MAKE-WINDOW", "CL-GUI-BASE"), (cl_objectfn_fixed) clgui_load_window, 1);
+  ecl_def_c_function(ecl_make_symbol("DRAW-WINDOWS", "CL-GUI-BASE"), (cl_objectfn_fixed) clgui_go_draw_windows, 0);
 
   //ecl_def_c_function(ecl_make_symbol("STRING-ID", "CL-GUI-BASE"), (cl_objectfn_fixed) clgui_string_id, 1);
   
@@ -312,11 +340,16 @@ void gui_demo(){
   init_gui();
   register_sortable(size_initialize());
   //register_sortable(color_initialize());
-  register_sortable(color_alpha_initialize());
+  sorttable * color_table = color_alpha_initialize();
+  color_table->name = "color-alpha";
+  
+  register_sortable(color_table);
   register_sortable(window_position_initialize());
   cl_eval(c_string_to_object("(load \"prev-test.lisp\")"));
-
-  
+  //cl_eval(c_string_to_object("(handler-bind ((condition (lambda (c) (print \"WTF\")))) (load \"test.lisp\"))"));
+  //ecl_enable_interrupts();
+  //cl_eval(c_string_to_object("(load \"test.lisp\")"));
+  //ecl_disable_interrupts();  
   while(true){//!get_should_exit(game_board)){
     u64 window_count = get_count_window_state();
     u64 * windows = get_keys_window_state();
