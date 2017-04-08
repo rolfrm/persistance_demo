@@ -80,8 +80,7 @@ void render_console(u64 id){
 
   vec4 color = vec4_new(1,1,1,1);
   try_get_color(id, &(color.xyz));
-  try_get_color_alpha(id, &color);
-    
+  color_alpha_try_get(gui->color_alpha, &id, &color);
   rect_render_alpha(color, rect_offset, rect_size);
   
   u64 history[histcnt];

@@ -23,10 +23,12 @@ bool once(u64 itemid){
   return false;
 }
 
+
 CREATE_TABLE(is_mouse_over, u64, bool);
 CREATE_TABLE(focused_element, u64, u64);
 CREATE_TABLE2(window_state, u64, window);
-CREATE_TABLE2(color_alpha, u64, vec4);
+#include "abstract_sortable.h"
+#include "color_alpha.c"
 struct{
   GLFWwindow ** glfw_window;
   u64 * window_id;
@@ -1004,7 +1006,12 @@ void init_gui(){
   define_method(ui_element_class, mouse_over_method, (method) ui_element_mouse_over);
   define_method(stack_panel_class, mouse_over_method, (method) stack_panel_mouse_over);
   define_method(rectangle_class, mouse_over_method, (method) rectangle_mouse_over);
+
+  gui = alloc0(sizeof(gui));
+  gui->color_alpha = color_alpha_create("color_alpha");
+  
 }
+
 
 const int key_backspace = 259;
 const int key_enter = 257;

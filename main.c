@@ -843,71 +843,60 @@ void test_hydra();
 
 
 bool test_abstract_sortable(){
-  MyTableTest myTable = {0};
-  u32 sizes[] = {sizeof(myTable.index[0]), sizeof(myTable.x[0]), sizeof(myTable.y[1])};
-  const char * names[] = {"index", "x", "y"};
-  abstract_sorttable_init((abstract_sorttable *)&myTable, "MyTable", 3, sizes, (char **) names);
-  abstract_sorttable_clear((abstract_sorttable*)&myTable);
+  MyTableTest * myTable = MyTableTest_create("MyTable");
+  abstract_sorttable_clear((abstract_sorttable*)myTable);
   for(int j = 0; j < 2; j++){
     for(int i = 0; i < 40; i++){
       u64 key = i * 2;
       f32 x = sin(0.1 * key);
       f32 y = cos(0.1 * key);
       void * values[] = {(void *)&key, (void *)&x, (void *)&y};
-      abstract_sorttable_inserts((abstract_sorttable *)&myTable, values, 1);
+      abstract_sorttable_inserts((abstract_sorttable *)myTable, values, 1);
     }
   }
-  myTable.x = myTable.x_area->ptr;
-  myTable.y = myTable.y_area->ptr;
-  myTable.index = myTable.index_area->ptr;
-  myTable.count = myTable.index_area->size / myTable.sizes[0] - 1;
-  logd("COUNT: %i\n", myTable.count);
-  ASSERT(myTable.count == 40);
+  
+  logd("COUNT: %i\n", myTable->count);
+  ASSERT(myTable->count == 40);
   bool test = true;
-  for(u32 i = 0; i < myTable.count; i++){
+  for(u32 i = 0; i < myTable->count; i++){
     if(test){
       u64 key = i * 2;
       f32 x = sin(0.1 * key);
       f32 y = cos(0.1 * key);
-      ASSERT(myTable.index[i + 1] == key);
-      ASSERT(myTable.x[i + 1] == x);
-      ASSERT(myTable.y[i + 1] == y);
+      ASSERT(myTable->index[i + 1] == key);
+      ASSERT(myTable->x[i + 1] == x);
+      ASSERT(myTable->y[i + 1] == y);
     }else{
-      logd("%i %f %f\n", myTable.index[i + 1], myTable.x[i + 1], myTable.y[i + 1]);
+      logd("%i %f %f\n", myTable->index[i + 1], myTable->x[i + 1], myTable->y[i + 1]);
     }
   }
   u64 keys_to_remove[] = {8, 10, 12};
   u64 indexes_to_remove[array_count(keys_to_remove)];
   
-  abstract_sorttable_finds((abstract_sorttable *) &myTable, keys_to_remove, indexes_to_remove, array_count(keys_to_remove));
-  abstract_sorttable_remove_indexes((abstract_sorttable *) &myTable, indexes_to_remove, array_count(keys_to_remove));
-  myTable.x = myTable.x_area->ptr;
-  myTable.y = myTable.y_area->ptr;
-  myTable.index = myTable.index_area->ptr;
-  myTable.count = myTable.index_area->size / myTable.sizes[0] - 1;
-  ASSERT(myTable.count == 40 - array_count(keys_to_remove));
+  abstract_sorttable_finds((abstract_sorttable *) myTable, keys_to_remove, indexes_to_remove, array_count(keys_to_remove));
+  abstract_sorttable_remove_indexes((abstract_sorttable *) myTable, indexes_to_remove, array_count(keys_to_remove));
+  myTable->count = myTable->index_area->size / myTable->sizes[0] - 1;
+  ASSERT(myTable->count == 40 - array_count(keys_to_remove));
   
-  for(u32 i = 0; i < myTable.count; i++){
+  for(u32 i = 0; i < myTable->count; i++){
     if(test){
-      ASSERT(myTable.index[i + 1] != 8 && myTable.index[i + 1] != 10 && myTable.index[i + 1] != 12);
+      ASSERT(myTable->index[i + 1] != 8 && myTable->index[i + 1] != 10 && myTable->index[i + 1] != 12);
       u32 _i = i * 2;
       if(_i >= 8)
 	_i = i * 2 + 6;
       f32 x = sin(0.1 * _i);
       f32 y = cos(0.1 * _i);
-      ASSERT(myTable.x[i + 1] == x);
-      ASSERT(myTable.y[i + 1] == y);
+      ASSERT(myTable->x[i + 1] == x);
+      ASSERT(myTable->y[i + 1] == y);
     }
   }
 
-  MyTableTest_set(&myTable, 100, 4.5, 6.0);
+  MyTableTest_set(myTable, 100, 4.5, 6.0);
   u64 key = 100, index = 0;
-  MyTableTest_lookup(&myTable, &key, &index, 1);
+  MyTableTest_lookup(myTable, &key, &index, 1);
   TEST_ASSERT(index != 0);
-  myTable.x = myTable.x_area->ptr;
-  myTable.y = myTable.y_area->ptr;
-  logd("%i %f %f\n", index, myTable.x[index], myTable.y[index]);
-  TEST_ASSERT(myTable.x[index] == 4.5 && myTable.y[index] == 6.0);
+  logd("%i %f %f\n", index, myTable->x[index], myTable->y[index]);
+  TEST_ASSERT(myTable->x[index] == 4.5 && myTable->y[index] == 6.0);
   
   return TEST_SUCCESS;
 
@@ -935,13 +924,13 @@ int main(int argc, char ** argv){
   //TEST(test_elf_reader2);
   //TEST(test_elf_reader);
   TEST(test_abstract_sortable);
-  return 0;
+  //return 0;
   
   
   if (!glfwInit())
     return -1;
   //gui_demo();
   TEST(index_table_test);
-  //test_gui();
+  test_gui();
   return 0;
 }

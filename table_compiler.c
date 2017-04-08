@@ -16,6 +16,7 @@ void build_template(int argc, char ** argv, const char * template_file, const ch
   char * ptr_attrs2[argc - 2];
   char * column_sizes[argc - 2];
   char * column_name_strs[argc - 2];
+  char * column_pointers[argc - 2];
   for(int i = 2; i < argc; i++){
     char * column = argv[i];
     int splitcnt;    
@@ -33,6 +34,7 @@ void build_template(int argc, char ** argv, const char * template_file, const ch
     ptr_attrs2[i - 2] = fmtstr("(void* )%s", column_name);
     column_sizes[i - 2] = fmtstr("sizeof(%s)", column_type);
     column_name_strs[i - 2] = fmtstr("(char *)\"%s\"", column_name);
+    column_pointers[i - 2] = fmtstr("(void *)table->%s", column_name);
   }
   char * value_columns = string_join(array_count(columns1), ";\n  ", columns2);
   char * value_columns2 = string_join(array_count(columns1), ", ", columns1);
@@ -43,6 +45,7 @@ void build_template(int argc, char ** argv, const char * template_file, const ch
   char * colcount = fmtstr("%i", argc - 2);
   char * colsize = fmtstr("{%s}", string_join(array_count(columns2),", ", column_sizes));
   char * namearray = fmtstr("{%s}", string_join(array_count(columns2),", ", column_name_strs));
+  char * columnptrs = fmtstr("{%s}", string_join(array_count(columns2),", ", column_pointers));
   replace_inplace(template, "VALUE_COLUMNS1", value_columns);
   replace_inplace(template, "VALUE_COLUMNS2", value_columns2);
   replace_inplace(template, "VALUE_COLUMNS3", value_columns3);
@@ -53,6 +56,7 @@ void build_template(int argc, char ** argv, const char * template_file, const ch
   replace_inplace(template, "COLUMN_COUNT", colcount);
   replace_inplace(template, "COLUMN_SIZES", colsize);
   replace_inplace(template, "COLUMN_NAMES", namearray);
+  replace_inplace(template, "COLUMN_POINTERS", columnptrs);
   write_buffer_to_file(template, strlen(template), output_file);
 }
 

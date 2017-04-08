@@ -34,6 +34,10 @@ static mem_area ** get_mem_areas(abstract_sorttable * table){
   return ((void *)  &table->tail) + sizeof(u64) * table->column_count + sizeof(void *) * table->column_count;
 }
 
+static void ** get_pointers(abstract_sorttable * table){
+  return ((void *)  &table->tail) + sizeof(u64) * table->column_count;
+}
+
 static bool indexes_unique_and_sorted(u64 * indexes, u64 cnt){
   if(cnt == 0) return true;
   for(u64 i = 0; i < cnt - 1; i++)
@@ -74,6 +78,7 @@ void abstract_sorttable_init(abstract_sorttable * table,const char * table_name 
   char pathbuf[100];
   *((u32 *)(&table->column_count)) = column_count;
   mem_area ** mem_areas = get_mem_areas(table);
+  void ** pointers = get_pointers(table);
   u64 * type_sizes = get_type_sizes(table);
   u64 key_size = type_sizes[0];
 
@@ -97,6 +102,7 @@ void abstract_sorttable_init(abstract_sorttable * table,const char * table_name 
       mem_area_realloc(mem_areas[i], type_sizes[i]);
       memset(mem_areas[i]->ptr, 0, type_sizes[i]);
     }
+    pointers[i] = mem_areas[i]->ptr;
   }
   
   abstract_sorttable_check_sanity(table);
@@ -143,13 +149,15 @@ void abstract_sorttable_insert_keys(abstract_sorttable * table, void * keys, u64
   abstract_sorttable_check_sanity(table);
   u64 * column_size = get_type_sizes(table);
   mem_area ** column_area = get_mem_areas(table);
-
+  void ** pointers = get_pointers(table);
   mem_area * key_area = column_area[0];
   u64 key_size = column_size[0];
   u32 column_count = table->column_count;
   // make room for new data.
-  for(u32 i = 0; i < column_count; i++)
+  for(u32 i = 0; i < column_count; i++){
     mem_area_realloc(column_area[i], column_area[i]->size + cnt * column_size[i]);
+    pointers[i] = column_area[i]->ptr;
+  }
   
   // skip key related things
   column_size += 1;
@@ -188,6 +196,7 @@ void abstract_sorttable_insert_keys(abstract_sorttable * table, void * keys, u64
       vend[j] += column_size[j];
     }
   }
+  table->count = key_area->size / key_size - 1;
 }
 
 void abstract_sorttable_inserts(abstract_sorttable * table, void ** values, u64 cnt){
@@ -197,7 +206,8 @@ void abstract_sorttable_inserts(abstract_sorttable * table, void ** values, u64 
 
   u64 * column_size = get_type_sizes(table);
   mem_area ** column_area = get_mem_areas(table);
-
+  void ** pointers = get_pointers(table);
+  
   ASSERT(abstract_sorttable_keys_sorted(table, keys, cnt));
   u64 indexes[cnt];
   memset(indexes, 0, sizeof(indexes));
@@ -250,6 +260,7 @@ void abstract_sorttable_inserts(abstract_sorttable * table, void ** values, u64 
       u64 idx = indexes2[i];
       ASSERT(indexes[i]);
       memcpy(column_area[j]->ptr + csize * indexes[i], values[j] + csize * idx, csize);
+      pointers[i] = column_area[j]->ptr;
     }
   }
 }
@@ -257,8 +268,13 @@ void abstract_sorttable_inserts(abstract_sorttable * table, void ** values, u64 
 void abstract_sorttable_clear(abstract_sorttable * table){
   u64 * column_size = get_type_sizes(table);
   mem_area ** column_area = get_mem_areas(table);
-  for(u32 i = 0; i < table->column_count; i++)
+  void ** pointers = get_pointers(table);
+  
+  for(u32 i = 0; i < table->column_count; i++){
     mem_area_realloc(column_area[i], column_size[i]);
+    pointers[i] = column_area[i]->ptr;
+  }
+  table->count = 0;
 }
 
 void abstract_sorttable_remove_indexes(abstract_sorttable * table, u64 * indexes, size_t cnt){
@@ -266,8 +282,10 @@ void abstract_sorttable_remove_indexes(abstract_sorttable * table, u64 * indexes
 
   u64 * column_size = get_type_sizes(table);
   mem_area ** column_area = get_mem_areas(table);
+  void ** pointers = get_pointers(table);
   
   const u64 _table_cnt = column_area[0]->size / column_size[0];
+  table->count = _table_cnt - cnt;
   for(u32 j = 0; j < table->column_count; j++){
     u64 table_cnt = _table_cnt;
     void * pt = column_area[j]->ptr;
@@ -279,6 +297,7 @@ void abstract_sorttable_remove_indexes(abstract_sorttable * table, u64 * indexes
       table_cnt--;
     }
     mem_area_realloc(column_area[j], table_cnt * size);
+    pointers[j] = column_area[j]->ptr;
   }
   abstract_sorttable_check_sanity(table);
 }

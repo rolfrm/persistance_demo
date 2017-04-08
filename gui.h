@@ -69,10 +69,16 @@ extern const u32 mouse_button_repeat;
 
 void make_window(u64 id);
 
+#include "color_alpha.h"
+
+struct {
+  color_alpha * color_alpha;
+
+}* gui;
+
 CREATE_TABLE_DECL(margin, u64, thickness);
 CREATE_TABLE_DECL(corner_roundness, u64, thickness);
 CREATE_TABLE_DECL(color, u64, vec3);
-CREATE_TABLE_DECL2(color_alpha, u64, vec4);
 CREATE_STRING_TABLE_DECL(text, u64);
 CREATE_STRING_TABLE_DECL(name, u64);
 CREATE_MULTI_TABLE_DECL(inventory, u64, u64);

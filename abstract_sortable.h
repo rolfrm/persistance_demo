@@ -1,6 +1,5 @@
 typedef struct _abstract_sorttable{
   u64 count;
-  u64 capacity;
   bool is_multi_table;
   const u32 column_count;
   int (*cmp) (void * k1, void * k2);

@@ -31,3 +31,16 @@ void TABLE_NAME_clear(TABLE_NAME * table){
 void TABLE_NAME_unset(TABLE_NAME * table, INDEX_TYPE key){
   TABLE_NAME_remove(table, &key, 1);
 }
+
+bool TABLE_NAME_try_get(TABLE_NAME * table, VALUE_COLUMNS3){
+  void * array[] = {VALUE_PTRS2};
+  void * column_pointers[] = COLUMN_POINTERS;
+  u64 index = 0;
+  abstract_sorttable_finds((abstract_sorttable *) table, array[0], &index, 1);
+  if(index == 0) return false;
+  u32 sizes[] = COLUMN_SIZES;
+  for(int i = 1; i < COLUMN_COUNT; i++){
+    memcpy(array[i], column_pointers[i] + index * sizes[i], sizes[i]); 
+  }
+  return true;
+}
