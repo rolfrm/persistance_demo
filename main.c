@@ -838,21 +838,8 @@ void test_coroutines2(){
 
 void test_hydra();
 #include "abstract_sortable.h"
-
-typedef struct _MyTableTest{
-  u64 count;
-  u64 capacity;
-  bool is_multi_table;
-  const u32 column_count;
-  int (*cmp) (const u64 * k1, const u64 * k2);
-  u64 sizes[3];
-  u64 *  index;
-  f32 * x;
-  f32 * y;
-  mem_area * index_area;
-  mem_area * x_area;
-  mem_area * y_area;
-}MyTableTest;
+#include "MyTableTest.h"
+#include "MyTableTest.c"
 
 
 bool test_abstract_sortable(){
@@ -912,6 +899,16 @@ bool test_abstract_sortable(){
       ASSERT(myTable.y[i + 1] == y);
     }
   }
+
+  MyTableTest_set(&myTable, 100, 4.5, 6.0);
+  u64 key = 100, index = 0;
+  MyTableTest_lookup(&myTable, &key, &index, 1);
+  TEST_ASSERT(index != 0);
+  myTable.x = myTable.x_area->ptr;
+  myTable.y = myTable.y_area->ptr;
+  logd("%i %f %f\n", index, myTable.x[index], myTable.y[index]);
+  TEST_ASSERT(myTable.x[index] == 4.5 && myTable.y[index] == 6.0);
+  
   return TEST_SUCCESS;
 
 }
