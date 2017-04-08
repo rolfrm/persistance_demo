@@ -180,16 +180,17 @@ void sorttable_inserts(sorttable * table, void * keys, void * values, size_t cnt
   sorttable_check_sanity(table);
   ASSERT(sorttable_keys_sorted(table, keys, cnt));
   u64 indexes[cnt];
-  sorttable_finds(table, keys, indexes, cnt);
+  memset(indexes, 0, sizeof(indexes));
   u64 newcnt = 0;
   if(table->is_multi_table){
     newcnt = cnt;
-    memset(indexes, 0, sizeof(indexes));
   }else{
+    sorttable_finds(table, keys, indexes, cnt);
     for(u64 i = 0; i < cnt; i++){
       if(indexes[i] == 0){
 	newcnt += 1;
       }else{
+	// overwrite existing values.
 	memcpy(table->value_area->ptr + table->value_size * indexes[i], values + table->value_size * i, table->value_size);
       }
     }

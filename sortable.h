@@ -294,10 +294,6 @@ void sorttable_destroy(sorttable * table);
       return ((ValueType *) table->ptr->value_area->ptr) + 1;\
     }
 
-
-
-
-       
 			 
 #define CREATE_TABLE2(Name, KeyType, ValueType)\
   _CREATE_TABLE2(Name, KeyType, ValueType, false, true)
