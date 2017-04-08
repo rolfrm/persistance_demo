@@ -864,8 +864,8 @@ bool test_abstract_sortable(){
   for(int j = 0; j < 2; j++){
     for(int i = 0; i < 40; i++){
       u64 key = i * 2;
-      f32 x = sin(0.1 * i);
-      f32 y = cos(0.1 * i);
+      f32 x = sin(0.1 * key);
+      f32 y = cos(0.1 * key);
       void * values[] = {(void *)&key, (void *)&x, (void *)&y};
       abstract_sorttable_inserts((abstract_sorttable *)&myTable, values, 1);
     }
@@ -876,12 +876,12 @@ bool test_abstract_sortable(){
   myTable.count = myTable.index_area->size / myTable.sizes[0] - 1;
   logd("COUNT: %i\n", myTable.count);
   ASSERT(myTable.count == 40);
-  bool test = false;
+  bool test = true;
   for(u32 i = 0; i < myTable.count; i++){
     if(test){
       u64 key = i * 2;
-      f32 x = sin(0.1 * i);
-      f32 y = cos(0.1 * i);
+      f32 x = sin(0.1 * key);
+      f32 y = cos(0.1 * key);
       ASSERT(myTable.index[i + 1] == key);
       ASSERT(myTable.x[i + 1] == x);
       ASSERT(myTable.y[i + 1] == y);
@@ -898,23 +898,18 @@ bool test_abstract_sortable(){
   myTable.y = myTable.y_area->ptr;
   myTable.index = myTable.index_area->ptr;
   myTable.count = myTable.index_area->size / myTable.sizes[0] - 1;
-  logd("COUNT: %i\n", myTable.count);
   ASSERT(myTable.count == 40 - array_count(keys_to_remove));
   
   for(u32 i = 0; i < myTable.count; i++){
-    logd("%i %f %f\n", myTable.index[i + 1], myTable.x[i + 1], myTable.y[i + 1]);
     if(test){
       ASSERT(myTable.index[i + 1] != 8 && myTable.index[i + 1] != 10 && myTable.index[i + 1] != 12);
       u32 _i = i * 2;
-      if(_i >12)
-	_i += 3 * 2;
+      if(_i >= 8)
+	_i = i * 2 + 6;
       f32 x = sin(0.1 * _i);
       f32 y = cos(0.1 * _i);
-      
       ASSERT(myTable.x[i + 1] == x);
       ASSERT(myTable.y[i + 1] == y);
-    }else{
-      
     }
   }
   return TEST_SUCCESS;
