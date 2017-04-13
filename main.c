@@ -840,9 +840,30 @@ void test_hydra();
 #include "abstract_sortable.h"
 #include "MyTableTest.h"
 #include "MyTableTest.c"
-
+#include "is_node.h"
+#include "is_node.c"
 
 bool test_abstract_sortable(){
+
+    is_node * table = is_node_create(NULL);
+  for(u32 key = 100; key < 200; key+=2){
+    logd("ITERATION: %i\n", key);
+    is_node_set(table, key);
+    for(u32 i = 0; i < table->count + 1; i++){
+      logd("key %i %i\n", i, table->index[i]);
+    }
+    ASSERT(is_node_try_get(table, &key));
+  }
+  
+  for(u32 key = 100; key < 200; key++){
+    if(key%2 == 0){
+      ASSERT(is_node_try_get(table, &key));
+    }else{
+      ASSERT(false == is_node_try_get(table, &key));
+    }
+  }
+
+  
   MyTableTest * myTable = MyTableTest_create("MyTable");
   abstract_sorttable_clear((abstract_sorttable*)myTable);
   for(int j = 0; j < 2; j++){
@@ -897,7 +918,14 @@ bool test_abstract_sortable(){
   TEST_ASSERT(index != 0);
   logd("%i %f %f\n", index, myTable->x[index], myTable->y[index]);
   TEST_ASSERT(myTable->x[index] == 4.5 && myTable->y[index] == 6.0);
-  
+  u64 idx = 20;
+  f32 x;
+  f32 y;
+  ASSERT(MyTableTest_try_get(myTable, &idx, &x, &y));
+  logd("%i %f %f\n", idx, x, y);
+  idx = 21;
+  ASSERT(MyTableTest_try_get(myTable, &idx, &x, &y) == false);
+
   return TEST_SUCCESS;
 
 }

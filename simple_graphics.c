@@ -2214,7 +2214,7 @@ void simple_graphics_editor_load(u64 id, u64 win_id){
   u64 console = intern_string("ccconsole!");
   
   set_simple_graphics_control(console, id);
-  color_alpha_set(gui->color_alpha, console, vec4_new(1,0,1,0.3));
+  color_alpha_set(gui->color_alpha, console, vec4_new(1,1,1,0.1));
   set_console_height(console, 300);
   create_console(console);
   add_control(id, console);

@@ -122,6 +122,7 @@ void abstract_sorttable_finds(abstract_sorttable * table, void * keys, u64 * ind
   void * end = key_area->ptr + key_area->size;
   
   for(u64 i = 0; i < cnt; i++){
+
     //if(end < start) break;
     u64 size = end - start;
     void * key_index = NULL;
@@ -130,12 +131,12 @@ void abstract_sorttable_finds(abstract_sorttable * table, void * keys, u64 * ind
     if(startcmp < 0) continue;
     if(startcmp == 0)
       key_index = start;
-    else if(table->cmp(key, end - key_size) > 0)
+    else if(table->cmp(key, end - key_size) > 0){
       return;
-    else
+    }else
       //key_index =memmem(start,size,key,table->key_size);
       key_index = bsearch(key, start, size / key_size, key_size, (void *)table->cmp);
-    
+
     if(key_index == 0){
       indexes[i] = 0;
     }else{
@@ -166,23 +167,24 @@ void abstract_sorttable_insert_keys(abstract_sorttable * table, void * keys, u64
   column_count -= 1;
 
   abstract_sorttable_check_sanity(table);  
-  void * pt = key_area->ptr;
-  void * end = pt + key_area->size - key_size * cnt;
+  void * pt = key_area->ptr + key_size;
+  void * end = key_area->ptr + key_area->size - key_size * cnt;
 
   void * vend[column_count];
   for(u32 i = 0; i < column_count; i++)
     vend[i] = column_area[i]->ptr + column_area[i]->size - column_size[i] * cnt;
   
   for(u64 i = 0; i < cnt; i++){
-    while(pt < end && table->cmp(pt, keys) <= 0)
+    while(pt < end && table->cmp(pt, keys) <= 0){
       pt += key_size;
+    }
     u64 offset = (pt - key_area->ptr) / key_size;
-
-    memmove(pt + key_size, pt , end - pt);
+    // move everything from keysize up
+    memmove(pt + key_size, pt , end - pt); 
     memmove(pt, keys, key_size);
 
     for(u32 j = 0; j < column_count; j++){
-      void * vpt = column_area[j]->ptr +  offset * column_size[j];
+      void * vpt = column_area[j]->ptr + offset * column_size[j];
       memmove(vpt + column_size[j], vpt, vend[j] - vpt);
       memset(vpt, 0, column_size[j]);
     }
