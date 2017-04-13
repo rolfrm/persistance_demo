@@ -80,19 +80,20 @@ void abstract_sorttable_init(abstract_sorttable * table,const char * table_name 
   mem_area ** mem_areas = get_mem_areas(table);
   void ** pointers = get_pointers(table);
   u64 * type_sizes = get_type_sizes(table);
-  u64 key_size = type_sizes[0];
-
+  u64 key_size = column_size[0];
   if(key_size == sizeof(u128))
     table->cmp = (void *) keycmp128;
-  else if(key_size == sizeof(u32))
+  else if(key_size == sizeof(u32)){
+
     table->cmp = (void *) keycmp32;
+  }
   else
     table->cmp = (void *) keycmp;
   
 
   for(u32 i = 0; i < column_count; i++){
     type_sizes[i] = column_size[i];
-    if(column_name[i] == NULL){
+    if(column_name[i] == NULL || table_name == NULL){
       mem_areas[i] = create_non_persisted_mem_area();
     }else{
       sprintf(pathbuf, "table2/%s.%s", table_name, column_name[i]);
