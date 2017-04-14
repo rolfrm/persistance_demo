@@ -41,11 +41,13 @@ u32 _index_table_free_index_count(index_table * table){
 void _index_table_free_index_count_set(index_table * table, u32 cnt){
   ((u32 *) table->free_indexes->ptr)[0] = cnt;
 }
+
 void * index_table_all(index_table * table, u64 * cnt){
   // return count -1 and a pointer from the placeholder element.
   *cnt = index_table_count(table) - 1;
   return table->area->ptr + table->element_size * 5;
 }
+
 void index_table_clear(index_table * table){
   index_table_count_set(table, 1);
   _index_table_free_index_count_set(table, 0);
@@ -329,7 +331,6 @@ void calc_voxel_surface(index_table * vox, u32 idx){
     was_initialized = true;
   }
   clear_voxel_collider();
-  UNUSED(vox);UNUSED(idx);
 
   void insert_surface(u32 idx2, int x, int y, int z, int lod){
     
@@ -835,108 +836,103 @@ void test_coroutines2(){
   logd("IT: %i\n", iteration);
 
 }
-
+#include <ecl/ecl.h>
 void test_hydra();
+
+
+void gui_demo();
 #include "abstract_sortable.h"
-#include "MyTableTest.h"
-#include "MyTableTest.c"
-#include "is_node.h"
-#include "is_node.c"
+
+typedef struct _MyTableTest{
+  u64 count;
+  u64 capacity;
+  bool is_multi_table;
+  const u32 column_count;
+  int (*cmp) (const u64 * k1, const u64 * k2);
+  u64 sizes[3];
+  u64 *  index;
+  f32 * x;
+  f32 * y;
+  mem_area * index_area;
+  mem_area * x_area;
+  mem_area * y_area;
+}MyTableTest;
 
 
 bool test_abstract_sortable(){
-
-    is_node * table = is_node_create(NULL);
-  for(u32 key = 100; key < 200; key+=2){
-    logd("ITERATION: %i\n", key);
-    is_node_set(table, key);
-    for(u32 i = 0; i < table->count + 1; i++){
-      logd("key %i %i\n", i, table->index[i]);
-    }
-    ASSERT(is_node_try_get(table, &key));
-  }
-  
-  for(u32 key = 100; key < 200; key++){
-    if(key%2 == 0){
-      ASSERT(is_node_try_get(table, &key));
-    }else{
-      ASSERT(false == is_node_try_get(table, &key));
-    }
-  }
-
-  
-  MyTableTest * myTable = MyTableTest_create("MyTable");
-  MyTableTest_clear(myTable);
+  MyTableTest myTable = {0};
+  u32 sizes[] = {sizeof(myTable.index[0]), sizeof(myTable.x[0]), sizeof(myTable.y[1])};
+  const char * names[] = {"index", "x", "y"};
+  abstract_sorttable_init((abstract_sorttable *)&myTable, "MyTable", 3, sizes, (char **) names);
+  abstract_sorttable_clear((abstract_sorttable*)&myTable);
   for(int j = 0; j < 2; j++){
     for(int i = 0; i < 40; i++){
       u64 key = i * 2;
-      f32 x = sin(0.1 * key);
-      f32 y = cos(0.1 * key);
+      f32 x = sin(0.1 * i);
+      f32 y = cos(0.1 * i);
       void * values[] = {(void *)&key, (void *)&x, (void *)&y};
-      abstract_sorttable_inserts((abstract_sorttable *)myTable, values, 1);
+      abstract_sorttable_inserts((abstract_sorttable *)&myTable, values, 1);
     }
   }
-  
-  logd("COUNT: %i\n", myTable->count);
-  ASSERT(myTable->count == 40);
-  bool test = true;
-  for(u32 i = 0; i < myTable->count; i++){
+  myTable.x = myTable.x_area->ptr;
+  myTable.y = myTable.y_area->ptr;
+  myTable.index = myTable.index_area->ptr;
+  myTable.count = myTable.index_area->size / myTable.sizes[0] - 1;
+  logd("COUNT: %i\n", myTable.count);
+  ASSERT(myTable.count == 40);
+  bool test = false;
+  for(u32 i = 0; i < myTable.count; i++){
     if(test){
       u64 key = i * 2;
-      f32 x = sin(0.1 * key);
-      f32 y = cos(0.1 * key);
-      ASSERT(myTable->index[i + 1] == key);
-      ASSERT(myTable->x[i + 1] == x);
-      ASSERT(myTable->y[i + 1] == y);
+      f32 x = sin(0.1 * i);
+      f32 y = cos(0.1 * i);
+      ASSERT(myTable.index[i + 1] == key);
+      ASSERT(myTable.x[i + 1] == x);
+      ASSERT(myTable.y[i + 1] == y);
     }else{
-      logd("%i %f %f\n", myTable->index[i + 1], myTable->x[i + 1], myTable->y[i + 1]);
+      logd("%i %f %f\n", myTable.index[i + 1], myTable.x[i + 1], myTable.y[i + 1]);
     }
   }
   u64 keys_to_remove[] = {8, 10, 12};
   u64 indexes_to_remove[array_count(keys_to_remove)];
   
-  abstract_sorttable_finds((abstract_sorttable *) myTable, keys_to_remove, indexes_to_remove, array_count(keys_to_remove));
-  abstract_sorttable_remove_indexes((abstract_sorttable *) myTable, indexes_to_remove, array_count(keys_to_remove));
-  myTable->count = myTable->index_area->size / myTable->sizes[0] - 1;
-  ASSERT(myTable->count == 40 - array_count(keys_to_remove));
+  abstract_sorttable_finds((abstract_sorttable *) &myTable, keys_to_remove, indexes_to_remove, array_count(keys_to_remove));
+  abstract_sorttable_remove_indexes((abstract_sorttable *) &myTable, indexes_to_remove, array_count(keys_to_remove));
+  myTable.x = myTable.x_area->ptr;
+  myTable.y = myTable.y_area->ptr;
+  myTable.index = myTable.index_area->ptr;
+  myTable.count = myTable.index_area->size / myTable.sizes[0] - 1;
+  logd("COUNT: %i\n", myTable.count);
+  ASSERT(myTable.count == 40 - array_count(keys_to_remove));
   
-  for(u32 i = 0; i < myTable->count; i++){
+  for(u32 i = 0; i < myTable.count; i++){
+    logd("%i %f %f\n", myTable.index[i + 1], myTable.x[i + 1], myTable.y[i + 1]);
     if(test){
-      ASSERT(myTable->index[i + 1] != 8 && myTable->index[i + 1] != 10 && myTable->index[i + 1] != 12);
+      ASSERT(myTable.index[i + 1] != 8 && myTable.index[i + 1] != 10 && myTable.index[i + 1] != 12);
       u32 _i = i * 2;
-      if(_i >= 8)
-	_i = i * 2 + 6;
+      if(_i >12)
+	_i += 3 * 2;
       f32 x = sin(0.1 * _i);
       f32 y = cos(0.1 * _i);
-      ASSERT(myTable->x[i + 1] == x);
-      ASSERT(myTable->y[i + 1] == y);
+      
+      ASSERT(myTable.x[i + 1] == x);
+      ASSERT(myTable.y[i + 1] == y);
+    }else{
+      
     }
   }
-  ASSERT(myTable->index[20] > 0);
-  MyTableTest_set(myTable, 100, 4.5, 6.0);
-  ASSERT(myTable->index[20] > 0);
-  u64 key = 100, index = 0;
-  MyTableTest_lookup(myTable, &key, &index, 1);
-  TEST_ASSERT(index != 0);
-  logd("%i %f %f\n", index, myTable->x[index], myTable->y[index]);
-  TEST_ASSERT(myTable->x[index] == 4.5 && myTable->y[index] == 6.0);
-  u64 idx = 20;
-  f32 x;
-  f32 y;
-  ASSERT(MyTableTest_try_get(myTable, &idx, &x, &y));
-  logd("%i %f %f\n", idx, x, y);
-  idx = 21;
-  ASSERT(MyTableTest_try_get(myTable, &idx, &x, &y) == false);
-  MyTableTest_print(myTable);
   return TEST_SUCCESS;
 
 }
 //int main2();
 int main(int argc, char ** argv){
+  
+
   if(argc == 2){
     logd("Setting data dir: %s\n", argv[1]);
     mem_area_set_data_directory(argv[1]);
   }
+
   //test_coroutines2();
   //return 0;
   //test_hydra();
@@ -954,13 +950,14 @@ int main(int argc, char ** argv){
   //TEST(test_elf_reader2);
   //TEST(test_elf_reader);
   TEST(test_abstract_sortable);
-  //return 0;
+  return 0;
   
   
   if (!glfwInit())
     return -1;
   //gui_demo();
+  return 0;
   TEST(index_table_test);
-  test_gui();
+  //test_gui();
   return 0;
 }
