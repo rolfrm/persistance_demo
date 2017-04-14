@@ -2,7 +2,7 @@ typedef struct _abstract_sorttable{
   char ** column_names;
   char ** column_types;
   u64 count;
-  bool is_multi_table;
+  const bool is_multi_table;
   const u32 column_count;
   int (*cmp) (void * k1, void * k2);
   void * tail;

@@ -31,11 +31,11 @@ static u64 * get_type_sizes(abstract_sorttable * table){
 }
 
 static mem_area ** get_mem_areas(abstract_sorttable * table){
-  return ((void *)  &table->tail) + sizeof(u64) * table->column_count + sizeof(void *) * table->column_count;
+  return (mem_area **)(&table->tail + table->column_count + table->column_count);
 }
 
 static void ** get_pointers(abstract_sorttable * table){
-  return ((void *)  &table->tail) + sizeof(u64) * table->column_count;
+  return &table->tail + table->column_count;
 }
 
 static bool indexes_unique_and_sorted(u64 * indexes, u64 cnt){

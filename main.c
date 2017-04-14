@@ -478,7 +478,7 @@ bool index_table_test(){
 
   }
   
-  if(false){// first test.
+  if(true){// first test.
     for(int k = 1; k < 5;k++){
       logd("K: %i\n", k);
       index_table * t = index_table_create(NULL, sizeof(i64));
@@ -845,7 +845,7 @@ void test_hydra();
 
 bool test_abstract_sortable(){
 
-    is_node * table = is_node_create(NULL);
+  is_node * table = is_node_create(NULL);
   for(u32 key = 100; key < 200; key+=2){
     logd("ITERATION: %i\n", key);
     is_node_set(table, key);
@@ -863,7 +863,6 @@ bool test_abstract_sortable(){
     }
   }
 
-  
   MyTableTest * myTable = MyTableTest_create("MyTable");
   MyTableTest_clear(myTable);
   for(int j = 0; j < 2; j++){
@@ -948,13 +947,13 @@ int main(int argc, char ** argv){
   //return 0;
   
   //table2_test();
-  //test_persist_oop();
-  //test_walls();
+  test_persist_oop();
+  test_walls();
   //TEST(test_elf_reader2);
   //TEST(test_elf_reader);
   TEST(test_abstract_sortable);
 
-  return 0;
+  //return 0;
   
   
   if (!glfwInit())
@@ -962,6 +961,6 @@ int main(int argc, char ** argv){
   //gui_demo();
 
   TEST(index_table_test);
-  test_gui();
+  //test_gui();
   return 0;
 }
