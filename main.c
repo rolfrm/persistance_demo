@@ -842,22 +842,8 @@ void test_hydra();
 
 void gui_demo();
 #include "abstract_sortable.h"
-
-typedef struct _MyTableTest{
-  u64 count;
-  u64 capacity;
-  bool is_multi_table;
-  const u32 column_count;
-  int (*cmp) (const u64 * k1, const u64 * k2);
-  u64 sizes[3];
-  u64 *  index;
-  f32 * x;
-  f32 * y;
-  mem_area * index_area;
-  mem_area * x_area;
-  mem_area * y_area;
-}MyTableTest;
-
+#include "MyTableTest.h"
+#include "MyTableTest.c"
 
 bool test_abstract_sortable(){
   MyTableTest myTable = {0};

@@ -1,4 +1,6 @@
 typedef struct _abstract_sorttable{
+  char ** column_names;
+  char ** column_types;
   u64 count;
   bool is_multi_table;
   const u32 column_count;
@@ -13,3 +15,4 @@ void abstract_sorttable_finds(abstract_sorttable * table, void * keys, u64 * ind
 void abstract_sorttable_inserts(abstract_sorttable * table, void ** values, u64 count);
 void abstract_sorttable_clear(abstract_sorttable * table);
 void abstract_sorttable_remove_indexes(abstract_sorttable * table, u64 * indexes, size_t index_count);
+void abstract_sorttable_print(abstract_sorttable * table);

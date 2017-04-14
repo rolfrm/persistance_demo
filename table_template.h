@@ -1,4 +1,6 @@
 typedef struct _TABLE_NAME{
+  char ** column_names;
+  char ** column_types;
   u64 count;
   const bool is_multi_table;
   const int column_count;
