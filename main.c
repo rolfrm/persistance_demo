@@ -843,6 +843,7 @@ void test_hydra();
 #include "is_node.h"
 #include "is_node.c"
 
+
 bool test_abstract_sortable(){
 
     is_node * table = is_node_create(NULL);
@@ -865,7 +866,7 @@ bool test_abstract_sortable(){
 
   
   MyTableTest * myTable = MyTableTest_create("MyTable");
-  abstract_sorttable_clear((abstract_sorttable*)myTable);
+  MyTableTest_clear(myTable);
   for(int j = 0; j < 2; j++){
     for(int i = 0; i < 40; i++){
       u64 key = i * 2;
@@ -911,8 +912,9 @@ bool test_abstract_sortable(){
       ASSERT(myTable->y[i + 1] == y);
     }
   }
-
+  ASSERT(myTable->index[20] > 0);
   MyTableTest_set(myTable, 100, 4.5, 6.0);
+  ASSERT(myTable->index[20] > 0);
   u64 key = 100, index = 0;
   MyTableTest_lookup(myTable, &key, &index, 1);
   TEST_ASSERT(index != 0);
@@ -925,7 +927,7 @@ bool test_abstract_sortable(){
   logd("%i %f %f\n", idx, x, y);
   idx = 21;
   ASSERT(MyTableTest_try_get(myTable, &idx, &x, &y) == false);
-
+  MyTableTest_print(myTable);
   return TEST_SUCCESS;
 
 }

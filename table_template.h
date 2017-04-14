@@ -4,6 +4,7 @@ typedef struct _TABLE_NAME{
   const int column_count;
   int (*cmp) (const INDEX_TYPE * k1, const INDEX_TYPE * k2);
   const u64 sizes[COLUMN_COUNT];
+
   VALUE_COLUMNS1;
   MEM_AREAS;
 }TABLE_NAME;
@@ -17,3 +18,5 @@ void TABLE_NAME_get_refs(TABLE_NAME * table, INDEX_TYPE * keys, u64 ** indexes, 
 void TABLE_NAME_clear(TABLE_NAME * table);
 void TABLE_NAME_unset(TABLE_NAME * table, INDEX_TYPE key);
 bool TABLE_NAME_try_get(TABLE_NAME * table, VALUE_COLUMNS3);
+void TABLE_NAME_print(TABLE_NAME * table);
+

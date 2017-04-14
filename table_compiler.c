@@ -46,6 +46,7 @@ void build_template(int argc, char ** argv, const char * template_file, const ch
   char * colsize = fmtstr("{%s}", string_join(array_count(columns2),", ", column_sizes));
   char * namearray = fmtstr("{%s}", string_join(array_count(columns2),", ", column_name_strs));
   char * columnptrs = fmtstr("{%s}", string_join(array_count(columns2),", ", column_pointers));
+  char * column_type_names = fmtstr("{\"%s\"}", string_join(array_count(columns2),"\", \"", column_types));
   replace_inplace(template, "VALUE_COLUMNS1", value_columns);
   replace_inplace(template, "VALUE_COLUMNS2", value_columns2);
   replace_inplace(template, "VALUE_COLUMNS3", value_columns3);
@@ -56,6 +57,8 @@ void build_template(int argc, char ** argv, const char * template_file, const ch
   replace_inplace(template, "COLUMN_COUNT", colcount);
   replace_inplace(template, "COLUMN_SIZES", colsize);
   replace_inplace(template, "COLUMN_NAMES", namearray);
+  replace_inplace(template, "COLUMN_TYPE_NAMES", column_type_names);
+
   replace_inplace(template, "COLUMN_POINTERS", columnptrs);
   write_buffer_to_file(template, strlen(template), output_file);
 }

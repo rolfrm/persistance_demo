@@ -195,3 +195,6 @@ bool nth_parse_u32(char * commands, u32 idx, u32 * result);
 bool nth_parse_f32(char * commands, u32 idx, f32 * result);
 bool nth_str_cmp(char * commands, u32 idx, const char * comp);
 bool is_whitespace(char c);
+
+void table_print_cell(void * ptr, const char * type);
+void add_table_printer(bool (*printer)(void * ptr, const char * type));

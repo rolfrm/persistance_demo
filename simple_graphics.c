@@ -15,6 +15,66 @@
 #include "console.h"
 #include "simple_graphics.h"
 
+bool (** printer_table)(void * ptr, const char * type) = NULL ;
+u64 printer_table_cnt = 0;
+
+bool pu64(u64 * p, const char * type){
+      if(strcmp(type, "u64") == 0){
+	
+	logd("%i", *p);
+	return true;
+      }
+      return false;
+    }
+bool pu32(u32 * p, const char * type){
+  if(strcmp(type, "u32") == 0){
+    logd("%i", *p);
+    return true;
+  }
+  return false;
+}
+
+bool pf32(f32 * p, const char * type){
+  if(strcmp(type, "f32") == 0){
+    logd("%f", *p);
+    return true;
+  }
+  return false;
+}
+index_table * init_printers(){
+  static index_table * printers = NULL;
+  if(printers == NULL){
+    printers = index_table_create(NULL, sizeof(printer_table));
+    
+    
+    add_table_printer((void *)pu64);
+
+    
+    add_table_printer((void *)pu32);
+    
+ 
+    add_table_printer((void *)pf32);
+  }
+  return printers;
+}
+
+void add_table_printer(bool (*printer)(void * ptr, const char * type)){
+  auto printers = init_printers();
+  u32 indx = index_table_alloc(printers);
+  ((void **)index_table_lookup(printers, indx))[0] = printer;
+  printer_table = index_table_all(printers, &printer_table_cnt);
+}
+
+void table_print_cell(void * ptr, const char * type){
+  init_printers();
+  for(u64 i = 0; i < printer_table_cnt; i++){
+    if(printer_table[i](ptr, type))
+      return;
+  }
+  logd("%s", type);
+}
+
+
 CREATE_TABLE2(material_y_offset, u32, f32);
 CREATE_TABLE2(desc_text, u64, name_data);
 CREATE_TABLE2(entity_type, u64, ENTITY_TYPE);
@@ -26,7 +86,6 @@ void set_desc_text2(u32 idx, u32 group, const char * str){
   name_data d = {0};
   memcpy(d.data, str, strlen(str));
   set_desc_text(id, d);
-  logd("%p\n", id);
 }
 
 bool get_desc_text2(u32 idx, u32 group, char * buf, u32 bufsize){

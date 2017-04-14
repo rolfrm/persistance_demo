@@ -209,7 +209,6 @@ void abstract_sorttable_inserts(abstract_sorttable * table, void ** values, u64 
 
   u64 * column_size = get_type_sizes(table);
   mem_area ** column_area = get_mem_areas(table);
-  void ** pointers = get_pointers(table);
   
   ASSERT(abstract_sorttable_keys_sorted(table, keys, cnt));
   u64 indexes[cnt];
@@ -263,7 +262,6 @@ void abstract_sorttable_inserts(abstract_sorttable * table, void ** values, u64 
       u64 idx = indexes2[i];
       ASSERT(indexes[i]);
       memcpy(column_area[j]->ptr + csize * indexes[i], values[j] + csize * idx, csize);
-      pointers[i] = column_area[j]->ptr;
     }
   }
 }
