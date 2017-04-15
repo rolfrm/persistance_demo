@@ -45,7 +45,8 @@ bool TABLE_NAME_try_get(TABLE_NAME * table, VALUE_COLUMNS3){
   if(__index == 0) return false;
   u32 sizes[] = COLUMN_SIZES;
   for(int i = 1; i < COLUMN_COUNT; i++){
-    memcpy(array[i], column_pointers[i] + __index * sizes[i], sizes[i]); 
+    if(column_pointers[i] != NULL)
+      memcpy(array[i], column_pointers[i] + __index * sizes[i], sizes[i]); 
   }
   return true;
 }
