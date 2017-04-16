@@ -306,7 +306,9 @@ void abstract_sorttable_remove_indexes(abstract_sorttable * table, u64 * indexes
     mem_area_realloc(column_area[j], table_cnt * size);
     pointers[j] = column_area[j]->ptr;
   }
+  table->count = column_area[0]->size / column_size[0] - 1;
   abstract_sorttable_check_sanity(table);
+  
 }
 
 void table_print_cell(void * ptr, const char * type);
@@ -315,7 +317,7 @@ void abstract_sorttable_print(abstract_sorttable * table){
   u64 * sizes = get_type_sizes(table);
   for(u32 i = 0; i < table->column_count;i++)
     logd("%s ", table->column_types[i]);
-  logd("\n");
+  logd("    rows: %i\n", table->count);
   for(u32 i = 0; i < table->count; i++){
     for(u32 j = 0; j < table->column_count;j++){
       table_print_cell(pointers[j] + (1 + i) * sizes[j], table->column_types[j]);

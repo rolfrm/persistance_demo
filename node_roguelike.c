@@ -34,15 +34,16 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
   if(nth_str_cmp(commands, 0, "set_node")){
     if(is_node_try_get(is_node_table, &entity)){
       is_node_unset(is_node_table, entity);
-      logd("Entity %i is node.\n", entity);
+      logd("Entity %i is not node.\n", entity);
     }
     else{
       is_node_set(is_node_table, entity);
-      logd("Entity %i is not node.\n", entity);
+      logd("Entity %i is node.\n", entity);
 
     }
     return true;
   }
+
   if(nth_str_cmp(commands, 0, "connect")){
     u32 entity2 = 0;
     if(nth_parse_u32(commands, 2, &entity2) == false && ctx->selection_kind == SELECTED_ENTITY){
@@ -66,7 +67,6 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
       u64 indexes[count];
       connected_nodes_iter(connected_nodes_table, &entity, 1, NULL, indexes, count, NULL);
       for(u32 i = 0; i < count; i++){
-	logd("%i, %i ?? %i ?? %i\n", indexes[i], connected_nodes_table->n2[indexes[i]], entity2, entity);
 	if(connected_nodes_table->n2[indexes[i]] == entity2){
 	  logd("Node %i and %i are already connected!\n", entity, entity2);
 	  return true;
@@ -74,24 +74,18 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
       }
     }
 
-    
     connected_nodes_set(connected_nodes_table, entity, entity2);
     connected_nodes_set(connected_nodes_table, entity2, entity);
     logd("Connected %i %i\n", entity2, entity);
     return true;
   }
   
-  
   return false;
 }
 
 void node_roguelike_update(graphics_context * ctx){
   UNUSED(ctx);
-  logd("%i:", is_node_table->count);
-  for(u32 i = 0; i < is_node_table->count; i++){
-    logd(" %i ", is_node_table->index[i]);
-  }
-  logd("\n");
+  is_node_print(is_node_table);
 }
 
 void load_bezier_into_model(u32 model){
