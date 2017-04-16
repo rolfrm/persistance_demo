@@ -45,7 +45,7 @@ bool TABLE_NAME_try_get(TABLE_NAME * table, VALUE_COLUMNS3){
   if(__index == 0) return false;
   u32 sizes[] = COLUMN_SIZES;
   for(int i = 1; i < COLUMN_COUNT; i++){
-    if(column_pointers[i] != NULL)
+    if(array[i] != NULL)
       memcpy(array[i], column_pointers[i] + __index * sizes[i], sizes[i]); 
   }
   return true;
@@ -53,4 +53,9 @@ bool TABLE_NAME_try_get(TABLE_NAME * table, VALUE_COLUMNS3){
 
 void TABLE_NAME_print(TABLE_NAME * table){
   abstract_sorttable_print((abstract_sorttable *) table);
+}
+
+u64 TABLE_NAME_iter(TABLE_NAME * table, INDEX_TYPE * keys, size_t keycnt, INDEX_TYPE * optional_keys_out, u64 * indexes, u64 cnt, u64 * iterator){
+  return abstract_sorttable_iter((abstract_sorttable *) table, keys, keycnt, optional_keys_out, indexes, cnt, iterator);
+
 }

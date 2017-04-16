@@ -22,4 +22,4 @@ void TABLE_NAME_clear(TABLE_NAME * table);
 void TABLE_NAME_unset(TABLE_NAME * table, INDEX_TYPE key);
 bool TABLE_NAME_try_get(TABLE_NAME * table, VALUE_COLUMNS3);
 void TABLE_NAME_print(TABLE_NAME * table);
-
+u64 TABLE_NAME_iter(TABLE_NAME * table, INDEX_TYPE * keys, size_t keycnt, INDEX_TYPE * optional_keys_out, u64 * indexes, u64 cnt, u64 * iterator);

@@ -16,3 +16,4 @@ void abstract_sorttable_inserts(abstract_sorttable * table, void ** values, u64 
 void abstract_sorttable_clear(abstract_sorttable * table);
 void abstract_sorttable_remove_indexes(abstract_sorttable * table, u64 * indexes, size_t index_count);
 void abstract_sorttable_print(abstract_sorttable * table);
+size_t abstract_sorttable_iter(abstract_sorttable * table, void * keys, size_t keycnt, void * out_keys, u64 * indexes, size_t cnt, size_t * idx);
