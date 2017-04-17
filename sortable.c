@@ -255,7 +255,11 @@ void sorttable_removes(sorttable * table, void * keys, size_t cnt){
 }
 
 size_t sorttable_iter(sorttable * table, void * keys, size_t keycnt, void * out_keys, u64 * indexes, size_t cnt, size_t * idx){
+  u64 idx_replacement = 0;
   u64 orig_cnt = cnt;
+  if(idx == NULL)
+    idx = &idx_replacement;
+  
   if(*idx == 0) *idx = 1;
   for(u64 i = 0; i < keycnt; i++){
     void * key = keys + i * table->key_size;

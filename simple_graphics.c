@@ -2,6 +2,7 @@
 #include <iron/full.h>
 #include "persist.h"
 #include "sortable.h"
+#include "abstract_sortable.h"
 #include "persist_oop.h"
 #include "shader_utils.h"
 #include "game.h"
@@ -207,6 +208,7 @@ void graphics_context_load(graphics_context * ctx){
   ctx->material_y_offset = material_y_offset_table_create("simple/material-y-offset");
   ctx->entity_velocity = entity_velocity_table_create("simple/entity-velocity");
   ctx->entity_acceleration = entity_acceleration_table_create("simple/entity-acceleration");
+  ctx->game_event_table = game_events_create(NULL);
 }
 CREATE_TABLE_DECL2(current_loaded_modules, u32, u32);
 CREATE_TABLE_NP(current_loaded_modules, u32, u32);
@@ -2113,7 +2115,7 @@ void simple_grid_render(u64 id){
   u32 error = glGetError();
   if(error > 0)
     logd("GL ERROR: %i\n", error);
-  clear_game_event();
+  game_events_clear(gd.game_event_table);
 }
 
 void simple_grid_game_mouse_over_func(u64 grid_id, double x, double y, u64 method){
@@ -2216,7 +2218,7 @@ void simple_game_point_collision(graphics_context ctx, u32 * entities, u32 entit
   }
 }
 
-CREATE_TABLE2(game_event, u32, game_event);
+#include "game_events.c"
 u32 game_event_index_new(){
   static u32 * ptr = NULL;
   if(ptr == NULL){
@@ -2236,7 +2238,7 @@ void simple_grid_game_mouse_down_func(u64 grid_id, double x, double y, u64 metho
   p = vec2_scale(p, gd.zoom);
   vec2 v2 = vec2_add(p, gd.offset);
   if(mouse_button_action != mouse_button_repeat)
-    set_game_event(game_event_index_new(), (game_event){.kind = GAME_EVENT_MOUSE_BUTTON, .mouse_button.game_position = v2, .mouse_button.button = mouse_button_button,
+    game_events_set(ctx.game_event_table, game_event_index_new(), (game_event){.kind = GAME_EVENT_MOUSE_BUTTON, .mouse_button.game_position = v2, .mouse_button.button = mouse_button_button,
 	  .mouse_button.pressed = mouse_button_action == mouse_button_press});
   if(mouse_button_button == mouse_button_right && mouse_button_action != mouse_button_repeat){
     if(gd.mouse_state){

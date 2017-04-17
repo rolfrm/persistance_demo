@@ -140,7 +140,7 @@ typedef struct{
 }game_event;
 
 u32 game_event_index_new();
-CREATE_TABLE_DECL2(game_event, u32, game_event);
+#include "game_events.h"
 
 typedef struct {
   u32 selected_entity;
@@ -174,7 +174,7 @@ struct _graphics_context{
   material_y_offset_table * material_y_offset;
   entity_acceleration_table * entity_acceleration;
   entity_velocity_table * entity_velocity;
-  
+  game_events * game_event_table;
   u32 game_id;
 };
 

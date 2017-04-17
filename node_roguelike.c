@@ -15,16 +15,19 @@
 #include "console.h"
 #include "simple_graphics.h"
 #include "abstract_sortable.h"
-#include "is_node.h"
-#include "is_node.c"
+#include "u32_lookup.h"
 #include "line_element.h"
 #include "line_element.c"
 #include "connected_nodes.h"
 #include "connected_nodes.c"
 #include "connection_entities.h"
 #include "connection_entities.c"
+#include "character_table.h"
+#include "character_table.c"
+u32_lookup * is_node_table;
+u32_lookup * is_selected_table;
 
-is_node * is_node_table;
+character_table * characters;
 index_table * bezier_curve_table;
 line_element * line_element_table;
 connected_nodes * connected_nodes_table;
@@ -84,19 +87,19 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
   u32 entity = 0;
   if(nth_parse_u32(commands, 1, &entity) == false && ctx->selection_kind == SELECTED_ENTITY)
     entity = ctx->selected_index;
-  if(nth_str_cmp(commands, 0, "set_node")){
-    if(is_node_try_get(is_node_table, &entity)){
-      is_node_unset(is_node_table, entity);
+  if(nth_str_cmp(commands, 0, "set-node")){
+    if(u32_lookup_try_get(is_node_table, &entity)){
+      u32_lookup_unset(is_node_table, entity);
       logd("Entity %i is not node.\n", entity);
     }
     else{
-      is_node_set(is_node_table, entity);
+      u32_lookup_set(is_node_table, entity);
       logd("Entity %i is node.\n", entity);
     }
     return true;
   }
   if(nth_str_cmp(commands, 0, "node-list")){
-    is_node_print(is_node_table);
+    u32_lookup_print(is_node_table);
     return true;
   }
   
@@ -138,13 +141,78 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
     
     return true;
   }
+
+  if(nth_str_cmp(commands, 0, "is-character")){
+    u32 entity = ctx->selected_index;
+    if(ctx->selection_kind != SELECTED_ENTITY || ctx->selected_index == 0){
+      logd("Invalid entity\n");
+    }else if(u32_lookup_try_get(is_node_table, &entity)){
+      logd("A node cannot be a character\n");
+    }else{
+
+      u32 node;
+      if(character_table_try_get(characters, &entity, &node)){
+	character_table_unset(characters, entity);
+	logd("Entity %i is not character.\n", entity);
+      }
+      else{
+	u32 node = 0;
+	if(nth_parse_u32(commands, 1, &node) == false || node == 0 || !u32_lookup_try_get(is_node_table, &node)){
+	  logd("Second argument must be a node!\n");
+	}else{
+	  character_table_set(characters, entity, node);
+	  logd("Entity %i is character.\n", entity);
+	}
+      }
+    }
+    return true;
+  }
+  
+  if(nth_str_cmp(commands, 0, "is-selected")){
+    u32 cnt = 0;
+    u32 buf = 0;
+    while(nth_parse_u32(commands, 1 + cnt, &buf)) cnt++;
+    u32 items[cnt];
+    for(u32 i = 0; i < cnt; i++){
+      if(!nth_parse_u32(commands, 1 + i, items + i) || items[i] == 0){
+	logd("item #%i is not an integer bigget than 0.");
+	return true;
+      }
+    }
+    int cmpfnc(u32 * a, u32 * b){
+      if(*a > *b)
+	return 1;
+      else if(*a < *b)
+	return -1;
+      return 0;
+    }
+    qsort(items, cnt, sizeof(u32), (void *) cmpfnc);
+    for(u32 i = 0; i < cnt; i++){
+      logd("selecting: %i: %i\n", i + 1, items[i]);
+    }
+    u32_lookup_clear(is_selected_table);
+    u32_lookup_insert(is_selected_table, items, cnt);
+    u32_lookup_print(is_selected_table);
+    return true;
+    }
   
   return false;
 }
 
 void node_roguelike_update(graphics_context * ctx){
   UNUSED(ctx);
-  //is_node_print(is_node_table);
+  //u32_lookup_print(is_node_table);
+  u32 cnt = ctx->game_event_table->count;
+  if(cnt > 0){
+    logd("Game events: %i\n", cnt);
+    game_event * events = ctx->game_event_table->event + 1;
+    for(u32 i = 0; i < cnt; i++){
+      game_event evt = events[i];
+      logd("Game event %i: %i %i %f %f\n", i, evt.kind, evt.mouse_button.button, evt.mouse_button.pressed, evt.mouse_button.game_position.x, evt.mouse_button.game_position.y);
+
+    }
+
+  }
 }
 
 void load_bezier_into_model(u32 model){
@@ -204,9 +272,11 @@ void init_module(graphics_context * ctx){
   is_initialized = true;
   
   logd("INIT node roguelike MODULE\n");
-  is_node_table = is_node_create("is_node");
+  is_node_table = u32_lookup_create("is_node");
+  characters = character_table_create("characters");
   bezier_curve_table = index_table_create("bezier", sizeof(vec2));
   line_element_table = line_element_create("line_elements");
+  is_selected_table = u32_lookup_create("selected-entities");
   connected_nodes_table = connected_nodes_create("connected_nodes");
   connection_entities_table = connection_entities_create("connection_entities");
   ((bool *)&connected_nodes_table->is_multi_table)[0] = true;

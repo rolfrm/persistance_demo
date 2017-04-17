@@ -840,39 +840,46 @@ void test_hydra();
 #include "abstract_sortable.h"
 #include "MyTableTest.h"
 #include "MyTableTest.c"
-#include "is_node.h"
-#include "is_node.c"
+#include "u32_lookup.h"
+#include "u32_lookup.c"
 
 bool test_abstract_sortable(){
 
-  is_node * table = is_node_create(NULL);
+  u32_lookup * table = u32_lookup_create(NULL);
   for(u32 key = 100; key < 200; key+=2){
     logd("ITERATION: %i\n", key);
-    is_node_set(table, key);
+    u32_lookup_set(table, key);
     for(u32 i = 0; i < table->count + 1; i++){
-      logd("key %i %i\n", i, table->index[i]);
+      logd("key %i %i\n", i, table->key[i]);
     }
-    ASSERT(is_node_try_get(table, &key));
+    ASSERT(u32_lookup_try_get(table, &key));
   }
   
   for(u32 key = 100; key < 200; key++){
     if(key%2 == 0){
-      ASSERT(is_node_try_get(table, &key));
+      ASSERT(u32_lookup_try_get(table, &key));
     }else{
-      ASSERT(false == is_node_try_get(table, &key));
+      ASSERT(false == u32_lookup_try_get(table, &key));
     }
   }
 
   MyTableTest * myTable = MyTableTest_create("MyTable");
   MyTableTest_clear(myTable);
   for(int j = 0; j < 2; j++){
+    u64 keys[40];
+    f32 xs[40];
+    f32 ys[40];
+    
     for(int i = 0; i < 40; i++){
       u64 key = i * 2;
+
       f32 x = sin(0.1 * key);
       f32 y = cos(0.1 * key);
-      void * values[] = {(void *)&key, (void *)&x, (void *)&y};
-      abstract_sorttable_inserts((abstract_sorttable *)myTable, values, 1);
+      keys[i] = key;
+      xs[i] = x;
+      ys[i] = y;
     }
+    MyTableTest_insert(myTable, keys, xs, ys, 40);
   }
   
   logd("COUNT: %i\n", myTable->count);

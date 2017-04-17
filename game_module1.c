@@ -328,8 +328,8 @@ void game1_interactions_update(graphics_context * ctx){
   }
 
   float heat = ambient_heat;
-  game_event * ge = get_values_game_event();
-  u64 count = get_count_game_event();
+  game_event * ge = ctx->game_event_table->event + 1;
+  u64 count = ctx->game_event_table->count;
   for(u32 i = 0; i < count; i++){
     if(ge[i].mouse_button.button != mouse_button_left)
       continue;
