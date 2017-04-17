@@ -110,7 +110,7 @@ void abstract_sorttable_init(abstract_sorttable * table,const char * table_name 
     
     pointers[i] = mem_areas[i]->ptr;
   }
-  
+  table->count = mem_areas[0]->size / key_size - 1;
   abstract_sorttable_check_sanity(table);
 }
 
@@ -292,11 +292,11 @@ void abstract_sorttable_remove_indexes(abstract_sorttable * table, u64 * indexes
   void ** pointers = get_pointers(table);
   
   const u64 _table_cnt = column_area[0]->size / column_size[0];
-  table->count = _table_cnt - cnt;
   for(u32 j = 0; j < table->column_count; j++){
     u64 table_cnt = _table_cnt;
     void * pt = column_area[j]->ptr;
     u64 size = column_size[j];
+
     for(u64 _i = 0; _i < cnt; _i++){
       u64 i = cnt - _i - 1;
       u64 index = indexes[i];
