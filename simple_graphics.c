@@ -46,13 +46,8 @@ index_table * init_printers(){
   if(printers == NULL){
     printers = index_table_create(NULL, sizeof(printer_table));
     
-    
     add_table_printer((void *)pu64);
-
-    
     add_table_printer((void *)pu32);
-    
- 
     add_table_printer((void *)pf32);
   }
   return printers;
@@ -758,11 +753,13 @@ void simple_graphics_editor_render(u64 id){
       v1.y = floor(v1.y);
       v2.x = ceil(v2.x);
       v2.y = ceil(v2.y);
+
       if(v2.x - v1.x < 100){
+
 	for(;v1.y < v2.y; v1.y += 1){
 	  vec4 v = vec4_new(px * grid_width, v1.y * grid_width,0,1);
 	  v = mat4_mul_vec4(editor_tform, v);
-	  mat4 cam = mat4_translate(v.x + 1, v.y, v.z);
+	  mat4 cam = mat4_translate(v.x + 1, v.y, 0);
 	  auto loaded = simple_grid_load_polygon(gd, poly);
 	  glBindBuffer(GL_ARRAY_BUFFER, loaded.gl_ref);
 	  simple_grid_shader shader = simple_grid_shader_get();
@@ -781,7 +778,7 @@ void simple_graphics_editor_render(u64 id){
 	for(;v1.x < v2.x; v1.x += 1){
 	  vec4 v = vec4_new(v1.x * grid_width, py * grid_width,0,1);
 	  v = mat4_mul_vec4(editor_tform, v);
-	  mat4 cam = mat4_mul(mat4_translate(v.x, v.y + 1, v.z), rot);
+	  mat4 cam = mat4_mul(mat4_translate(v.x, v.y + 1, 0), rot);
 	  auto loaded = simple_grid_load_polygon(gd, poly);
 	  glBindBuffer(GL_ARRAY_BUFFER, loaded.gl_ref);
 	  simple_grid_shader shader = simple_grid_shader_get();
