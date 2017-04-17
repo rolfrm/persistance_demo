@@ -21,11 +21,64 @@
 #include "line_element.c"
 #include "connected_nodes.h"
 #include "connected_nodes.c"
+#include "connection_entities.h"
+#include "connection_entities.c"
 
 is_node * is_node_table;
 index_table * bezier_curve_table;
 line_element * line_element_table;
 connected_nodes * connected_nodes_table;
+connection_entities * connection_entities_table;
+void load_connection_entity(graphics_context * ctx, u32 entity, u32 entity2){
+  if(entity > entity2)
+    SWAP(entity, entity2);
+  u64 connection_id = ((u64)entity) | ((u64)entity2) << 32;
+  u32 ced = 0;
+  if(connection_entities_try_get(connection_entities_table, &connection_id, &ced) == false){
+    ced = index_table_alloc(ctx->entities);
+    connection_entities_set(connection_entities_table, connection_id, ced);
+    active_entities_set(ctx->active_entities, ced, true);
+  }
+  logd("load connection entity %i %i %i\n", entity, entity2, ced);
+  entity_data * ed = index_table_lookup(ctx->entities, ced);
+  entity_data * e1 = index_table_lookup(ctx->entities, entity);
+  entity_data * e2 = index_table_lookup(ctx->entities, entity2);
+  if(e1 == NULL || e2 == NULL)
+    return;
+  if(ed->model == 0){
+    ed->model = index_table_alloc(ctx->models);
+  }
+  model_data * md = index_table_lookup(ctx->models, ed->model);
+  if(md->polygons.index == 0){
+    md->polygons = index_table_alloc_sequence(ctx->polygon, 1);
+  }
+  polygon_data * pd = index_table_lookup_sequence(ctx->polygon, md->polygons);
+  if(pd->vertexes.index == 0){
+    index_table_resize_sequence(ctx->vertex, &(pd->vertexes), 4);
+  }
+  if(pd->material == 0){
+    pd->material = get_unique_number();
+    polygon_color_set(ctx->poly_color, pd->material, vec4_new(0,0,0,1));
+  }
+  vertex_data * vd = index_table_lookup_sequence(ctx->vertex, pd->vertexes);
+  vec2 p1 = vec2_new(e1->position.x, e1->position.z);;
+  vec2 p2 = vec2_new(e2->position.x, e2->position.z);;
+  vec2 pdd = vec2_sub(p2, p1);
+  vec2 pn = vec2_normalize(pdd);
+  pn = vec2_new(pn.y * 0.02, -pn.x * 0.02);
+  vec2 pn2 = vec2_scale(pn, -1);
+  vd[0].position = vec2_add(p1, pn);
+  vd[1].position = vec2_add(p1, pn2);
+  vd[2].position = vec2_add(p2, pn);
+  vd[3].position = vec2_add(p2, pn2);
+  for(int i = 0; i < 4; i++){
+    vec2_print(vd[i].position);
+    logd(" ");
+  }
+  logd("\n");
+  //graphics_context_reload_polygon(*ctx, ced);
+}
+
 bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char * commands){
   UNUSED(gctx);
   u32 entity = 0;
@@ -39,10 +92,14 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
     else{
       is_node_set(is_node_table, entity);
       logd("Entity %i is node.\n", entity);
-
     }
     return true;
   }
+  if(nth_str_cmp(commands, 0, "node-list")){
+    is_node_print(is_node_table);
+    return true;
+  }
+  
 
   if(nth_str_cmp(commands, 0, "connect")){
     u32 entity2 = 0;
@@ -77,6 +134,8 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
     connected_nodes_set(connected_nodes_table, entity, entity2);
     connected_nodes_set(connected_nodes_table, entity2, entity);
     logd("Connected %i %i\n", entity2, entity);
+    load_connection_entity(gctx, entity, entity2);
+    
     return true;
   }
   
@@ -85,7 +144,7 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
 
 void node_roguelike_update(graphics_context * ctx){
   UNUSED(ctx);
-  is_node_print(is_node_table);
+  //is_node_print(is_node_table);
 }
 
 void load_bezier_into_model(u32 model){
@@ -149,6 +208,7 @@ void init_module(graphics_context * ctx){
   bezier_curve_table = index_table_create("bezier", sizeof(vec2));
   line_element_table = line_element_create("line_elements");
   connected_nodes_table = connected_nodes_create("connected_nodes");
+  connection_entities_table = connection_entities_create("connection_entities");
   ((bool *)&connected_nodes_table->is_multi_table)[0] = true;
   index_table_clear(bezier_curve_table);
   if(line_element_table->count == 0){
