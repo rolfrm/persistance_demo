@@ -1114,18 +1114,30 @@ void simple_game_editor_invoke_command(graphics_context * ctx, editor_context * 
 	  }
 	  graphics_context_reload_polygon(*ctx, editor->selected_index);
 	}
-	
-
-	if(snd("zoom")){
-
-	  char buf[20];
-	  if(copy_nth(command, 2, buf, array_count(buf))){
-	    float v = 1.0;
-	    sscanf(buf,"%f", &v);
-	    editor->zoom = v;
+	{
+	  bool game_zoom = false;
+	  if(snd("zoom") || (game_zoom = snd("game-zoom"))){
+	    f32 zoom = 1.0;
+	    if(nth_parse_f32(command, 2, &zoom)){
+	      if(zoom <= 0){
+		loge("Zoom cannot be <= 0. Selected value: %f\n", zoom);
+	      }else{
+		if(game_zoom){
+		  u64 game = get_alternative_control(ctx->game_id);
+		  game_data _gd = get_simple_game_data(game);
+		  ASSERT(_gd.zoom > 0);
+		  _gd.zoom = zoom;
+		  set_simple_game_data(game, _gd);
+		}else{
+		  editor->zoom = zoom;
+		}
+		logd("ZOOM: %f\n", zoom);
+	      }
+	    }
+	    
 	  }
-	  logd("ZOOM: %f\n", editor->zoom);
 	}
+	
 
 	if(snd("gravity") && editor->selected_index != 0  && editor->selection_kind == SELECTED_ENTITY){
 	  char buf[20];
@@ -2294,8 +2306,9 @@ void simple_graphics_editor_load(u64 id, u64 win_id){
   set_game_window(game, win_id);
   
   //if(once(game)){
-    game_data _gd = get_simple_game_data(game);
-    _gd.zoom = 0.4;
+  game_data _gd = get_simple_game_data(game);
+    if(_gd.zoom < 0.001)
+      _gd.zoom = 0.4;
     set_simple_game_data(game, _gd);
     //}
   
