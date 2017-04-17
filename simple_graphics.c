@@ -1350,14 +1350,16 @@ void simple_game_editor_invoke_command(graphics_context * ctx, editor_context * 
 	loge("ERROR: polygon == 0");
 	return;
       }
-      vec2 avg = vec2_infinity;
+      vec2 avg = vec2_zero;
       {
 	polygon_data * pd = index_table_lookup(ctx->polygon, polygon);
 	vertex_data * v = index_table_lookup_sequence(ctx->vertex, pd->vertexes);
-	for(u32 i = 0; i < pd->vertexes.count; i++){
-	  avg = vec2_min(avg, v[i].position);
+	if(pd->vertexes.count > 0){
+	  for(u32 i = 0; i < pd->vertexes.count; i++){
+	    avg = vec2_add(avg, v[i].position);
+	  }
+	  avg = vec2_scale(avg, 1.0f / pd->vertexes.count);
 	}
-	//avg = vec2_scale(avg, 1.0f / pd->vertexes.count);
       }
       model_data * md = index_table_lookup(ctx->models, model);
       polygon_data * pd = index_table_lookup_sequence(ctx->polygon, md->polygons);
