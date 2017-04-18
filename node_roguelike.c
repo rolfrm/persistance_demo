@@ -204,11 +204,23 @@ void node_roguelike_update(graphics_context * ctx){
   //u32_lookup_print(is_node_table);
   u32 cnt = ctx->game_event_table->count;
   if(cnt > 0){
-    logd("Game events: %i\n", cnt);
+
     game_event * events = ctx->game_event_table->event + 1;
     for(u32 i = 0; i < cnt; i++){
       game_event evt = events[i];
-      logd("Game event %i: %i %i %f %f\n", i, evt.kind, evt.mouse_button.button, evt.mouse_button.pressed, evt.mouse_button.game_position.x, evt.mouse_button.game_position.y);
+      if(evt.mouse_button.button == mouse_button_left && evt.mouse_button.pressed){
+	static index_table * tab = NULL;
+	if(tab == NULL) tab = index_table_create(NULL, sizeof(entity_local_data));
+	index_table_clear(tab);
+	vec2 pt = evt.mouse_button.game_position;
+	simple_game_point_collision(*ctx, is_node_table->key + 1, is_node_table->count, pt, tab);
+	u64 hitcnt = 0;
+	u32 * e = index_table_all(tab, &hitcnt);
+	logd("Hit: %i %i\n", hitcnt, is_node_table->count);
+	for(u32 i = 0; i < hitcnt; i++){
+	  logd("%i: %i\n", i, e[i]);
+	}
+      }
 
     }
 

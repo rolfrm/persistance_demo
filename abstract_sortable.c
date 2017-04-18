@@ -246,8 +246,7 @@ void abstract_sorttable_inserts(abstract_sorttable * table, void ** values, u64 
   memset(indexes2, 0, sizeof(indexes2));
   {
     u32 csize = column_size[0];
-    u64 newsize = newcnt * csize;
-    u8 newvalues[newsize];
+    void * newvalues = calloc(newcnt, csize);
     u64 offset = 0;
     for(u64 i = 0; i < cnt; i++){
       if(indexes[i] == 0){
