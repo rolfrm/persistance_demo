@@ -216,15 +216,35 @@ void node_roguelike_update(graphics_context * ctx){
 	simple_game_point_collision(*ctx, is_node_table->key + 1, is_node_table->count, pt, tab);
 	u64 hitcnt = 0;
 	u32 * e = index_table_all(tab, &hitcnt);
-	logd("Hit: %i %i\n", hitcnt, is_node_table->count);
-	for(u32 i = 0; i < hitcnt; i++){
-	  logd("%i: %i\n", i, e[i]);
+	if(hitcnt > 0){
+	  u64 indexes[is_selected_table->count];
+	  character_table_lookup(characters, is_selected_table->key + 1, indexes, is_selected_table->count);
+	  for(u32 i = 0; i < is_selected_table->count; i++){
+	    characters->node[indexes[i]] = e[0];
+	  }
 	}
       }
-
     }
-
   }
+
+  for(u32 i = 0; i < characters->count; i++){
+    u32 entity = characters->entity[i + 1];
+    u32 nodeid = characters->node[i + 1];
+    entity_data * ed = index_table_lookup(ctx->entities, entity);
+    entity_data * node = index_table_lookup(ctx->entities, nodeid);
+    ASSERT(ed != NULL);
+    ASSERT(node != NULL);
+    vec3 n2c = vec3_sub(node->position, ed->position);
+    auto len = vec3_len(n2c);
+    if(len > 0.2){
+
+      vec3 d = vec3_scale(n2c, 0.3 * 1.0 / len);
+      entity_velocity_set(ctx->entity_velocity, entity, d);
+    }else{
+      entity_velocity_unset(ctx->entity_velocity, entity);
+    } 
+  }
+  
 }
 
 void load_bezier_into_model(u32 model){
