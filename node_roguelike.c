@@ -1,21 +1,14 @@
-#include <GL/glew.h>
 #include <iron/full.h>
 #include "persist.h"
 #include "sortable.h"
 #include "persist_oop.h"
-#include "shader_utils.h"
-#include "game.h"
-
-#include <GLFW/glfw3.h>
-
 #include "gui.h"
-#include "gui_test.h"
 #include "index_table.h"
-#include "game_board.h"
-#include "console.h"
 #include "simple_graphics.h"
 #include "abstract_sortable.h"
 #include "u32_lookup.h"
+#include "u32_to_u32.h"
+#include "u32_to_u32.c"
 #include "line_element.h"
 #include "line_element.c"
 #include "connected_nodes.h"
@@ -24,9 +17,9 @@
 #include "connection_entities.c"
 #include "character_table.h"
 #include "character_table.c"
+#include "node_roguelike.h"
 u32_lookup * is_node_table;
 u32_lookup * is_selected_table;
-
 character_table * characters;
 index_table * bezier_curve_table;
 line_element * line_element_table;
@@ -195,6 +188,57 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
     u32_lookup_print(is_selected_table);
     return true;
     }
+  if(nth_str_cmp(commands, 0, "nr-load-player")){
+    if(ctx->selection_kind != SELECTED_ENTITY || ctx->selected_index == 0){
+      logd("Invalid entity\n");
+    }else{
+      u32 entity = ctx->selected_index;
+      while(u32_to_u32_try_get(ui_subnodes, &entity, NULL))
+	u32_to_u32_remove(ui_subnodes, &entity, 1);
+      
+      {
+	u32 nodeid = 0xFF01;
+	u32_to_u32_set(ui_subnodes, entity, nodeid);
+	u32_to_u32_set(ui_node_actions, nodeid, intern_string("inventory"));
+
+	while(u32_to_u32_try_get(ui_subnodes, &nodeid, NULL))
+	  u32_to_u32_remove(ui_subnodes, &nodeid, 1);
+	{
+	  
+	  u32 nodeid2 = 0xFF04;
+	  u32_to_u32_set(ui_subnodes, nodeid , nodeid2);
+	  u32_to_u32_set(ui_node_actions, nodeid2, intern_string("apple"));
+	}
+	{
+	  u32 nodeid2 = 0xFF05;
+	  u32_to_u32_set(ui_subnodes, nodeid , nodeid2);
+	  u32_to_u32_set(ui_node_actions, nodeid2, intern_string("orange"));
+	}
+	{
+	  u32 nodeid2 = 0xFF06;
+	  u32_to_u32_set(ui_subnodes, nodeid , nodeid2);
+	  u32_to_u32_set(ui_node_actions, nodeid2, intern_string("pear"));
+	}
+	
+      }
+      {
+	u32 nodeid = 0xFF02;
+	u32_to_u32_set(ui_subnodes, entity, nodeid);
+	u32_to_u32_set(ui_node_actions, nodeid, intern_string("stats"));
+      }
+
+      {
+	u32 nodeid = 0xFF03;
+	u32_to_u32_set(ui_subnodes, entity, nodeid);
+	u32_to_u32_set(ui_node_actions, nodeid, intern_string("jump"));
+      }
+      
+      u32_to_u32_print(ui_node_actions);
+
+    }
+    return true;
+  }
+  
   
   return false;
 }
@@ -209,21 +253,47 @@ void node_roguelike_update(graphics_context * ctx){
     for(u32 i = 0; i < cnt; i++){
       game_event evt = events[i];
       if(evt.mouse_button.button == mouse_button_left && evt.mouse_button.pressed){
+	vec2 pt = evt.mouse_button.game_position;
+	
 	static index_table * tab = NULL;
 	if(tab == NULL) tab = index_table_create(NULL, sizeof(entity_local_data));
-	index_table_clear(tab);
-	vec2 pt = evt.mouse_button.game_position;
-	simple_game_point_collision(*ctx, is_node_table->key + 1, is_node_table->count, pt, tab);
-	u64 hitcnt = 0;
-	u32 * e = index_table_all(tab, &hitcnt);
-	if(hitcnt > 0){
-	  u64 indexes[is_selected_table->count];
-	  character_table_lookup(characters, is_selected_table->key + 1, indexes, is_selected_table->count);
-	  for(u32 i = 0; i < is_selected_table->count; i++){
-	    characters->node[indexes[i]] = e[0];
+		
+	{ // check if characters are clicked.
+	  index_table_clear(tab);
+	  simple_game_point_collision(*ctx, characters->entity + 1, characters->count, pt, tab);
+	  u64 hitcnt = 0;
+	  u32 * e = index_table_all(tab, &hitcnt);
+	  for(u32 i = 0; i < hitcnt; i++){
+	    logd("Character %i clicked\n", e[i]);
+	  }
+	  
+
+	  
+	  if(hitcnt > 0){
+	    u32 entity = e[0];
+	    logd("SHOW: %i\n", entity);
+	    //entity_data * ed = index_table_lookup(ctx->entities, entity);
+	    node_roguelike_ui_show(entity, entity);
+	    goto next_evt;
+	  }
+	  
+	}
+	
+	{ // check if ground is clicked
+	  index_table_clear(tab);
+	  simple_game_point_collision(*ctx, is_node_table->key + 1, is_node_table->count, pt, tab);
+	  u64 hitcnt = 0;
+	  u32 * e = index_table_all(tab, &hitcnt);
+	  if(hitcnt > 0){
+	    u64 indexes[is_selected_table->count];
+	    character_table_lookup(characters, is_selected_table->key + 1, indexes, is_selected_table->count);
+	    for(u32 i = 0; i < is_selected_table->count; i++){
+	      characters->node[indexes[i]] = e[0];
+	    }
 	  }
 	}
       }
+    next_evt:;
     }
   }
 
@@ -244,6 +314,8 @@ void node_roguelike_update(graphics_context * ctx){
       entity_velocity_unset(ctx->entity_velocity, entity);
     } 
   }
+  
+  node_roguelike_ui_update(ctx);
   
 }
 
@@ -298,6 +370,10 @@ void load_bezier_into_model(u32 model){
   }
 }
 
+void inventory_action(u32 node){
+  logd("Show UI node %i\n", node);
+}
+
 void init_module(graphics_context * ctx){
   static bool is_initialized = false;
   if(is_initialized) return;
@@ -335,4 +411,10 @@ void init_module(graphics_context * ctx){
 
   graphics_context_load_update(ctx, node_roguelike_update, intern_string("node_roguelike/interactions"));
   simple_game_editor_load_func(ctx, node_roguelike_interact, intern_string("node_roguelike/editor_interact"));
+  node_roguelike_ui_init();
+
+
+  // must be loaded each run.
+  u32 inventory_action_id = intern_string("inventory");
+  node_roguelike_ui_register(inventory_action_id, inventory_action); 
 }

@@ -244,6 +244,7 @@ int load_module(graphics_context * ctx, char * name){
   void * module = dlopen(name, RTLD_NOW);
   if(module == NULL){
     loge("unable to load module '%s' %s\n", name, dlerror());
+    ASSERT(false);
     return -1;
   }
 

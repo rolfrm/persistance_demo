@@ -1,5 +1,5 @@
 OPT = -g3 -O0 -fPIC 
-LIB_SOURCES = node_roguelike.c
+LIB_SOURCES = node_roguelike.c node_roguelike_ui.c 
 CC = gcc
 TARGET = node_roguelike.so
 LIB_OBJECTS =$(LIB_SOURCES:.c=.o)
