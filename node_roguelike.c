@@ -409,7 +409,9 @@ void load_bezier_into_model(u32 model){
 }
 
 void inventory_action(u32 node){
-  logd("Show Inventory  (%i)\n", node);
+  logd("Show Inventory  (%i)\n", shown_ui_nodes->count);
+  u32_lookup_remove(shown_ui_nodes, &node, 1);
+  logd("--------------  (%i)\n", shown_ui_nodes->count);
 }
 
 void init_module(graphics_context * ctx){
