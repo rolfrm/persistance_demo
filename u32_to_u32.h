@@ -19,7 +19,6 @@ void u32_to_u32_set(u32_to_u32 * table, u32 key, u32 value);
 void u32_to_u32_insert(u32_to_u32 * table, u32 * key, u32 * value, u64 count);
 void u32_to_u32_lookup(u32_to_u32 * table, u32 * keys, u64 * out_indexes, u64 count);
 void u32_to_u32_remove(u32_to_u32 * table, u32 * keys, u64 key_count);
-void u32_to_u32_get_refs(u32_to_u32 * table, u32 * keys, u64 ** indexes, u64 count);
 void u32_to_u32_clear(u32_to_u32 * table);
 void u32_to_u32_unset(u32_to_u32 * table, u32 key);
 bool u32_to_u32_try_get(u32_to_u32 * table, u32 * key, u32 * value);

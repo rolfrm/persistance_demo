@@ -17,7 +17,6 @@ void TABLE_NAME_set(TABLE_NAME * table, VALUE_COLUMNS2);
 void TABLE_NAME_insert(TABLE_NAME * table, VALUE_COLUMNS3, u64 count);
 void TABLE_NAME_lookup(TABLE_NAME * table, INDEX_TYPE * keys, u64 * out_indexes, u64 count);
 void TABLE_NAME_remove(TABLE_NAME * table, INDEX_TYPE * keys, u64 key_count);
-void TABLE_NAME_get_refs(TABLE_NAME * table, INDEX_TYPE * keys, u64 ** indexes, u64 count);
 void TABLE_NAME_clear(TABLE_NAME * table);
 void TABLE_NAME_unset(TABLE_NAME * table, INDEX_TYPE key);
 bool TABLE_NAME_try_get(TABLE_NAME * table, VALUE_COLUMNS3);

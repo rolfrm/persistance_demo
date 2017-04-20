@@ -17,7 +17,21 @@
 #include "connection_entities.c"
 #include "character_table.h"
 #include "character_table.c"
+
 #include "node_roguelike.h"
+#include "node_action_table.h"
+extern node_action_table * node_actions;
+void sort_u32(u32 * items, u64 cnt){
+  int cmpfnc(u32 * a, u32 * b){
+    if(*a > *b)
+      return 1;
+    else if(*a < *b)
+      return -1;
+    return 0;
+  }
+  qsort(items, cnt, sizeof(u32), (void *) cmpfnc);
+}
+
 u32_lookup * is_node_table;
 u32_lookup * is_selected_table;
 character_table * characters;
@@ -74,6 +88,8 @@ void load_connection_entity(graphics_context * ctx, u32 entity, u32 entity2){
   logd("\n");
   //graphics_context_reload_polygon(*ctx, ced);
 }
+
+
 
 bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char * commands){
   UNUSED(gctx);
@@ -172,14 +188,7 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
 	return true;
       }
     }
-    int cmpfnc(u32 * a, u32 * b){
-      if(*a > *b)
-	return 1;
-      else if(*a < *b)
-	return -1;
-      return 0;
-    }
-    qsort(items, cnt, sizeof(u32), (void *) cmpfnc);
+    sort_u32(items, cnt);
     for(u32 i = 0; i < cnt; i++){
       logd("selecting: %i: %i\n", i + 1, items[i]);
     }
@@ -257,9 +266,42 @@ void node_roguelike_update(graphics_context * ctx){
 	
 	static index_table * tab = NULL;
 	if(tab == NULL) tab = index_table_create(NULL, sizeof(entity_local_data));
+	index_table_clear(tab);
+	{ // check if ui nodes are clicked
+	  u64 node_entities_index[shown_ui_nodes->count];
+	  u32_to_u32_lookup(node_to_entity, shown_ui_nodes->key + 1, node_entities_index, shown_ui_nodes->count);
+	  u32 entities[shown_ui_nodes->count];
+	  for(u64 i = 0; i < array_count(entities); i++)
+	    entities[i] = node_to_entity->value[node_entities_index[i]];
+	  sort_u32(entities, array_count(entities));
+	  simple_game_point_collision(*ctx, entities, array_count(entities), pt, tab);
+	  u64 hitcnt = 0;
+	  u32 * e = index_table_all(tab, &hitcnt);
+	  //for(u32 i = 0; i < hitcnt; i++)
+	    //logd("UI nodes  %i clicked clicked\n", e[i]);
+	  if(hitcnt > 0){
+	    for(u32 i = 0; i < node_to_entity->count; i++){
+	      u32 _e = node_to_entity->value[i + 1];
+	      u32 node = node_to_entity->key[i + 1];
+	      if(_e == e[0]){
+		u32 node_action = 0;
+		if(u32_to_u32_try_get(ui_node_actions, &node, &node_action) ){
+		  ui_node_action action = NULL;
+		  if(node_action_table_try_get(node_actions, &node_action, &action) && action != NULL)
+		    action(node);
+
+		}
 		
+		break;		
+	      }
+	    }
+
+	    
+	    goto next_evt;
+	  }
+	}
+	
 	{ // check if characters are clicked.
-	  index_table_clear(tab);
 	  simple_game_point_collision(*ctx, characters->entity + 1, characters->count, pt, tab);
 	  u64 hitcnt = 0;
 	  u32 * e = index_table_all(tab, &hitcnt);
@@ -267,20 +309,16 @@ void node_roguelike_update(graphics_context * ctx){
 	    logd("Character %i clicked\n", e[i]);
 	  }
 	  
-
-	  
 	  if(hitcnt > 0){
 	    u32 entity = e[0];
 	    logd("SHOW: %i\n", entity);
 	    //entity_data * ed = index_table_lookup(ctx->entities, entity);
 	    node_roguelike_ui_show(entity, entity);
 	    goto next_evt;
-	  }
-	  
+	  }	  
 	}
 	
 	{ // check if ground is clicked
-	  index_table_clear(tab);
 	  simple_game_point_collision(*ctx, is_node_table->key + 1, is_node_table->count, pt, tab);
 	  u64 hitcnt = 0;
 	  u32 * e = index_table_all(tab, &hitcnt);
@@ -371,7 +409,7 @@ void load_bezier_into_model(u32 model){
 }
 
 void inventory_action(u32 node){
-  logd("Show UI node %i\n", node);
+  logd("Show Inventory  (%i)\n", node);
 }
 
 void init_module(graphics_context * ctx){

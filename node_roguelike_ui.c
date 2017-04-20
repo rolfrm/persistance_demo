@@ -34,7 +34,6 @@ void node_roguelike_ui_update(graphics_context * ctx){
 
   u64 indexes[shown_ui_nodes->count];
   memset(indexes, 0, sizeof(indexes));
-  //logd("IDX: %i\n", shown_ui_nodes->count);
   u32_to_u32_lookup(node_to_entity, shown_ui_nodes->key + 1,indexes, array_count(indexes));
   {
     // update node->parent
@@ -74,11 +73,9 @@ void node_roguelike_ui_update(graphics_context * ctx){
       if(indexes[i] == 0){
 	
 	u32 i1 = index_table_alloc(ctx->entities);
-	//u32 i2 = index_table_alloc(ctx->model);
 	new_entries_nodes[j] = shown_ui_nodes->key[i + 1];
 	new_entries_entities[j] = i1;
 	j++;
-	//entity_data * entity = index_table_lookup(ctx->entities, editor->selected_index);
       }
     }
     u32_to_u32_insert(node_to_entity, new_entries_nodes, new_entries_entities, zeros);
@@ -130,14 +127,8 @@ void node_roguelike_ui_show(u32 uinode, u32 entity){
     for(u32 i = 0; i < cnt; i++)
       nodes[i] = ui_subnodes->value[indexes[i]];
   }
-  int cmpfnc(u32 * a, u32 * b){
-      if(*a > *b)
-	return 1;
-      else if(*a < *b)
-	return -1;
-      return 0;
-  }
-  qsort(nodes, cnt, sizeof(u32), (void *) cmpfnc);
+  
+  sort_u32(nodes, cnt);
   
   //u32_lookup_clear(shown_ui_nodes);
   u32_lookup_insert(shown_ui_nodes, nodes, cnt);
