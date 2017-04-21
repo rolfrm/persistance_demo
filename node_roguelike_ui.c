@@ -19,6 +19,7 @@ u32_to_u32 * ui_node_actions;
 u32_to_u32 * node_to_entity;
 static u32_to_u32 * ui_node_index;
 u32_lookup * shown_ui_nodes;
+u32_lookup * nodes_to_hide;
 void node_roguelike_ui_init(){
   ui_subnodes = u32_to_u32_create("ui_subnodes");
   ui_node_parent = u32_to_u32_create("ui_node_parent");
@@ -28,35 +29,53 @@ void node_roguelike_ui_init(){
   node_to_entity = u32_to_u32_create("ui_node_entities");
   shown_ui_nodes = u32_lookup_create("ui_node_shown");
   ui_node_index = u32_to_u32_create("ui_node_index");
+  nodes_to_hide = u32_lookup_create("ui_nodes_to_hide");
 }
 
 void node_roguelike_ui_update(graphics_context * ctx){
 
-  u64 indexes[shown_ui_nodes->count];
-  memset(indexes, 0, sizeof(indexes));
-  u32_to_u32_lookup(node_to_entity, shown_ui_nodes->key + 1,indexes, array_count(indexes));
   {
-    // update node->parent
-    static u32 lastcount = 0;
-    if(ui_subnodes->count != lastcount){
-      u32 parent = 0;
-      u32 index = 0;
-      for(u32 i = 0; i < ui_subnodes->count; i++){
-
-	u32 thisparent = ui_subnodes->key[i + 1];
-	if(thisparent != parent){
-	  parent = thisparent;
-	  index = 0;
-	}
-
-	u32_to_u32_insert(ui_node_parent, ui_subnodes->value + i + 1, &parent, 1);
-	if(index > 0)
-	  u32_to_u32_insert(ui_node_index, ui_subnodes->value + i + 1, &index, 1);
-	index++;
+    u64 indexes[nodes_to_hide->count];
+    u32_to_u32_lookup(node_to_entity, nodes_to_hide->key + 1,indexes, array_count(indexes));
+    for(u32 i = 0; i < array_count(indexes);i++){
+      u64 index = indexes[i];
+      if(index != 0){
+	u32 entity = node_to_entity->value[index];
+	u32 node = node_to_entity->key[index];
+	if(entity != 0)
+	  active_entities_unset(ctx->active_entities, entity);
+	u32_lookup_unset(shown_ui_nodes, node);
       }
-      lastcount = ui_subnodes->count;
     }
+    u32_lookup_clear(nodes_to_hide);
   }
+  {
+    u64 indexes[shown_ui_nodes->count];
+    memset(indexes, 0, sizeof(indexes));
+    u32_to_u32_lookup(node_to_entity, shown_ui_nodes->key + 1,indexes, array_count(indexes));
+    {
+      // update node->parent
+      static u32 lastcount = 0;
+      if(ui_subnodes->count != lastcount){
+	u32 parent = 0;
+	u32 index = 0;
+	for(u32 i = 0; i < ui_subnodes->count; i++){
+	  
+	  u32 thisparent = ui_subnodes->key[i + 1];
+	  if(thisparent != parent){
+	    parent = thisparent;
+	    index = 0;
+	  }
+	  
+	  u32_to_u32_insert(ui_node_parent, ui_subnodes->value + i + 1, &parent, 1);
+	  if(index > 0)
+	    u32_to_u32_insert(ui_node_index, ui_subnodes->value + i + 1, &index, 1);
+	  index++;
+	}
+	lastcount = ui_subnodes->count;
+      }
+    }
+  
 
   { // insert new entities.
     u32 zeros = 0;
@@ -101,14 +120,11 @@ void node_roguelike_ui_update(graphics_context * ctx){
 	u32_to_u32_try_get(ui_node_index, &node, &index);
 	entity_data * ed = index_table_lookup(ctx->entities, entity);
 	entity_data * ped = index_table_lookup(ctx->entities, parent_entity);
-
 	ed->position = vec3_add(ped->position, vec3_new(0.1, -0.1 * index, 0));
-	
       }
     }
   }
-  
-  
+}
 }
 
 void node_roguelike_ui_register(u32 actionid, ui_node_action action){
@@ -118,7 +134,6 @@ void node_roguelike_ui_register(u32 actionid, ui_node_action action){
 void node_roguelike_ui_show(u32 uinode, u32 entity){
 
   u64 cnt = u32_to_u32_iter(ui_subnodes, &uinode, 1, NULL, NULL, 10000, NULL);
-  logd("loading: %i sub nodes:%i\n", uinode, cnt);
   u32 nodes[cnt];
   {
     u64 indexes[cnt];
@@ -135,8 +150,26 @@ void node_roguelike_ui_show(u32 uinode, u32 entity){
   
   if(entity != 0)
     u32_to_u32_insert(node_to_entity, &uinode, &entity, 1);
-  for(u32 i = 0; i < cnt; i++){
+  //for(u32 i = 0; i < cnt; i++){
     
-    node_roguelike_ui_show(nodes[i], 0);
+  //  node_roguelike_ui_show(nodes[i], 0);
+  //}
+}
+
+void node_roguelike_ui_hide(u32 uinode){
+  u32_lookup_set(nodes_to_hide, uinode);
+}
+
+void node_roguelike_ui_hide_subnodes(u32 uinode){
+  u64 cnt = u32_to_u32_iter(ui_subnodes, &uinode, 1, NULL, NULL, 10000, NULL);
+  {
+    u64 indexes[cnt];
+    u32_to_u32_iter(ui_subnodes, &uinode, 1, NULL, indexes, cnt, NULL);
+    for(u32 i = 0; i < cnt; i++){
+      if(indexes[i] == 0) continue;
+      u32 node = ui_subnodes->value[indexes[i]];
+      if(node != 0)
+	node_roguelike_ui_hide(node);
+    }
   }
 }

@@ -2006,7 +2006,8 @@ void simple_grid_render(u64 id){
     }
     set_simple_game_data(id, *gd.game_data);
   }
-
+  count = active_entities_count(gd.active_entities);
+  entities = active_entities_get_keys(gd.active_entities);
 
   mat4 shuffle_flat = mat4_identity();
   shuffle_flat.m22 = 0;

@@ -17,7 +17,6 @@ void u32_lookup_set(u32_lookup * table, u32 key);
 void u32_lookup_insert(u32_lookup * table, u32 * key, u64 count);
 void u32_lookup_lookup(u32_lookup * table, u32 * keys, u64 * out_indexes, u64 count);
 void u32_lookup_remove(u32_lookup * table, u32 * keys, u64 key_count);
-void u32_lookup_get_refs(u32_lookup * table, u32 * keys, u64 ** indexes, u64 count);
 void u32_lookup_clear(u32_lookup * table);
 void u32_lookup_unset(u32_lookup * table, u32 key);
 bool u32_lookup_try_get(u32_lookup * table, u32 * key);

@@ -289,13 +289,11 @@ void node_roguelike_update(graphics_context * ctx){
 		  ui_node_action action = NULL;
 		  if(node_action_table_try_get(node_actions, &node_action, &action) && action != NULL)
 		    action(node);
-
 		}
 		
-		break;		
+		break;
 	      }
 	    }
-
 	    
 	    goto next_evt;
 	  }
@@ -409,9 +407,13 @@ void load_bezier_into_model(u32 model){
 }
 
 void inventory_action(u32 node){
-  logd("Show Inventory  (%i)\n", shown_ui_nodes->count);
-  u32_lookup_remove(shown_ui_nodes, &node, 1);
-  logd("--------------  (%i)\n", shown_ui_nodes->count);
+  u64 subnode_idx = 0;
+  u64 cnt = u32_to_u32_iter(ui_subnodes, &node, 1, NULL, &subnode_idx, 1, NULL);
+  if(cnt > 0 && u32_lookup_try_get(shown_ui_nodes, &ui_subnodes->value[subnode_idx])){
+    node_roguelike_ui_hide_subnodes(node);      
+  }else{
+    node_roguelike_ui_show(node, 0);      
+  }
 }
 
 void init_module(graphics_context * ctx){

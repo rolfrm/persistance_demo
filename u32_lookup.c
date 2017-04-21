@@ -25,8 +25,12 @@ void u32_lookup_lookup(u32_lookup * table, u32 * keys, u64 * out_indexes, u64 co
 
 void u32_lookup_remove(u32_lookup * table, u32 * keys, u64 key_count){
   u64 indexes[key_count];
-  abstract_sorttable_finds((abstract_sorttable *) table, keys, indexes, key_count);
-  abstract_sorttable_remove_indexes((abstract_sorttable *) table, indexes, key_count);
+  u64 index = 0;
+  u64 cnt = 0;
+  while(0 < (cnt = abstract_sorttable_iter((abstract_sorttable *) table, keys, key_count, NULL, indexes, array_count(indexes), &index))){
+    abstract_sorttable_remove_indexes((abstract_sorttable *) table, indexes, cnt);
+    index = 0;
+  }
 }
 
 void u32_lookup_clear(u32_lookup * table){
