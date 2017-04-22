@@ -71,22 +71,18 @@ void load_connection_entity(graphics_context * ctx, u32 entity, u32 entity2){
     polygon_color_set(ctx->poly_color, pd->material, vec4_new(0,0,0,1));
   }
   vertex_data * vd = index_table_lookup_sequence(ctx->vertex, pd->vertexes);
-  vec2 p1 = vec2_new(e1->position.x, e1->position.z);;
-  vec2 p2 = vec2_new(e2->position.x, e2->position.z);;
+  vec2 p1 = vec2_new(e1->position.x, e1->position.z);
+  vec2 p2 = vec2_new(e2->position.x, e2->position.z);
   vec2 pdd = vec2_sub(p2, p1);
   vec2 pn = vec2_normalize(pdd);
   pn = vec2_new(pn.y * 0.02, -pn.x * 0.02);
   vec2 pn2 = vec2_scale(pn, -1);
-  vd[0].position = vec2_add(p1, pn);
-  vd[1].position = vec2_add(p1, pn2);
-  vd[2].position = vec2_add(p2, pn);
-  vd[3].position = vec2_add(p2, pn2);
-  for(int i = 0; i < 4; i++){
-    vec2_print(vd[i].position);
-    logd(" ");
-  }
-  logd("\n");
-  //graphics_context_reload_polygon(*ctx, ced);
+  vd[0].position = pn;
+  vd[1].position = pn2;
+  vd[2].position = vec2_add(pdd, pn);
+  vd[3].position = vec2_add(pdd, pn2);
+  ed->position = e1->position;
+  graphics_context_reload_polygon(*ctx, ced);
 }
 
 
@@ -132,19 +128,23 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
     u64 count = connected_nodes_iter(connected_nodes_table, &entity, 1, NULL, NULL, connected_nodes_table->count, NULL);
     connected_nodes_print(connected_nodes_table);
     logd("connections for %i: %i\n", entity, count);
+    bool connect = true;
     if(count > 1){
       u64 indexes[count];
       connected_nodes_iter(connected_nodes_table, &entity, 1, NULL, indexes, count, NULL);
       for(u32 i = 0; i < count; i++){
 	if(connected_nodes_table->n2[indexes[i]] == entity2){
 	  logd("Node %i and %i are already connected!\n", entity, entity2);
-	  return true;
+	  connect = false;
+	  break;
+	  //return true;
 	}
       }
     }
-
-    connected_nodes_set(connected_nodes_table, entity, entity2);
-    connected_nodes_set(connected_nodes_table, entity2, entity);
+    if(connect){
+      connected_nodes_set(connected_nodes_table, entity, entity2);
+      connected_nodes_set(connected_nodes_table, entity2, entity);
+    }
     logd("Connected %i %i\n", entity2, entity);
     load_connection_entity(gctx, entity, entity2);
     
@@ -252,6 +252,17 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
   return false;
 }
 
+void inventory_action(u32 node){
+  u64 subnode_idx = 0;
+  u64 cnt = u32_to_u32_iter(ui_subnodes, &node, 1, NULL, &subnode_idx, 1, NULL);
+  if(cnt > 0 && u32_lookup_try_get(shown_ui_nodes, &ui_subnodes->value[subnode_idx])){
+    node_roguelike_ui_hide_subnodes(node);      
+  }else{
+    node_roguelike_ui_show(node, 0);      
+  }
+}
+
+
 void node_roguelike_update(graphics_context * ctx){
   UNUSED(ctx);
   //u32_lookup_print(is_node_table);
@@ -310,8 +321,10 @@ void node_roguelike_update(graphics_context * ctx){
 	  if(hitcnt > 0){
 	    u32 entity = e[0];
 	    logd("SHOW: %i\n", entity);
-	    //entity_data * ed = index_table_lookup(ctx->entities, entity);
-	    node_roguelike_ui_show(entity, entity);
+	    //entity_data * ed = index_table_lookup(ctx->entities,
+  //entity);
+	    inventory_action(entity);
+	    //node_roguelike_ui_show(entity, entity);
 	    goto next_evt;
 	  }	  
 	}
@@ -406,15 +419,6 @@ void load_bezier_into_model(u32 model){
   }
 }
 
-void inventory_action(u32 node){
-  u64 subnode_idx = 0;
-  u64 cnt = u32_to_u32_iter(ui_subnodes, &node, 1, NULL, &subnode_idx, 1, NULL);
-  if(cnt > 0 && u32_lookup_try_get(shown_ui_nodes, &ui_subnodes->value[subnode_idx])){
-    node_roguelike_ui_hide_subnodes(node);      
-  }else{
-    node_roguelike_ui_show(node, 0);      
-  }
-}
 
 void init_module(graphics_context * ctx){
   static bool is_initialized = false;

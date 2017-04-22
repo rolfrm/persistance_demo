@@ -444,7 +444,11 @@ void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 came
   
   glUseProgram(shader.shader);
   glUniformMatrix4fv(shader.camera_loc,1,false, &(camera.data[0][0]));
-  
+  if(color.w < 1){
+    glEnable(GL_BLEND);
+  }else{
+    glDisable(GL_BLEND);
+  }
   glUniform4f(shader.color_loc, color.x, color.y, color.z, color.w);
   //logd("Depth: %f\n", depth);
   glUniform1f(shader.depth_loc, depth);
@@ -2060,8 +2064,9 @@ void simple_grid_render(u64 id){
 	mat = mat4_mul(proj_mat, mat);
 
 	vec4 color = vec4_zero;
-	if(polygon_color_try_get(gd.poly_color, pd->material, &color) && color.w != 1.0f)
+	if(polygon_color_try_get(gd.poly_color, pd->material, &color) == false || color.w < 1.0f || color.w <= 0.0001f)
 	  continue;
+	
 	simple_grid_render_gl(gd, index, mat, false, bias);
 	bias -= 0.000001;
 	if(j == 0)
@@ -2102,7 +2107,7 @@ void simple_grid_render(u64 id){
 	mat = mat4_mul(proj_mat, mat);
 
 	vec4 color = vec4_zero;
-	if(false == (polygon_color_try_get(gd.poly_color, pd->material, &color) && color.w > 0.0f && color.w < 1.0f))
+	if(false == (polygon_color_try_get(gd.poly_color, pd->material, &color) && (color.w > 0.01f || color.w < 0.99f)))
 	  continue;
 	simple_grid_render_gl(gd, index, mat, false, bias);
 
