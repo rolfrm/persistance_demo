@@ -242,7 +242,7 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
       {
 	u32 nodeid = 0xFF03;
 	u32_to_u32_set(ui_subnodes, entity, nodeid);
-	u32_to_u32_set(ui_node_actions, nodeid, intern_string("jump"));
+	u32_to_u32_set(ui_node_actions, nodeid, intern_string("look"));
       }
       
       u32_to_u32_print(ui_node_actions);
@@ -465,6 +465,13 @@ void load_bezier_into_model(u32 model){
   }
 }
 
+void look_action(u32 node){
+  logd("Look around: %i\n", node);
+}
+
+void stats_action(u32 node){
+  logd("Check stats: %i\n", node);
+}
 
 void init_module(graphics_context * ctx){
   static bool is_initialized = false;
@@ -513,6 +520,7 @@ void init_module(graphics_context * ctx){
 
 
   // must be loaded each run.
-  u32 inventory_action_id = intern_string("inventory");
-  node_roguelike_ui_register(inventory_action_id, inventory_action); 
+  node_roguelike_ui_register(intern_string("inventory"), inventory_action);
+  node_roguelike_ui_register(intern_string("look"), look_action);
+  node_roguelike_ui_register(intern_string("stats"), stats_action); 
 }
