@@ -39,6 +39,9 @@ index_table * bezier_curve_table;
 line_element * line_element_table;
 connected_nodes * connected_nodes_table;
 connection_entities * connection_entities_table;
+
+u32_to_u32 * node_traversal;
+u32_to_u32 * node_traversal_offset;
 void load_connection_entity(graphics_context * ctx, u32 entity, u32 entity2){
   if(entity > entity2)
     SWAP(entity, entity2);
@@ -247,6 +250,24 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
     }
     return true;
   }
+
+  if(nth_str_cmp(commands, 0, "nr-traverse")){
+    if(ctx->selection_kind != SELECTED_ENTITY || ctx->selected_index == 0){
+      logd("An entity must be selected for nr-traverse\n");
+      return true;
+    }
+    logd("%p\n", node_traversal->key_area->ptr);
+    u32_to_u32_unset(node_traversal, ctx->selected_index);
+    u32_to_u32_unset(node_traversal_offset, ctx->selected_index);
+    u32 i = 0;
+    u32 node = 0;
+    while(nth_parse_u32(commands, 1 + i, &node)){
+      u32_to_u32_set(node_traversal, ctx->selected_index, node);
+      i++;
+    }
+    return true;
+  }
+  
   
   
   return false;
@@ -361,6 +382,31 @@ void node_roguelike_update(graphics_context * ctx){
       entity_velocity_set(ctx->entity_velocity, entity, d);
     }else{
       entity_velocity_unset(ctx->entity_velocity, entity);
+      u32 firstnode = 0;
+      // check if there is a number of nodes in the traversal list.
+      if(u32_to_u32_try_get(node_traversal, &entity, &firstnode)){
+	
+	u32 offset = 0;	
+	u32_to_u32_try_get(node_traversal_offset, &entity, &offset);
+
+	u64 iter = 0;
+	u64 index = 0;
+	for(u32 i = 0; i < offset + 1; i++){
+	  u32 left = u32_to_u32_iter(node_traversal, &entity, 1, NULL, &index, 1, &iter);
+	  if(left == 0){
+	    characters->node[i + 1] = firstnode;
+	    offset = 0;
+	    goto end;
+	  }
+	}
+	offset += 1;
+	characters->node[i + 1] = node_traversal->value[index];
+	
+      end:;
+	u32_to_u32_set(node_traversal_offset, entity, offset);
+	logd("Character %i going to %i\n", entity, characters->node[i + 1]);
+	
+      }
     } 
   }
   
@@ -432,8 +478,14 @@ void init_module(graphics_context * ctx){
   line_element_table = line_element_create("line_elements");
   is_selected_table = u32_lookup_create("selected-entities");
   connected_nodes_table = connected_nodes_create("connected_nodes");
-  connection_entities_table = connection_entities_create("connection_entities");
   ((bool *)&connected_nodes_table->is_multi_table)[0] = true;
+  
+  connection_entities_table = connection_entities_create("connection_entities");
+  node_traversal = u32_to_u32_create("node-traversal");
+  
+  ((bool *)&node_traversal->is_multi_table)[0] = true;
+  node_traversal_offset = u32_to_u32_create("node-traversal-offset");
+  
   index_table_clear(bezier_curve_table);
   if(line_element_table->count == 0){
     // test bezier
