@@ -17,7 +17,8 @@
 #include "connection_entities.c"
 #include "character_table.h"
 #include "character_table.c"
-
+#include "u32_to_sequence.h"
+#include "u32_to_sequence.c"
 #include "node_roguelike.h"
 #include "node_action_table.h"
 extern node_action_table * node_actions;
@@ -40,7 +41,8 @@ line_element * line_element_table;
 connected_nodes * connected_nodes_table;
 connection_entities * connection_entities_table;
 
-u32_to_u32 * node_traversal;
+index_table * node_traversal;
+u32_to_sequence * node_traversal_index;
 u32_to_u32 * node_traversal_offset;
 void load_connection_entity(graphics_context * ctx, u32 entity, u32 entity2){
   if(entity > entity2)
@@ -256,19 +258,25 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
       logd("An entity must be selected for nr-traverse\n");
       return true;
     }
-    logd("%p\n", node_traversal->key_area->ptr);
-    u32_to_u32_unset(node_traversal, ctx->selected_index);
+    
     u32_to_u32_unset(node_traversal_offset, ctx->selected_index);
-    u32 i = 0;
-    u32 node = 0;
-    while(nth_parse_u32(commands, 1 + i, &node)){
-      u32_to_u32_set(node_traversal, ctx->selected_index, node);
-      i++;
+    u32 count = 0;
+    {
+      u32 node;
+      while(nth_parse_u32(commands, 1 + count, &node)){count++;}
     }
+    index_table_sequence seq = {0};
+    u32_to_sequence_try_get(node_traversal_index, &ctx->selected_index, &seq);
+    index_table_resize_sequence(node_traversal, &seq, count);
+    u32 * nodes = index_table_lookup_sequence(node_traversal, seq);;
+    for(u32 i = 0; i < count; i++){
+      u32 node = 0;
+      nth_parse_u32(commands, 1 + i, &node);
+      nodes[i] = node;
+    }
+    u32_to_sequence_set(node_traversal_index, ctx->selected_index, seq);
     return true;
   }
-  
-  
   
   return false;
 }
@@ -282,7 +290,6 @@ void inventory_action(u32 node){
     node_roguelike_ui_show(node, 0);      
   }
 }
-
 
 void node_roguelike_update(graphics_context * ctx){
   UNUSED(ctx);
@@ -370,6 +377,7 @@ void node_roguelike_update(graphics_context * ctx){
   for(u32 i = 0; i < characters->count; i++){
     u32 entity = characters->entity[i + 1];
     u32 nodeid = characters->node[i + 1];
+    if(nodeid == 0) continue;
     entity_data * ed = index_table_lookup(ctx->entities, entity);
     entity_data * node = index_table_lookup(ctx->entities, nodeid);
     ASSERT(ed != NULL);
@@ -382,30 +390,22 @@ void node_roguelike_update(graphics_context * ctx){
       entity_velocity_set(ctx->entity_velocity, entity, d);
     }else{
       entity_velocity_unset(ctx->entity_velocity, entity);
-      u32 firstnode = 0;
+      index_table_sequence seq = {0};
       // check if there is a number of nodes in the traversal list.
-      if(u32_to_u32_try_get(node_traversal, &entity, &firstnode)){
+      if(u32_to_sequence_try_get(node_traversal_index, &entity, &seq)){
+
+	u32 * traversal_list = index_table_lookup_sequence(node_traversal, seq);
 	
 	u32 offset = 0;	
 	u32_to_u32_try_get(node_traversal_offset, &entity, &offset);
-
-	u64 iter = 0;
-	u64 index = 0;
-	for(u32 i = 0; i < offset + 1; i++){
-	  u32 left = u32_to_u32_iter(node_traversal, &entity, 1, NULL, &index, 1, &iter);
-	  if(left == 0){
-	    characters->node[i + 1] = firstnode;
-	    offset = 0;
-	    goto end;
-	  }
-	}
+	
 	offset += 1;
-	characters->node[i + 1] = node_traversal->value[index];
-	
-      end:;
+	if(offset >= seq.count)
+	  offset = 0;
+	ASSERT(traversal_list[offset] != 0);
+	characters->node[i + 1] = traversal_list[offset];
 	u32_to_u32_set(node_traversal_offset, entity, offset);
-	logd("Character %i going to %i\n", entity, characters->node[i + 1]);
-	
+	logd("Character %i going to %i\n", entity, characters->node[i + 1]);	
       }
     } 
   }
@@ -488,10 +488,10 @@ void init_module(graphics_context * ctx){
   ((bool *)&connected_nodes_table->is_multi_table)[0] = true;
   
   connection_entities_table = connection_entities_create("connection_entities");
-  node_traversal = u32_to_u32_create("node-traversal");
   
-  ((bool *)&node_traversal->is_multi_table)[0] = true;
   node_traversal_offset = u32_to_u32_create("node-traversal-offset");
+  node_traversal_index = u32_to_sequence_create("node-traversal-index");
+  node_traversal = index_table_create("node-traversal", sizeof(u32));
   
   index_table_clear(bezier_curve_table);
   if(line_element_table->count == 0){
