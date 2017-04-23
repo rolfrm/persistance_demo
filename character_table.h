@@ -6,22 +6,23 @@ typedef struct _character_table{
   const bool is_multi_table;
   const int column_count;
   int (*cmp) (const u32 * k1, const u32 * k2);
-  const u64 sizes[2];
+  const u64 sizes[3];
 
   u32 * entity;
-  u32 * node;
+  u32 * current_node;
+  u32 * target_node;
   mem_area * entity_area;
-  mem_area * node_area;
+  mem_area * current_node_area;
+  mem_area * target_node_area;
 }character_table;
 
 character_table * character_table_create(const char * optional_name);
-void character_table_set(character_table * table, u32 entity, u32 node);
-void character_table_insert(character_table * table, u32 * entity, u32 * node, u64 count);
+void character_table_set(character_table * table, u32 entity, u32 current_node, u32 target_node);
+void character_table_insert(character_table * table, u32 * entity, u32 * current_node, u32 * target_node, u64 count);
 void character_table_lookup(character_table * table, u32 * keys, u64 * out_indexes, u64 count);
 void character_table_remove(character_table * table, u32 * keys, u64 key_count);
-void character_table_get_refs(character_table * table, u32 * keys, u64 ** indexes, u64 count);
 void character_table_clear(character_table * table);
 void character_table_unset(character_table * table, u32 key);
-bool character_table_try_get(character_table * table, u32 * entity, u32 * node);
+bool character_table_try_get(character_table * table, u32 * entity, u32 * current_node, u32 * target_node);
 void character_table_print(character_table * table);
 u64 character_table_iter(character_table * table, u32 * keys, size_t keycnt, u32 * optional_keys_out, u64 * indexes, u64 cnt, u64 * iterator);

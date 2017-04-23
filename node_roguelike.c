@@ -167,7 +167,9 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
     }else{
 
       u32 node;
-      if(character_table_try_get(characters, &entity, &node)){
+      u32 target;
+      
+      if(character_table_try_get(characters, &entity, &node, &target)){
 	character_table_unset(characters, entity);
 	logd("Entity %i is not character.\n", entity);
       }
@@ -176,7 +178,7 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
 	if(nth_parse_u32(commands, 1, &node) == false || node == 0 || !u32_lookup_try_get(is_node_table, &node)){
 	  logd("Second argument must be a node!\n");
 	}else{
-	  character_table_set(characters, entity, node);
+	  character_table_set(characters, entity, node, 0);
 	  logd("Entity %i is character.\n", entity);
 	}
       }
@@ -365,7 +367,7 @@ void node_roguelike_update(graphics_context * ctx){
 	    u64 indexes[is_selected_table->count];
 	    character_table_lookup(characters, is_selected_table->key + 1, indexes, is_selected_table->count);
 	    for(u32 i = 0; i < is_selected_table->count; i++){
-	      characters->node[indexes[i]] = e[0];
+	      characters->target_node[indexes[i]] = e[0];
 	    }
 	  }
 	}
@@ -378,7 +380,8 @@ void node_roguelike_update(graphics_context * ctx){
   for(u32 i = 0; i < is_selected_table->count; i++){
     u32 entity = is_selected_table->key[i + 1];
     u32 node;
-    if(character_table_try_get(characters, &entity, &node)){
+    u32 target;
+    if(character_table_try_get(characters, &entity, &node, &target)){
       current_node = node;
       u32_lookup_set(visited_nodes, node);
       u32 connection_count = connected_nodes_iter(connected_nodes_table, &node, 1, NULL, NULL, 100, NULL);
@@ -395,8 +398,9 @@ void node_roguelike_update(graphics_context * ctx){
   u32_lookup_clear(ctx->game_visible);
   if(current_node != 0){
     for(u32 i = 0; i < characters->count; i++){
-      if(characters->node[i + 1] == current_node){
-	u32_lookup_insert(ctx->game_visible, characters->entity + 1 + i, 1);
+      if(characters->current_node[i + 1] == current_node || characters->target_node[i + 1] == current_node){
+	u32 entity = characters->entity[1 + i];
+	u32_lookup_insert(ctx->game_visible, &entity, 1);
       }
     }
   }
@@ -426,18 +430,29 @@ void node_roguelike_update(graphics_context * ctx){
   u32_lookup_insert(ctx->game_visible, shown_ui_nodes->key + 1, shown_ui_nodes->count);
   for(u32 i = 0; i < characters->count; i++){
     u32 entity = characters->entity[i + 1];
-    u32 nodeid = characters->node[i + 1];
-    if(nodeid == 0) continue;
+    u32 nodeid = characters->target_node[i + 1];
+    if(nodeid == 0){
+      index_table_sequence seq = {0};
+      // check if there is a number of nodes in the traversal list.
+      if(u32_to_sequence_try_get(node_traversal_index, &entity, &seq) && seq.count > 0){
+	u32 * traversal_list = index_table_lookup_sequence(node_traversal, seq);
+	characters->target_node[i + 1] = traversal_list[0];
+      }
+      continue;
+    }
+
     entity_data * ed = index_table_lookup(ctx->entities, entity);
     entity_data * node = index_table_lookup(ctx->entities, nodeid);
     ASSERT(ed != NULL);
     ASSERT(node != NULL);
     vec3 n2c = vec3_sub(node->position, ed->position);
+
     auto len = vec3_len(n2c);
     if(len > 0.2){
 
       vec3 d = vec3_scale(n2c, 0.3 * 1.0 / len);
       entity_velocity_set(ctx->entity_velocity, entity, d);
+
     }else{
       entity_velocity_unset(ctx->entity_velocity, entity);
       index_table_sequence seq = {0};
@@ -448,15 +463,15 @@ void node_roguelike_update(graphics_context * ctx){
 	
 	u32 offset = 0;	
 	u32_to_u32_try_get(node_traversal_offset, &entity, &offset);
-	
 	offset += 1;
 	if(offset >= seq.count)
 	  offset = 0;
 	ASSERT(traversal_list[offset] != 0);
-	characters->node[i + 1] = traversal_list[offset];
+	characters->current_node[i + 1] = characters->target_node[i + 1];
+	characters->target_node[i + 1] = traversal_list[offset];
 	u32_to_u32_set(node_traversal_offset, entity, offset);
-	logd("Character %i going to %i\n", entity, characters->node[i + 1]);	
       }
+      characters->current_node[i + 1] = nodeid;
     } 
   }
   
