@@ -1,3 +1,4 @@
+
 void simple_graphics_editor_load(u64 id, u64 win_id);
 bool simple_graphics_editor_test();
 
@@ -176,6 +177,8 @@ struct _graphics_context{
   entity_velocity_table * entity_velocity;
   game_events * game_event_table;
   u32 game_id;
+
+  u32_lookup * game_visible;
 };
 
 

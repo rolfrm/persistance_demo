@@ -11,6 +11,7 @@
 #include "gui.h"
 #include "gui_test.h"
 #include "index_table.h"
+#include "u32_lookup.h"
 #include "simple_graphics.h"
 #include "game_board.h"
 void table2_test();
@@ -125,7 +126,7 @@ index_table_sequence index_table_alloc_sequence(index_table * table, u32 count){
 	}else if(idx == start + cnt){
 	  cnt += 1;
 	}else if(idx == start + cnt - 1){
-	  ASSERT(false);
+	  ASSERT(false); // it seems that some bug can appear here.
 	}else{
 	  start = idx;
 	  cnt = 1;
@@ -840,7 +841,6 @@ void test_hydra();
 #include "abstract_sortable.h"
 #include "MyTableTest.h"
 #include "MyTableTest.c"
-#include "u32_lookup.h"
 #include "u32_lookup.c"
 
 bool test_abstract_sortable(){

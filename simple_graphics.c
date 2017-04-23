@@ -14,6 +14,7 @@
 #include "index_table.h"
 #include "game_board.h"
 #include "console.h"
+#include "u32_lookup.h"
 #include "simple_graphics.h"
 
 bool (** printer_table)(void * ptr, const char * type) = NULL ;
@@ -1933,8 +1934,15 @@ void simple_grid_render(u64 id){
     }
   }
   u64 count = active_entities_count(gd.active_entities);
-  u32 * entities = active_entities_get_keys(gd.active_entities);
+  u32 entities[count];
+  {
+    u32 * _entities = active_entities_get_keys(gd.active_entities);
 
+    if(gd.game_visible != NULL)
+      count = u32_lookup_iter(gd.game_visible, _entities, count, entities, NULL, count, NULL);
+    else
+      memcpy(entities, _entities, sizeof(entities));
+  }
   vec3 prevp[count];
   bool moved[count];
   
@@ -2011,7 +2019,15 @@ void simple_grid_render(u64 id){
     set_simple_game_data(id, *gd.game_data);
   }
   count = active_entities_count(gd.active_entities);
-  entities = active_entities_get_keys(gd.active_entities);
+  {
+    u32 * _entities = active_entities_get_keys(gd.active_entities);
+
+    if(gd.game_visible != NULL)
+      count = u32_lookup_iter(gd.game_visible, _entities, count, entities, NULL, count, NULL);
+    else
+      memcpy(entities, _entities, sizeof(entities));
+  }
+  //entities = active_entities_get_keys(gd.active_entities);
 
   mat4 shuffle_flat = mat4_identity();
   shuffle_flat.m22 = 0;

@@ -4,11 +4,12 @@
 #include "persist_oop.h"
 #include "gui.h"
 #include "index_table.h"
-#include "simple_graphics.h"
+
 #include "abstract_sortable.h"
 #include "u32_lookup.h"
 #include "u32_to_u32.h"
 #include "u32_to_u32.c"
+#include "simple_graphics.h"
 #include "line_element.h"
 #include "line_element.c"
 #include "connected_nodes.h"
@@ -44,6 +45,7 @@ connection_entities * connection_entities_table;
 index_table * node_traversal;
 u32_to_sequence * node_traversal_index;
 u32_to_u32 * node_traversal_offset;
+u32_lookup * visited_nodes;
 void load_connection_entity(graphics_context * ctx, u32 entity, u32 entity2){
   if(entity > entity2)
     SWAP(entity, entity2);
@@ -292,8 +294,6 @@ void inventory_action(u32 node){
 }
 
 void node_roguelike_update(graphics_context * ctx){
-  UNUSED(ctx);
-  //u32_lookup_print(is_node_table);
   u32 cnt = ctx->game_event_table->count;
   if(cnt > 0){
 
@@ -357,7 +357,7 @@ void node_roguelike_update(graphics_context * ctx){
 	  }	  
 	}
 	
-	{ // check if ground is clicked
+	{ // check if node is clicked
 	  simple_game_point_collision(*ctx, is_node_table->key + 1, is_node_table->count, pt, tab);
 	  u64 hitcnt = 0;
 	  u32 * e = index_table_all(tab, &hitcnt);
@@ -374,6 +374,53 @@ void node_roguelike_update(graphics_context * ctx){
     }
   }
 
+  for(u32 i = 0; i < is_selected_table->count; i++){
+    u32 entity = is_selected_table->key[i + 1];
+    u32 node;
+    if(character_table_try_get(characters, &entity, &node)){
+      u32_lookup_set(visited_nodes, node);
+      u32 connection_count = connected_nodes_iter(connected_nodes_table, &node, 1, NULL, NULL, 100, NULL);
+      u64 indexes[connection_count];
+      connected_nodes_iter(connected_nodes_table, &node, 1, NULL, indexes, connection_count, NULL);
+      for(u32 i = 0; i < connection_count; i++){
+	u64 index = indexes[i];
+	if(index != 0)
+	  u32_lookup_set(visited_nodes, connected_nodes_table->n2[index]);
+      }
+    }
+
+  }
+  
+  u32_lookup_clear(ctx->game_visible);
+  u32_lookup_insert(ctx->game_visible, characters->entity + 1, characters->count);
+  u32_lookup_insert(ctx->game_visible, visited_nodes->key + 1, visited_nodes->count);
+
+  { // add UI nodes
+    u64 ui_node_entities_index[shown_ui_nodes->count];
+    u32_to_u32_lookup(node_to_entity, shown_ui_nodes->key + 1, ui_node_entities_index, shown_ui_nodes->count);
+    u32 cnt = 0;
+    for(u32 i = 0; i < shown_ui_nodes->count; i++){
+      if(ui_node_entities_index[i] != 0)
+	cnt++;
+    }
+    u32 entities[cnt];
+    u32 j = 0;
+    for(u32 i = 0; i < shown_ui_nodes->count; i++){
+      u64 index = ui_node_entities_index[i];
+      if(index != 0){
+	entities[j] = node_to_entity->value[index];
+	j++;
+      }
+    }
+    sort_u32(entities, cnt);
+    u32_lookup_insert(ctx->game_visible, entities, cnt);
+  }
+  { // add visited nodes
+
+
+  }
+  
+  u32_lookup_insert(ctx->game_visible, shown_ui_nodes->key + 1, shown_ui_nodes->count);
   for(u32 i = 0; i < characters->count; i++){
     u32 entity = characters->entity[i + 1];
     u32 nodeid = characters->node[i + 1];
@@ -492,7 +539,10 @@ void init_module(graphics_context * ctx){
   node_traversal_offset = u32_to_u32_create("node-traversal-offset");
   node_traversal_index = u32_to_sequence_create("node-traversal-index");
   node_traversal = index_table_create("node-traversal", sizeof(u32));
-  
+  if(ctx->game_visible == NULL){
+    ctx->game_visible = u32_lookup_create("game-visible");
+  }
+  visited_nodes = u32_lookup_create("visited-nodes");
   index_table_clear(bezier_curve_table);
   if(line_element_table->count == 0){
     // test bezier
