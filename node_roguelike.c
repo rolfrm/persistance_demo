@@ -374,10 +374,12 @@ void node_roguelike_update(graphics_context * ctx){
     }
   }
 
+  u32 current_node = 0;
   for(u32 i = 0; i < is_selected_table->count; i++){
     u32 entity = is_selected_table->key[i + 1];
     u32 node;
     if(character_table_try_get(characters, &entity, &node)){
+      current_node = node;
       u32_lookup_set(visited_nodes, node);
       u32 connection_count = connected_nodes_iter(connected_nodes_table, &node, 1, NULL, NULL, 100, NULL);
       u64 indexes[connection_count];
@@ -390,9 +392,17 @@ void node_roguelike_update(graphics_context * ctx){
     }
 
   }
-  
+
   u32_lookup_clear(ctx->game_visible);
-  u32_lookup_insert(ctx->game_visible, characters->entity + 1, characters->count);
+  if(current_node != 0){
+    for(u32 i = 0; i < characters->count; i++){
+      if(characters->node[i + 1] == current_node){
+
+	u32_lookup_insert(ctx->game_visible, characters->entity + 1 + i, 1);
+      }
+    }
+  }
+  //u32_lookup_insert(ctx->game_visible, characters->entity + 1, characters->count);
   u32_lookup_insert(ctx->game_visible, visited_nodes->key + 1, visited_nodes->count);
 
   { // add UI nodes

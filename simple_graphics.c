@@ -1934,15 +1934,8 @@ void simple_grid_render(u64 id){
     }
   }
   u64 count = active_entities_count(gd.active_entities);
-  u32 entities[count];
-  {
-    u32 * _entities = active_entities_get_keys(gd.active_entities);
-
-    if(gd.game_visible != NULL)
-      count = u32_lookup_iter(gd.game_visible, _entities, count, entities, NULL, count, NULL);
-    else
-      memcpy(entities, _entities, sizeof(entities));
-  }
+  u32 * entities = active_entities_get_keys(gd.active_entities);
+  
   vec3 prevp[count];
   bool moved[count];
   
@@ -2019,15 +2012,7 @@ void simple_grid_render(u64 id){
     set_simple_game_data(id, *gd.game_data);
   }
   count = active_entities_count(gd.active_entities);
-  {
-    u32 * _entities = active_entities_get_keys(gd.active_entities);
-
-    if(gd.game_visible != NULL)
-      count = u32_lookup_iter(gd.game_visible, _entities, count, entities, NULL, count, NULL);
-    else
-      memcpy(entities, _entities, sizeof(entities));
-  }
-  //entities = active_entities_get_keys(gd.active_entities);
+  entities = active_entities_get_keys(gd.active_entities);
 
   mat4 shuffle_flat = mat4_identity();
   shuffle_flat.m22 = 0;
@@ -2053,6 +2038,8 @@ void simple_grid_render(u64 id){
   glDepthFunc(GL_LEQUAL);
   for(u64 i = 0; i < count; i++){
     u32 entity = entities[i];
+    if(gd.game_visible != NULL && !u32_lookup_try_get(gd.game_visible, &entity))
+      continue;
     entity_data * ed = index_table_lookup(gd.entities, entity);
     vec3 p = ed->position;
 
@@ -2094,7 +2081,8 @@ void simple_grid_render(u64 id){
   glEnable(GL_BLEND);  
   for(u64 i = 0; i < count; i++){
     u32 entity = entities[i];
-    
+    if(gd.game_visible != NULL && !u32_lookup_try_get(gd.game_visible, &entity))
+      continue;
     entity_data * ed = index_table_lookup(gd.entities, entity);
     
     vec3 p = ed->position;
