@@ -22,6 +22,15 @@
 #include "u32_to_sequence.c"
 #include "node_roguelike.h"
 #include "node_action_table.h"
+#include "nr_ui_item.h"
+#include "nr_ui_item.c"
+
+
+typedef struct{
+  float time_step;
+
+}_nr_game_data;
+
 extern node_action_table * node_actions;
 void sort_u32(u32 * items, u64 cnt){
   int cmpfnc(u32 * a, u32 * b){
@@ -41,11 +50,12 @@ index_table * bezier_curve_table;
 line_element * line_element_table;
 connected_nodes * connected_nodes_table;
 connection_entities * connection_entities_table;
-
+_nr_game_data * nr_game_data;
 index_table * node_traversal;
 u32_to_sequence * node_traversal_index;
 u32_to_u32 * node_traversal_offset;
 u32_lookup * visited_nodes;
+nr_ui_item * ui_items;
 void load_connection_entity(graphics_context * ctx, u32 entity, u32 entity2){
   if(entity > entity2)
     SWAP(entity, entity2);
@@ -314,6 +324,18 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
     node_roguelike_ui_show(entity, entity);
     return true;
   }
+
+  if(nth_str_cmp(commands, 0, "make-ui")){
+    if(ctx->selection_kind != SELECTED_ENTITY || ctx->selected_index == 0){
+      logd("An entity must be selected for make-ui\n");
+      return true;
+    }
+    vec2 offset = {0};
+    nth_parse_f32(commands, 1, &offset.x);
+    nth_parse_f32(commands, 2, &offset.y);
+    nr_ui_item_set(ui_items, ctx->selected_index, offset);
+    return true;
+  }
   
   return false;
 }
@@ -330,6 +352,7 @@ void inventory_action(u32 node){
 
 double game_time = 0;
 void node_roguelike_update(graphics_context * ctx){
+  ctx->game_data->time_step = nr_game_data->time_step;
   u32 cnt = ctx->game_event_table->count;
   game_time += ctx->game_data->time_step * 60;
   int seconds = game_time;
@@ -525,6 +548,17 @@ void node_roguelike_update(graphics_context * ctx){
       characters->current_node[i + 1] = nodeid;
     } 
   }
+
+  for(u32 i = 0; i < ui_items->count; i++){
+    u32 item = ui_items->key[i + 1];
+    vec2 offset = ui_items->position[i + 1];
+    entity_data * ed = index_table_lookup(ctx->entities, item);
+    ASSERT(ed != NULL);
+    vec2 game_offset = ctx->game_data->offset;
+    float zoom = ctx->game_data->zoom;
+    ed->position = vec3_new(game_offset.x - offset.x * zoom, 10, game_offset.y - 10 + offset.y * zoom);
+  }
+  
   
   node_roguelike_ui_update(ctx);
   
@@ -590,18 +624,22 @@ void stats_action(u32 node){
 }
 
 void nr_pause(u32 node){
+  nr_game_data->time_step = 0.0f;
   logd("Pause %i\n", node);
 }
 
 void nr_normal_speed(u32 node){
+  nr_game_data->time_step = 2.0 / 60.0;
   logd("Normal Speed %i\n", node);
 }
 
 void nr_fast_speed(u32 node){
+  nr_game_data->time_step = 10.0 / 60.0;
   logd("Fast Speed %i\n", node);
 }
 
 void nr_ultra_speed(u32 node){
+  nr_game_data->time_step = 100.0 / 60.0;
   logd("Ultra Speed %i\n", node);
 }
 
@@ -618,7 +656,7 @@ void init_module(graphics_context * ctx){
   is_selected_table = u32_lookup_create("selected-entities");
   connected_nodes_table = connected_nodes_create("connected_nodes");
   ((bool *)&connected_nodes_table->is_multi_table)[0] = true;
-  
+  ui_items = nr_ui_item_create("nr-ui-item");
   connection_entities_table = connection_entities_create("connection_entities");
   
   node_traversal_offset = u32_to_u32_create("node-traversal-offset");
@@ -628,6 +666,14 @@ void init_module(graphics_context * ctx){
     ctx->game_visible = u32_lookup_create("game-visible");
   }
   visited_nodes = u32_lookup_create("visited-nodes");
+  static mem_area * game_data_mem_area = NULL;
+  if(game_data_mem_area == NULL){
+    game_data_mem_area = create_mem_area("nr-game-data");
+    if(game_data_mem_area->size != sizeof(_nr_game_data))
+      mem_area_realloc(game_data_mem_area, sizeof(_nr_game_data));
+    nr_game_data = game_data_mem_area->ptr;
+  }
+
   index_table_clear(bezier_curve_table);
   if(line_element_table->count == 0){
     // test bezier
