@@ -302,7 +302,14 @@ void node_roguelike_update(graphics_context * ctx){
     game_event * events = ctx->game_event_table->event + 1;
     for(u32 i = 0; i < cnt; i++){
       game_event evt = events[i];
-      if(evt.mouse_button.button == mouse_button_left && evt.mouse_button.pressed){
+      //logd("Event count: %i: %i %i %i\n", evt.key.key,  key_space, key_enter, key_release);
+      if(evt.kind == GAME_EVENT_KEY){
+	if(evt.key.key == key_space && evt.key.action == key_press){
+	  logd("Pause/Unpause\n");
+	}
+      }
+      
+      if(evt.kind == GAME_EVENT_MOUSE_BUTTON && evt.mouse_button.button == mouse_button_left && evt.mouse_button.pressed){
 	vec2 pt = evt.mouse_button.game_position;
 	
 	static index_table * tab = NULL;

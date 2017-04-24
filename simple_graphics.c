@@ -16,7 +16,7 @@
 #include "console.h"
 #include "u32_lookup.h"
 #include "simple_graphics.h"
-
+#include "game_events.c"
 bool (** printer_table)(void * ptr, const char * type) = NULL ;
 u64 printer_table_cnt = 0;
 
@@ -1544,7 +1544,6 @@ static void console_handle_key(u64 console, int key, int mods, int action){
     return;
   }
   
-  //logd("%i %i %i\n", console, key, mods);
   u64 histcnt = get_console_history_cnt(console);
   u64 history[histcnt + 1];
   u64 history_cnt = get_console_history(console, history, array_count(history));
@@ -1570,20 +1569,16 @@ static void console_handle_key(u64 console, int key, int mods, int action){
   if(idx > 0){
     char buffer[200] = {0};
     if(console_get_history(console, idx - 1, buffer, array_count(buffer))){
-      //logd("SETTING TEXT TO '%s'\n", buffer);
       remove_text(console);
       set_text(console, buffer);
     }
   }
-  //logd("HIST IDX: %i\n", idx);
-  
  skip:;
   CALL_BASE_METHOD(console, key_handler_method, key, mods, action);
 }
 
 
 void simple_grid_measure(u64 id, vec2 * size){
-  UNUSED(id);
   *size = shared_size;
   graphics_context gd = get_graphics_context(id);
   gd.render_size = *size;
@@ -1611,18 +1606,17 @@ static void game_handle_key(u64 console, int key, int mods, int action){
       }
     }
   }
-  if(key == key_space && action == key_press){
+
+  { // Tell the game.  
     u64 ctl = get_alternative_control(console);
     graphics_context ctx = get_graphics_context(ctl);
-    game_data gd = get_simple_game_data(console);
-    if(gd.selected_entity != 0){
-      vec3 current_impulse;
-      if(!try_get_current_impulse(gd.selected_entity, &current_impulse))
-	set_current_impulse(gd.selected_entity, vec3_new(0,0.05, 0));
-    }
-    UNUSED(ctx);
+    game_events_set(ctx.game_event_table, game_event_index_new(),
+		    (game_event){
+		      .kind = GAME_EVENT_KEY,
+			.key.key = key,
+			.key.action = action,
+			.key.mods = mods});
   }
-  UNUSED(mods);
 }
 struct detect_collision_aabb{
     vec3 min, max;
@@ -2229,7 +2223,7 @@ void simple_game_point_collision(graphics_context ctx, u32 * entities, u32 entit
   }
 }
 
-#include "game_events.c"
+
 u32 game_event_index_new(){
   static u32 * ptr = NULL;
   if(ptr == NULL){

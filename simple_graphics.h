@@ -125,7 +125,8 @@ CREATE_TABLE_DECL2(entity_direction, u32, vec2);
 CREATE_TABLE_DECL2(material_y_offset, u32, f32);
 
 typedef enum{
-  GAME_EVENT_MOUSE_BUTTON
+  GAME_EVENT_MOUSE_BUTTON,
+  GAME_EVENT_KEY
 }game_event_kind;
 
 typedef struct{
@@ -136,6 +137,11 @@ typedef struct{
       vec2 game_position;
       bool pressed;
     }mouse_button;
+    struct{
+      int key;
+      int action;
+      int mods;
+    }key;
     char reserved[28];
   };
 }game_event;
