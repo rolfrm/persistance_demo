@@ -155,6 +155,7 @@ typedef struct {
   bool mouse_state;
   vec2 last_mouse_position;
   float zoom;
+  f32 time_step;
 }game_data;
 
 struct _graphics_context{
@@ -185,6 +186,7 @@ struct _graphics_context{
   u32 game_id;
 
   u32_lookup * game_visible;
+
 };
 
 

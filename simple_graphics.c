@@ -210,6 +210,7 @@ void graphics_context_load(graphics_context * ctx){
   ctx->entity_velocity = entity_velocity_table_create("simple/entity-velocity");
   ctx->entity_acceleration = entity_acceleration_table_create("simple/entity-acceleration");
   ctx->game_event_table = game_events_create(NULL);
+
 }
 CREATE_TABLE_DECL2(current_loaded_modules, u32, u32);
 CREATE_TABLE_NP(current_loaded_modules, u32, u32);
@@ -1228,11 +1229,7 @@ void simple_game_editor_invoke_command(graphics_context * ctx, editor_context * 
 	    entity_speed_set(ctx->entity_speed, editor->selected_index, f);
 	    logd("Set speed for %i to %f\n", editor->selected_index, f);
 	  }
-	  
-
 	}
-	
-	
     }
     else if(first("select") || first("focus")){
       bool is_focus = first("focus");
@@ -1270,8 +1267,7 @@ void simple_game_editor_invoke_command(graphics_context * ctx, editor_context * 
 	}else{
 	  editor->focused_item_kind = SELECTED_NONE;
 	  editor->focused_item = 0;
-	}
-	
+	}	
       }
     }else if(first("remove")){
       char id_buffer[100] = {0};
@@ -1503,12 +1499,10 @@ void simple_game_editor_invoke_command(graphics_context * ctx, editor_context * 
       logd("Unkown command!\n");
     }
   }
-  //logd("COMMAND ENTERED %i %s\n", id, command);
 }
 
 CREATE_TABLE_DECL2(console_history_index, u64, u32);
 CREATE_TABLE2(console_history_index, u64, u32);
-
 
 static void console_handle_key(u64 console, int key, int mods, int action){
 
@@ -1939,7 +1933,7 @@ void simple_grid_render(u64 id){
   entity_index_lookup_clear(entity_lookup);
   
   entity_2_collisions_clear(gd.collisions_2_table);
-  float dt = 1.0 / 60.0;
+  float dt = _gd.time_step;
   { // check collisions due to move.
     for(u32 i = 0; i < count ;i ++){
       moved[i] = false;
@@ -2314,11 +2308,12 @@ void simple_graphics_editor_load(u64 id, u64 win_id){
   
   //if(once(game)){
   game_data _gd = get_simple_game_data(game);
-    if(_gd.zoom < 0.001)
+  if(_gd.zoom < 0.001){
       _gd.zoom = 0.4;
-    set_simple_game_data(game, _gd);
-    //}
-  
+      _gd.time_step = 1.0 / 60.0;
+      set_simple_game_data(game, _gd);
+  }
+
   if(gui_get_control(win_id, id) == NULL  && gui_get_control(win_id, game) == NULL){
     add_control(win_id, id);
     set_focused_element(win_id, console);

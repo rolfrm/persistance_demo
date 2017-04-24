@@ -281,6 +281,39 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
     u32_to_sequence_set(node_traversal_index, ctx->selected_index, seq);
     return true;
   }
+
+  if(nth_str_cmp(commands, 0, "nr-load-ui")){
+    u32 entity = 0;
+    if(!nth_parse_u32(commands, 1, &entity) || entity == 0){
+      logd("valid entity must be selected!\n");
+      return true;
+    }
+    u32_to_u32_remove(ui_subnodes, &entity, 1);
+    {
+      u32 nodeid = 0xFFA01;
+      u32_to_u32_set(ui_subnodes, entity, nodeid);
+      u32_to_u32_set(ui_node_actions, nodeid, intern_string("pause"));	
+    }
+    {
+      u32 nodeid = 0xFFA02;
+      u32_to_u32_set(ui_subnodes, entity, nodeid);
+      u32_to_u32_set(ui_node_actions, nodeid, intern_string(">"));
+    }
+    
+    {
+      u32 nodeid = 0xFFA03;
+      u32_to_u32_set(ui_subnodes, entity, nodeid);
+      u32_to_u32_set(ui_node_actions, nodeid, intern_string(">>"));
+    }
+
+    {
+      u32 nodeid = 0xFFA04;
+      u32_to_u32_set(ui_subnodes, entity, nodeid);
+      u32_to_u32_set(ui_node_actions, nodeid, intern_string(">>>"));
+    }
+    node_roguelike_ui_show(entity, entity);
+    return true;
+  }
   
   return false;
 }
@@ -295,8 +328,15 @@ void inventory_action(u32 node){
   }
 }
 
+double game_time = 0;
 void node_roguelike_update(graphics_context * ctx){
   u32 cnt = ctx->game_event_table->count;
+  game_time += ctx->game_data->time_step * 60;
+  int seconds = game_time;
+  int minutes = seconds / 60;
+  int hours = minutes / 60;
+  UNUSED(hours);
+  //logd("Game time: %02i:%02i:%02i\n", hours % 24, minutes % 60, seconds % 60);
   if(cnt > 0){
 
     game_event * events = ctx->game_event_table->event + 1;
@@ -305,7 +345,13 @@ void node_roguelike_update(graphics_context * ctx){
       //logd("Event count: %i: %i %i %i\n", evt.key.key,  key_space, key_enter, key_release);
       if(evt.kind == GAME_EVENT_KEY){
 	if(evt.key.key == key_space && evt.key.action == key_press){
-	  logd("Pause/Unpause\n");
+	  if(ctx->game_data->time_step < 0.0001f){
+	    logd("Unpause\n");
+	    ctx->game_data->time_step = 1.0f / 60.0f;
+	  }else{
+	    ctx->game_data->time_step = 0.0f;
+	    logd("Pause\n");
+	  }
 	}
       }
       
@@ -325,8 +371,6 @@ void node_roguelike_update(graphics_context * ctx){
 	  simple_game_point_collision(*ctx, entities, array_count(entities), pt, tab);
 	  u64 hitcnt = 0;
 	  u32 * e = index_table_all(tab, &hitcnt);
-	  //for(u32 i = 0; i < hitcnt; i++)
-	    //logd("UI nodes  %i clicked clicked\n", e[i]);
 	  if(hitcnt > 0){
 	    for(u32 i = 0; i < node_to_entity->count; i++){
 	      u32 _e = node_to_entity->value[i + 1];
@@ -545,6 +589,22 @@ void stats_action(u32 node){
   logd("Check stats: %i\n", node);
 }
 
+void nr_pause(u32 node){
+  logd("Pause %i\n", node);
+}
+
+void nr_normal_speed(u32 node){
+  logd("Normal Speed %i\n", node);
+}
+
+void nr_fast_speed(u32 node){
+  logd("Fast Speed %i\n", node);
+}
+
+void nr_ultra_speed(u32 node){
+  logd("Ultra Speed %i\n", node);
+}
+
 void init_module(graphics_context * ctx){
   static bool is_initialized = false;
   if(is_initialized) return;
@@ -597,5 +657,9 @@ void init_module(graphics_context * ctx){
   // must be loaded each run.
   node_roguelike_ui_register(intern_string("inventory"), inventory_action);
   node_roguelike_ui_register(intern_string("look"), look_action);
-  node_roguelike_ui_register(intern_string("stats"), stats_action); 
+  node_roguelike_ui_register(intern_string("stats"), stats_action);
+  node_roguelike_ui_register(intern_string("pause"), nr_pause);
+  node_roguelike_ui_register(intern_string(">"), nr_normal_speed);
+  node_roguelike_ui_register(intern_string(">>"), nr_fast_speed);
+  node_roguelike_ui_register(intern_string(">>>"), nr_ultra_speed); 
 }
