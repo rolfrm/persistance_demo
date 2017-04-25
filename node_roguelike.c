@@ -106,6 +106,16 @@ void load_connection_entity(graphics_context * ctx, u32 entity, u32 entity2){
   graphics_context_reload_polygon(*ctx, ced);
 }
 
+bool are_connected(u32 a, u32 b){
+  u64 iter = 0;
+  u64 index = 0;
+  while(connected_nodes_iter(connected_nodes_table, &a, 1, NULL, &index, 1, &iter)){
+    if(connected_nodes_table->n2[index] == b)
+      return true;
+  }
+  return false;
+}
+
 bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char * commands){
   UNUSED(gctx);
   u32 entity = 0;
@@ -417,7 +427,7 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
       if(i < ncount - 1)
 	_nodes[i] = newnode;
       seqs[i] = find_path(_nodes[i - 1], _nodes[i], tab, gctx);
-      total_count += seqs[i].count;
+      total_count += seqs[i].count - 1;
       if(seqs[i].count == 0){
 	logd("ERROR: Invalid path from %i to %i\n", _nodes[i-1], _nodes[i]);
 
@@ -435,15 +445,22 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
     for(u32 i = 1; i < ncount; i++){
       u32 * newnodes = index_table_lookup_sequence(tab, seqs[i]);
       logd("node count %i: %i\n", i, seqs[i].count);
-      for(u32 k = 0; k < seqs[i].count; k++){
+      for(u32 k = 1; k < seqs[i].count; k++){
 	nodes[j++] = newnodes[k];
       }
     }
     logd("Final path: %i\n", total_count);
     for(u32 i = 0; i < total_count; i++){
       logd("%i ", nodes[i]);
+
     }
     logd("\n");
+    
+    for(u32 i = 0; i < total_count; i++){
+      if(i > 0)
+	ASSERT(nodes[i] == nodes[i -1] || are_connected(nodes[i], nodes[i - 1]));
+    }
+    
     u32_to_sequence_set(node_traversal_index, i1, seq);
     
     return true;
@@ -456,6 +473,7 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
       logd("Got path:\n");
       u32 * nodes = index_table_lookup_sequence(tab, seq);
       for(u32 i = 0; i < seq.count; i++){
+
 	logd("%i ", nodes[i]);
       }
       logd("\n");
@@ -760,7 +778,7 @@ void node_roguelike_update(graphics_context * ctx){
     vec3 n2c = vec3_sub(node->position, ed->position);
 
     auto len = vec3_len(n2c);
-    if(len > 0.2){
+    if(len > 0.1){
 
       vec3 d = vec3_scale(n2c, 0.3 * 1.0 / len);
       entity_velocity_set(ctx->entity_velocity, entity, d);
