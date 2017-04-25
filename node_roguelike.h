@@ -11,3 +11,4 @@ extern u32_to_u32 * node_to_entity;
 void sort_u32(u32 * items, u64 cnt);
 void node_roguelike_ui_hide(u32 uinode);
 void node_roguelike_ui_hide_subnodes(u32 uinode);
+index_table_sequence find_path(u32 a, u32 b, index_table * outp_nodes, graphics_context * ctx);

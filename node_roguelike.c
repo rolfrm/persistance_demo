@@ -400,21 +400,181 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
     ed->model = nr_game_data->people_default_model;
     character_table_set(characters, i1, node, 0);
     active_entities_set(gctx->active_entities, i1, true);
-    index_table_sequence seq = {0};
-    u32_to_sequence_try_get(node_traversal_index, &i1, &seq);
-    index_table_resize_sequence(node_traversal, &seq, 5);
-    u32_to_sequence_set(node_traversal_index, i1, seq);
-    u32 * nodes = index_table_lookup_sequence(node_traversal, seq);;
-    nodes[0] = node;
-    for(u32 i = 1; i < seq.count; i++){
+    const u32 ncount = 10;
+    u32 _nodes[ncount];
+    
+    _nodes[0] = node;
+    _nodes[ncount - 1] = node;
+    index_table_sequence seqs[ncount];
+    static index_table * tab = NULL;
+    if(tab == NULL)
+      tab = index_table_create(NULL, sizeof(u32));
+    index_table_clear(tab);
+    u32 total_count = 1;
+    for(u32 i = 1; i < ncount; i++){
       u32 idx = randu32(residential_city_nodes->count);
-      nodes[i] = residential_city_nodes->key[idx + 1];
+      u32 newnode = residential_city_nodes->key[idx + 1];
+      if(i < ncount - 1)
+	_nodes[i] = newnode;
+      seqs[i] = find_path(_nodes[i - 1], _nodes[i], tab, gctx);
+      total_count += seqs[i].count;
+      if(seqs[i].count == 0){
+	logd("ERROR: Invalid path from %i to %i\n", _nodes[i-1], _nodes[i]);
+
+	return true;
+      }
     }
     
+    index_table_sequence seq = {0};
+    u32_to_sequence_try_get(node_traversal_index, &i1, &seq);
+    index_table_resize_sequence(node_traversal, &seq, total_count);
+
+    u32 * nodes = index_table_lookup_sequence(node_traversal, seq);
+    nodes[0] = node;
+    u32 j = 1;
+    for(u32 i = 1; i < ncount; i++){
+      u32 * newnodes = index_table_lookup_sequence(tab, seqs[i]);
+      logd("node count %i: %i\n", i, seqs[i].count);
+      for(u32 k = 0; k < seqs[i].count; k++){
+	nodes[j++] = newnodes[k];
+      }
+    }
+    logd("Final path: %i\n", total_count);
+    for(u32 i = 0; i < total_count; i++){
+      logd("%i ", nodes[i]);
+    }
+    logd("\n");
+    u32_to_sequence_set(node_traversal_index, i1, seq);
+    
+    return true;
+  }
+  if(nth_str_cmp(commands, 0, "find-path")){
+    u32 n1, n2;
+    if(nth_parse_u32(commands, 1, &n1) && nth_parse_u32(commands, 2, &n2) ){
+      index_table * tab = index_table_create(NULL, sizeof(u32));
+      index_table_sequence seq = find_path(n1, n2, tab, gctx);
+      logd("Got path:\n");
+      u32 * nodes = index_table_lookup_sequence(tab, seq);
+      for(u32 i = 0; i < seq.count; i++){
+	logd("%i ", nodes[i]);
+      }
+      logd("\n");
+    }else{
+      logd("Two u32s must be supplied\n");
+    }
     return true;
   }
   
   return false;
+}
+#include "a_star_helper.h"
+#include "a_star_helper.c"
+#include "f32_to_u32_lookup.h"
+#include "f32_to_u32_lookup.c"
+static int keycmpf32(const f32 * k1,const f32 * k2){
+  if(*k1 > *k2)
+    return 1;
+  else if(*k1 == *k2)
+    return 0;
+  else return -1;
+}
+
+index_table_sequence find_path(u32 a, u32 b, index_table * outp_nodes, graphics_context * ctx){
+  index_table_sequence seq ={0};
+  if(a == b){
+    index_table_resize_sequence(outp_nodes, &seq, 1);
+    ((u32 *)index_table_lookup_sequence(outp_nodes, seq))[0] = a;
+    return seq;
+  }
+  
+  static a_star_helper * helper = NULL;
+  static f32_to_u32_lookup * fronts = NULL;
+  if(helper == NULL) helper = a_star_helper_create(NULL);
+  if(fronts == NULL){
+    fronts = f32_to_u32_lookup_create(NULL);
+    fronts->cmp = (void *) keycmpf32;
+  }
+  f32_to_u32_lookup_clear(fronts);
+  a_star_helper_clear(helper);
+
+  entity_data * eb = index_table_lookup(ctx->entities, b);
+  entity_data * ab = index_table_lookup(ctx->entities, a);
+  
+  f32_to_u32_lookup_set(fronts, vec3_len(vec3_sub(eb->position, ab->position)), a);
+  a_star_helper_set(helper, a, vec3_len(vec3_sub(eb->position, ab->position)), 0,  (u32)-1);
+  bool debug = false;
+  while(true){
+    if(fronts->count == 0){
+      // this happens if there is no path between a and b.
+      return seq;
+    }
+    u32 node = fronts->value[1];
+    if(debug){
+      f32_to_u32_lookup_print(fronts);
+      iron_usleep(100000);
+      logd("Node: %i\n", node);
+    }
+    entity_data * ed = index_table_lookup(ctx->entities, node);
+    f32_to_u32_lookup_unset(fronts, fronts->key[1]);
+    u64 helper_idx = 0;
+    a_star_helper_lookup(helper, &node, &helper_idx, 1);
+    ASSERT(helper_idx > 0);
+    f32 traveled = helper->traveled[helper_idx];
+    u64 c1 = connected_nodes_iter(connected_nodes_table, &node, 1, NULL, NULL, 1000, NULL);
+    if(debug)
+      logd("Connected count: %i\n", c1);
+    u64 ac[c1];
+    connected_nodes_iter(connected_nodes_table, &node, 1, NULL, ac, c1, NULL);
+    u32 cn[c1];
+    for(u32 i = 0; i < c1; i++)
+      cn[i] = connected_nodes_table->n2[ac[i]];
+    sort_u32(cn, c1);
+    a_star_helper_lookup(helper, cn, ac, c1);
+    for(u32 i = 0; i < c1; i++){
+      u32 newnode = cn[i];
+      if(debug){
+	iron_usleep(100000);
+	logd("newnode: %i\n", newnode);
+      }
+      if(newnode == b){
+	index_table_resize_sequence(outp_nodes, &seq, helper->count + 1);
+	u32 * d = index_table_lookup_sequence(outp_nodes, seq);
+	u32 cnt = 0;
+	while(true){
+	  if(debug){
+	     iron_usleep(100000);
+	     logd("node: %i\n", newnode);
+	   }
+
+	  d[cnt] = newnode;
+	  cnt++;
+	  if(node == (u32) -1){
+	    for(u32 i = 0; i < cnt / 2; i++){
+	      SWAP(d[i], d[cnt - i - 1]);
+	    }
+	    index_table_resize_sequence(outp_nodes, &seq, cnt);
+	    return seq;
+	  }
+	  newnode = node;
+
+	  a_star_helper_try_get(helper, &newnode, NULL, NULL,  &node);
+
+	}
+      }
+      
+      if(ac[i] == 0){
+	entity_data * ab = index_table_lookup(ctx->entities, newnode);
+	f32 d = vec3_len(vec3_sub(ab->position, ed->position)) + traveled;
+	f32 expt = vec3_len(vec3_sub(ab->position, eb->position));
+	f32_to_u32_lookup_set(fronts, expt + d, newnode);
+	a_star_helper_set(helper, newnode, expt, d,  node);
+	
+      }
+    }
+    
+  }
+
+  
 }
 
 void inventory_action(u32 node){
@@ -722,6 +882,7 @@ void nr_ultra_speed(u32 node){
 }
 
 void init_module(graphics_context * ctx){
+
   static bool is_initialized = false;
   if(is_initialized) return;
   is_initialized = true;
