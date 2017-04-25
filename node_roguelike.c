@@ -20,6 +20,8 @@
 #include "character_table.c"
 #include "u32_to_sequence.h"
 #include "u32_to_sequence.c"
+#include "u32_to_f32.h"
+#include "u32_to_f32.c"
 #include "node_roguelike.h"
 #include "node_action_table.h"
 #include "nr_ui_item.h"
@@ -30,6 +32,14 @@ typedef struct{
   float time_step;
   u32 people_default_model;
 }_nr_game_data;
+
+typedef struct{
+  u32 entity;
+  u32 index;
+}traversal_time_key;
+
+#include "traversal_time.h"
+#include "traversal_time.c"
 
 extern node_action_table * node_actions;
 void sort_u32(u32 * items, u64 cnt){
@@ -54,11 +64,13 @@ _nr_game_data * nr_game_data;
 index_table * node_traversal;
 u32_to_sequence * node_traversal_index;
 u32_to_u32 * node_traversal_offset;
+u32_to_f32 * node_traversal_timeout;
 u32_lookup * visited_nodes;
 nr_ui_item * ui_items;
 u32_lookup * residential_nodes;
 u32_lookup * city_nodes;
 u32_lookup * residential_city_nodes;
+traversal_time * traversal_times;
 
 void load_connection_entity(graphics_context * ctx, u32 entity, u32 entity2){
   if(entity > entity2)
@@ -441,13 +453,14 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
 
     u32 * nodes = index_table_lookup_sequence(node_traversal, seq);
     nodes[0] = node;
+    traversal_time_set(traversal_times, (traversal_time_key){i1, 0}, 1.0f);
     u32 j = 1;
     for(u32 i = 1; i < ncount; i++){
       u32 * newnodes = index_table_lookup_sequence(tab, seqs[i]);
-      logd("node count %i: %i\n", i, seqs[i].count);
       for(u32 k = 1; k < seqs[i].count; k++){
 	nodes[j++] = newnodes[k];
       }
+      traversal_time_set(traversal_times, (traversal_time_key){i1, j - 1}, 1.0f);
     }
     logd("Final path: %i\n", total_count);
     for(u32 i = 0; i < total_count; i++){
@@ -614,7 +627,7 @@ void node_roguelike_update(graphics_context * ctx){
   int minutes = seconds / 60;
   int hours = minutes / 60;
   UNUSED(hours);
-  //logd("Game time: %02i:%02i:%02i\n", hours % 24, minutes % 60, seconds % 60);
+  //logd("Game time: %02i:%02i:%02i %f\n", hours % 24, minutes % 60, seconds % 60);
   if(cnt > 0){
 
     game_event * events = ctx->game_event_table->event + 1;
@@ -757,9 +770,18 @@ void node_roguelike_update(graphics_context * ctx){
   }
  
   u32_lookup_insert(ctx->game_visible, shown_ui_nodes->key + 1, shown_ui_nodes->count);
-  
+  for(u32 i = 0; i < node_traversal_timeout->count; i++){
+    node_traversal_timeout->value[i + 1] -= ctx->game_data->time_step;
+  }
+    
   for(u32 i = 0; i < characters->count; i++){
     u32 entity = characters->entity[i + 1];
+    f32 timeout = 0.0;
+    if(u32_to_f32_try_get(node_traversal_timeout, &entity, &timeout)){
+      if(timeout <= 0)
+	u32_to_f32_unset(node_traversal_timeout, entity);
+      else continue;
+    }
     u32 nodeid = characters->target_node[i + 1];
     if(nodeid == 0){
       index_table_sequence seq = {0};
@@ -778,7 +800,7 @@ void node_roguelike_update(graphics_context * ctx){
     vec3 n2c = vec3_sub(node->position, ed->position);
 
     auto len = vec3_len(n2c);
-    if(len > 0.1){
+    if(len > 0.2){
 
       vec3 d = vec3_scale(n2c, 0.3 * 1.0 / len);
       entity_velocity_set(ctx->entity_velocity, entity, d);
@@ -793,6 +815,9 @@ void node_roguelike_update(graphics_context * ctx){
 	
 	u32 offset = 0;	
 	u32_to_u32_try_get(node_traversal_offset, &entity, &offset);
+	traversal_time_key tk = {entity, offset};
+	f32 timeout = 0.0f;
+	
 	offset += 1;
 	if(offset >= seq.count)
 	  offset = 0;
@@ -800,11 +825,17 @@ void node_roguelike_update(graphics_context * ctx){
 	characters->current_node[i + 1] = characters->target_node[i + 1];
 	characters->target_node[i + 1] = traversal_list[offset];
 	u32_to_u32_set(node_traversal_offset, entity, offset);
+	if(traversal_time_try_get(traversal_times, &tk, &timeout)){
+
+	  u64 index = 0;
+	  u32_to_f32_lookup(node_traversal_timeout, &entity, &index, 1);
+	  if(index == 0)
+	    u32_to_f32_set(node_traversal_timeout, entity, timeout);
+	}
       }
       characters->current_node[i + 1] = nodeid;
     } 
   }
-
   for(u32 i = 0; i < ui_items->count; i++){
     u32 item = ui_items->key[i + 1];
     vec2 offset = ui_items->position[i + 1];
@@ -919,6 +950,8 @@ void init_module(graphics_context * ctx){
   node_traversal_offset = u32_to_u32_create("node-traversal-offset");
   node_traversal_index = u32_to_sequence_create("node-traversal-index");
   node_traversal = index_table_create("node-traversal", sizeof(u32));
+  traversal_times = traversal_time_create("node-traversal-time");
+  node_traversal_timeout = u32_to_f32_create("node-traversal-timeout");
   if(ctx->game_visible == NULL){
     ctx->game_visible = u32_lookup_create("game-visible");
   }
