@@ -28,7 +28,7 @@
 
 typedef struct{
   float time_step;
-
+  u32 people_default_model;
 }_nr_game_data;
 
 extern node_action_table * node_actions;
@@ -56,6 +56,10 @@ u32_to_sequence * node_traversal_index;
 u32_to_u32 * node_traversal_offset;
 u32_lookup * visited_nodes;
 nr_ui_item * ui_items;
+u32_lookup * residential_nodes;
+u32_lookup * city_nodes;
+u32_lookup * residential_city_nodes;
+
 void load_connection_entity(graphics_context * ctx, u32 entity, u32 entity2){
   if(entity > entity2)
     SWAP(entity, entity2);
@@ -101,8 +105,6 @@ void load_connection_entity(graphics_context * ctx, u32 entity, u32 entity2){
   ed->position = e1->position;
   graphics_context_reload_polygon(*ctx, ced);
 }
-
-
 
 bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char * commands){
   UNUSED(gctx);
@@ -336,6 +338,81 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
     nr_ui_item_set(ui_items, ctx->selected_index, offset);
     return true;
   }
+
+  if(nth_str_cmp(commands, 0, "is-residential")){
+    int i = 1;
+    u32 node = 0;
+    while(nth_parse_u32(commands, i++, &node))
+      u32_lookup_set(residential_nodes, node);
+    u32_lookup_print(residential_nodes);
+    return true;
+  }
+
+  if(nth_str_cmp(commands, 0, "is-city")){
+    int i = 1;
+    u32 node = 0;
+    while(nth_parse_u32(commands, i++, &node))
+      u32_lookup_set(city_nodes, node);
+    u32_lookup_print(city_nodes);
+    return true;
+  }
+
+  if(nth_str_cmp(commands, 0, "is-active")){
+    if(ctx->selection_kind != SELECTED_ENTITY || ctx->selected_index == 0){
+      logd("An entity must be selected for is-active.\n");
+      return true;
+    }
+    active_entities_set(gctx->active_entities, ctx->selected_index, true);
+  }
+  
+  
+  if(nth_str_cmp(commands, 0, "people-default-model")){
+    nth_parse_u32(commands, 1, &nr_game_data->people_default_model);
+    return true;
+  }
+  
+  if(nth_str_cmp(commands, 0, "load-people")){
+    if(nr_game_data->people_default_model == 0){
+      logd("Default model must be set.\n");
+      return true;
+    }
+
+    if(residential_nodes->count == 0){
+      logd("No residential nodes created.\n");
+      return true;
+    }
+
+    if(residential_city_nodes->count != residential_nodes->count + city_nodes->count){
+      u32_lookup_insert(residential_city_nodes, residential_nodes->key + 1, residential_nodes->count);
+      u32_lookup_insert(residential_city_nodes, city_nodes->key + 1, city_nodes->count);
+      logd("Refresh residential city:l\n");
+      u32_lookup_print(residential_city_nodes);
+    }
+    
+    u32 nodeidx = randu32(residential_nodes->count);
+    u32 node = residential_nodes->key[nodeidx + 1];
+    logd("lives at: %i\n", node);
+    entity_data * node_entity = index_table_lookup(gctx->entities, node);
+
+    u32 i1 = index_table_alloc(gctx->entities);
+    entity_data * ed = index_table_lookup(gctx->entities, i1);
+    ed->position = node_entity->position;
+    ed->model = nr_game_data->people_default_model;
+    character_table_set(characters, i1, node, 0);
+    active_entities_set(gctx->active_entities, i1, true);
+    index_table_sequence seq = {0};
+    u32_to_sequence_try_get(node_traversal_index, &i1, &seq);
+    index_table_resize_sequence(node_traversal, &seq, 5);
+    u32_to_sequence_set(node_traversal_index, i1, seq);
+    u32 * nodes = index_table_lookup_sequence(node_traversal, seq);;
+    nodes[0] = node;
+    for(u32 i = 1; i < seq.count; i++){
+      u32 idx = randu32(residential_city_nodes->count);
+      nodes[i] = residential_city_nodes->key[idx + 1];
+    }
+    
+    return true;
+  }
   
   return false;
 }
@@ -502,6 +579,7 @@ void node_roguelike_update(graphics_context * ctx){
   }
  
   u32_lookup_insert(ctx->game_visible, shown_ui_nodes->key + 1, shown_ui_nodes->count);
+  
   for(u32 i = 0; i < characters->count; i++){
     u32 entity = characters->entity[i + 1];
     u32 nodeid = characters->target_node[i + 1];
@@ -666,6 +744,9 @@ void init_module(graphics_context * ctx){
     ctx->game_visible = u32_lookup_create("game-visible");
   }
   visited_nodes = u32_lookup_create("visited-nodes");
+  residential_nodes = u32_lookup_create("residential");
+  city_nodes = u32_lookup_create("city-nodes");
+  residential_city_nodes = u32_lookup_create("residential-city-nodes");
   static mem_area * game_data_mem_area = NULL;
   if(game_data_mem_area == NULL){
     game_data_mem_area = create_mem_area("nr-game-data");
