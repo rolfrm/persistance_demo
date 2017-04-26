@@ -72,6 +72,9 @@ u32_lookup * city_nodes;
 u32_lookup * residential_city_nodes;
 traversal_time * traversal_times;
 
+u32_to_u32 * node_sub_nodes;
+u32_to_u32 * node_sub_nodes_lookup;
+
 void load_connection_entity(graphics_context * ctx, u32 entity, u32 entity2){
   if(entity > entity2)
     SWAP(entity, entity2);
@@ -205,7 +208,7 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
       
       if(character_table_try_get(characters, &entity, &node, &target)){
 	character_table_unset(characters, entity);
-	logd("Entity %i is not character.\n", entity);
+  	logd("Entity %i is not character.\n", entity);
       }
       else{
 	u32 node = 0;
@@ -384,7 +387,13 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
       logd("An entity must be selected for is-active.\n");
       return true;
     }
-    active_entities_set(gctx->active_entities, ctx->selected_index, true);
+    
+    if(active_entities_get(gctx->active_entities, ctx->selected_index))
+      active_entities_unset(gctx->active_entities, ctx->selected_index);
+    else
+      active_entities_set(gctx->active_entities, ctx->selected_index, true);
+    
+    return true;
   }
   
   
@@ -495,6 +504,28 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
     }
     return true;
   }
+
+  if(nth_str_cmp(commands, 0, "is-sub-node")){
+    u32 super, sub;
+    if(nth_parse_u32(commands, 1, &super) && nth_parse_u32(commands, 2, &sub) ){
+      u64 indexes[10];
+      u64 index = 0;
+      u64 cnt = 0;
+      while((cnt = u32_to_u32_iter(node_sub_nodes, &super, 1,NULL, indexes, array_count(indexes), &index))){
+	for(u32 i = 0; i < cnt; i++){
+	  if(node_sub_nodes->value[indexes[i]] == sub){
+	    logd("Node is already a sub-node\n");
+	    return true;
+	  }
+	}
+      }
+      u32_to_u32_set(node_sub_nodes, super, sub);
+    }else{
+      logd("is-sub-node takes two arguments\n");
+      
+    }
+    return true;
+  }
   
   return false;
 }
@@ -601,11 +632,8 @@ index_table_sequence find_path(u32 a, u32 b, index_table * outp_nodes, graphics_
 	a_star_helper_set(helper, newnode, expt, d,  node);
 	
       }
-    }
-    
+    } 
   }
-
-  
 }
 
 void inventory_action(u32 node){
@@ -620,6 +648,10 @@ void inventory_action(u32 node){
 
 double game_time = 0;
 void node_roguelike_update(graphics_context * ctx){
+  for(u32 i = 0; i < node_sub_nodes->count; i++){
+    // construct reverse lookup.
+    u32_to_u32_set(node_sub_nodes_lookup, node_sub_nodes->value[1 + i], node_sub_nodes->key[1 + i]);
+  }
   ctx->game_data->time_step = nr_game_data->time_step;
   u32 cnt = ctx->game_event_table->count;
   game_time += ctx->game_data->time_step * 60;
@@ -646,7 +678,9 @@ void node_roguelike_update(graphics_context * ctx){
 	}
       }
       
-      if(evt.kind == GAME_EVENT_MOUSE_BUTTON && evt.mouse_button.button == mouse_button_left && evt.mouse_button.pressed){
+      if(evt.kind == GAME_EVENT_MOUSE_BUTTON
+	 && evt.mouse_button.button == mouse_button_left
+	 && evt.mouse_button.pressed){
 	vec2 pt = evt.mouse_button.game_position;
 	
 	static index_table * tab = NULL;
@@ -717,14 +751,15 @@ void node_roguelike_update(graphics_context * ctx){
     next_evt:;
     }
   }
-
-  u32 current_node = 0;
+  static u32_lookup * current_nodes = NULL;
+  if(current_nodes == NULL) current_nodes = u32_lookup_create(NULL);
+  u32_lookup_clear(current_nodes);
   for(u32 i = 0; i < is_selected_table->count; i++){
     u32 entity = is_selected_table->key[i + 1];
     u32 node;
     u32 target;
     if(character_table_try_get(characters, &entity, &node, &target)){
-      current_node = node;
+      u32_lookup_set(current_nodes, node);
       u32_lookup_set(visited_nodes, node);
       u32 connection_count = connected_nodes_iter(connected_nodes_table, &node, 1, NULL, NULL, 100, NULL);
       u64 indexes[connection_count];
@@ -738,15 +773,54 @@ void node_roguelike_update(graphics_context * ctx){
   }
 
   u32_lookup_clear(ctx->game_visible);
-  if(current_node != 0){
-    for(u32 i = 0; i < characters->count; i++){
-      if(characters->current_node[i + 1] == current_node || characters->target_node[i + 1] == current_node){
-	u32 entity = characters->entity[1 + i];
-	u32_lookup_insert(ctx->game_visible, &entity, 1);
+  for(u32 i = 0; i < characters->count; i++){
+    if(u32_lookup_try_get(current_nodes, characters->current_node + i + 1)
+       || u32_lookup_try_get(current_nodes, characters->target_node + i + 1)){
+      u32 entity = characters->entity[1 + i];
+      u32_lookup_insert(ctx->game_visible, &entity, 1);
+    }
+  }
+  {
+    u64 parents_idx[10];
+    u64 index = 0;
+    u32 cnt = 0;
+    while((cnt = u32_to_u32_iter(node_sub_nodes_lookup, current_nodes->key + 1, 1, NULL, parents_idx, current_nodes->count, &index))){
+      for(u32 i = 0; i < cnt; i++){
+	u64 index = parents_idx[i];
+	if(index != 0){
+	  u32_lookup_set(current_nodes, node_sub_nodes_lookup->value[index]);
+	}
       }
     }
   }
-  u32_lookup_insert(ctx->game_visible, visited_nodes->key + 1, visited_nodes->count);
+  for(u32 i = 0; i < visited_nodes->count; i++){
+    u32 node = visited_nodes->key[1 + i];
+    u32 parent = 0;
+    //logd("Node: %i\n", node);
+    if(u32_to_u32_try_get(node_sub_nodes_lookup, &node, &parent)){
+      
+      u64 indexes[10];
+      u64 cnt = 0;
+      u64 index = 0;
+      while((cnt = u32_to_u32_iter(node_sub_nodes, &parent, 1, NULL, indexes, array_count(indexes), &index))){
+	  for(u32 j = 0; j < cnt; j++){
+	  //logd("Sub node: %i %i\n", node_sub_nodes->value[indexes[j]]);
+	  if(node_sub_nodes->value[indexes[j]] == node ){
+	    if(u32_lookup_try_get(current_nodes, &parent) || u32_lookup_try_get(current_nodes, &node)){
+	      u32_lookup_insert(ctx->game_visible, &node , 1);
+	      //logd("HIT\n");
+	      goto exit_loop;
+	    }
+	  }
+	}
+      }
+    exit_loop:;
+
+    }else{
+      u32_lookup_insert(ctx->game_visible, &node , 1);
+    }
+  }
+  
 
   { // add UI nodes
     u64 ui_node_entities_index[shown_ui_nodes->count];
@@ -845,10 +919,7 @@ void node_roguelike_update(graphics_context * ctx){
     float zoom = ctx->game_data->zoom;
     ed->position = vec3_new(game_offset.x - offset.x * zoom, 10, game_offset.y - 10 + offset.y * zoom);
   }
-  
-  
   node_roguelike_ui_update(ctx);
-  
 }
 
 void load_bezier_into_model(u32 model){
@@ -959,6 +1030,12 @@ void init_module(graphics_context * ctx){
   residential_nodes = u32_lookup_create("residential");
   city_nodes = u32_lookup_create("city-nodes");
   residential_city_nodes = u32_lookup_create("residential-city-nodes");
+
+  node_sub_nodes = u32_to_u32_create("node-sub-nodes");
+  ((bool *)&node_sub_nodes->is_multi_table)[0] = true;
+  node_sub_nodes_lookup = u32_to_u32_create(NULL/*"node-sub-nodes-lookup*/);
+  ((bool *)&node_sub_nodes_lookup->is_multi_table)[0] = true;
+
   static mem_area * game_data_mem_area = NULL;
   if(game_data_mem_area == NULL){
     game_data_mem_area = create_mem_area("nr-game-data");

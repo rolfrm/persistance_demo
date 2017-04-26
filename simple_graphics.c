@@ -1418,13 +1418,15 @@ void simple_game_editor_invoke_command(graphics_context * ctx, editor_context * 
       }
     }
     else if(first("moveup") && editor->selection_kind == SELECTED_POLYGON){
+      u32 polygon = editor->selected_index;
+      nth_parse_u32(command, 1, &polygon);
       u32 model = polygon_get_model(*ctx, editor->selected_index);
       if(model != 0){
 	model_data * md = index_table_lookup(ctx->models, model);
-	if(editor->selected_index > md->polygons.index
-	   && editor->selected_index < md->polygons.index + md->polygons.count){
+	if(polygon > md->polygons.index
+	   && polygon < md->polygons.index + md->polygons.count){
 	  polygon_data * pd = index_table_lookup_sequence(ctx->polygon, md->polygons);
-	  u32 a = editor->selected_index - md->polygons.index;
+	  u32 a = polygon - md->polygons.index;
 	  u32 b = a - 1;
 	  if(a > 0)
 	    SWAP(pd[a], pd[b]);
