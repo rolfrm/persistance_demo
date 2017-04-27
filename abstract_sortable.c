@@ -206,6 +206,9 @@ void abstract_sorttable_insert_keys(abstract_sorttable * table, void * keys, u64
     }
   }
   table->count = key_area->size / key_size - 1;
+  //todo: disable then when tables gets big enough
+  // until then this will detect possible programming errors, causing the tables to rapidly expand.
+  ASSERT(table->count < 10000);
 }
 
 void abstract_sorttable_inserts(abstract_sorttable * table, void ** values, u64 cnt){
