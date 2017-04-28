@@ -98,7 +98,7 @@ persisted_mem_area * create_mem_area2(const char * name, bool only_32bit){
 }
 
 void mem_area_free(persisted_mem_area * area){
-  if(area->is_persisted){
+  if(area->is_persisted == false){
     if(area->ptr != NULL)
       dealloc(area->ptr);
   }else{

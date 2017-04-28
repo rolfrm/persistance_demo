@@ -1,6 +1,8 @@
 #include <GL/glew.h>
 #include <iron/full.h>
 #include "persist.h"
+#include "index_table.h"
+
 #include "sortable.h"
 #include "persist_oop.h"
 #include "shader_utils.h"
@@ -10,7 +12,6 @@
 
 #include "gui.h"
 #include "gui_test.h"
-#include "index_table.h"
 #include "u32_lookup.h"
 #include "simple_graphics.h"
 #include "game_board.h"
@@ -23,249 +24,6 @@ bool test_type_system();
 void simple_grid_renderer_create(u64 id);
 void simple_grid_initialize(u64 id);
 bool copy_nth(const char * _str, u32 index, char * buffer, u32 buffer_size);
-u32 index_table_capacity(index_table * table){
-  return table->area->size / table->element_size - 4;
-}
-
-u32 index_table_count(index_table * table){
-  return ((u32 *) table->area->ptr)[0];
-}
-
-void index_table_count_set(index_table * table, u32 newcount){
-  ((u32 *) table->area->ptr)[0] = newcount;
-}
-
-u32 _index_table_free_index_count(index_table * table){
-  return ((u32 *) table->free_indexes->ptr)[0];
-}
-
-void _index_table_free_index_count_set(index_table * table, u32 cnt){
-  ((u32 *) table->free_indexes->ptr)[0] = cnt;
-}
-void * index_table_all(index_table * table, u64 * cnt){
-  // return count -1 and a pointer from the placeholder element.
-  *cnt = index_table_count(table) - 1;
-  return table->area->ptr + table->element_size * 5;
-}
-void index_table_clear(index_table * table){
-  index_table_count_set(table, 1);
-  _index_table_free_index_count_set(table, 0);
-}
-
-u32 _index_table_alloc(index_table * table){
-  u32 freeindexcnt = _index_table_free_index_count(table);
-  if(freeindexcnt > 0){
-    u32 idx = ((u32 *) table->free_indexes->ptr)[freeindexcnt];
-    _index_table_free_index_count_set(table, freeindexcnt - 1);
-    ASSERT(idx != 0);
-    void * p = index_table_lookup(table, idx);
-    memset(p, 0, table->element_size);
-    return idx;
-  }
-  
-  while(index_table_capacity(table) <= index_table_count(table)){
-    u32 prevsize = table->area->size;
-    ASSERT((prevsize % table->element_size) == 0);
-    u32 newsize = MAX(prevsize * 2, 8 * table->element_size);
-    mem_area_realloc(table->area, newsize);
-    memset(table->area->ptr + prevsize, 0,  newsize - prevsize);
-  }
-  u32 idx = index_table_count(table);
-  index_table_count_set(table,idx + 1);
-  return idx;
-}
-
-u32 index_table_alloc(index_table * table){
-  auto index = _index_table_alloc(table);
-  ASSERT(index > 0);
-  return index;
-}
-
-
-void index_table_remove(index_table * table, u32 index){
-  ASSERT(index < index_table_count(table));
-  ASSERT(index > 0);
-  u32 cnt = _index_table_free_index_count(table);
-  mem_area_realloc(table->free_indexes, table->free_indexes->size + sizeof(u32));
-  ((u32 *)table->free_indexes->ptr)[cnt + 1] = 0;
-  //ASSERT(memmem(table->free_indexes->ptr + sizeof(u32), (cnt + 1) * sizeof(u32), &index, sizeof(index)) == NULL);
-  ((u32 *)table->free_indexes->ptr)[cnt + 1] = index;
-  ((u32 *) table->free_indexes->ptr)[0] += 1;
-}
-
-void index_table_resize_sequence(index_table * table, index_table_sequence * seq,  u32 new_count){
-  index_table_sequence nseq;
-  if(new_count > 0)
-    nseq = index_table_alloc_sequence(table, new_count);
-  else{
-    nseq.index = 0;
-    nseq.count = 0;
-  }
-  if(seq->index != 0 && seq->count != 0 ){
-    if(new_count > 0){
-      void * src = index_table_lookup_sequence(table, *seq);
-      void * dst = index_table_lookup_sequence(table, nseq);
-      memmove(dst, src, MIN(seq->count, nseq.count) * table->element_size);
-    }
-    index_table_remove_sequence(table, seq);
-  }
-  *seq = nseq;
-}
-
-index_table_sequence index_table_alloc_sequence(index_table * table, u32 count){
-  u32 freeindexcnt = _index_table_free_index_count(table);
-  
-  if(freeindexcnt > 0){
-      u32 start = 0;
-      u32 cnt = 0;
-      for(u32 i = 0; i < freeindexcnt; i++){
-	u32 idx = ((u32 *) table->free_indexes->ptr)[i + 1];
-	if(start == 0){
-	  start = idx;
-	  cnt = 1;
-	}else if(idx == start + cnt){
-	  cnt += 1;
-	}else if(idx == start + cnt - 1){
-	  ASSERT(false); // it seems that some bug can appear here.
-	}else{
-	  start = idx;
-	  cnt = 1;
-	}
-	if(cnt == count){
-	  // pop it from the indexex.
-	  _index_table_free_index_count_set(table, freeindexcnt - cnt);
-	  u32 * ptr = table->free_indexes->ptr;
-	  for(u32 j = i - cnt + 1; j < freeindexcnt - cnt; j++)
-	    ptr[j + 1] = ptr[j + cnt + 1];
-	  
-	  ASSERT(start != 0);
-	  void * p = index_table_lookup(table, start);
-	  memset(p, 0, cnt * table->element_size);
-	  return (index_table_sequence){.index = start, .count = cnt};
-	}
-      }
-    }
-  
-  while(index_table_capacity(table) <= (index_table_count(table) + count)){
-    u32 prevsize = table->area->size;
-    ASSERT((prevsize % table->element_size) == 0);
-    u32 newsize = MAX(prevsize * 2, 8 * table->element_size);
-    mem_area_realloc(table->area, newsize);
-    memset(table->area->ptr + prevsize, 0,  newsize - prevsize);
-  }
-  u32 idx = index_table_count(table);
-  index_table_count_set(table,idx + count);
-  return (index_table_sequence){.index = idx, .count = count};
-}
-
-void index_table_remove_sequence(index_table * table, index_table_sequence * seq){
-  u32 cnt = _index_table_free_index_count(table);
-  mem_area_realloc(table->free_indexes, table->free_indexes->size + seq->count * sizeof(u32));
-  //ASSERT(memmem(table->free_indexes->ptr + sizeof(u32), cnt * sizeof(u32), &index, sizeof(index)) == NULL);
-  for(u32 i = 0; i < seq->count; i++)
-    ((u32 *)table->free_indexes->ptr)[cnt + i + 1] = seq->index + i;
-  ((u32 *) table->free_indexes->ptr)[0] += seq->count;
-  memset(seq, 0, sizeof(*seq));
-  index_table_optimize(table);
-}
-
-void * index_table_lookup_sequence(index_table * table, index_table_sequence seq){
-  if(seq.index == 0)
-    return NULL;
-  return index_table_lookup(table, seq.index);
-}
-
-
-index_table * index_table_create(const char * name, u32 element_size){
-  ASSERT(element_size > 0);
-  index_table table = {0};
-  table.element_size = element_size;
-  if(name != NULL){
-
-    table.area = mem_area_create(name);
-    char name2[128] = {0};
-    sprintf(name2, "%s.free", name);
-    table.free_indexes = mem_area_create(name2);
-  }else{
-    table.area = mem_area_create_non_persisted();
-    table.free_indexes = mem_area_create_non_persisted();
-  }
-  
-  if(table.free_indexes->size < sizeof(u32)){
-    mem_area_realloc(table.free_indexes, sizeof(u32));
-    ((u32 *)table.free_indexes->ptr)[0] = 0;
-  }
-
-  if(table.area->size < element_size){
-    mem_area_realloc(table.area, element_size * 4);
-    memset(table.area->ptr, 0, table.area->size);
-    _index_table_alloc(&table);
-  }
-  ASSERT((table.area->size % table.element_size) == 0);
-  ASSERT(index_table_count(&table) > 0);
-  return iron_clone(&table, sizeof(table));
-}
-
-
-void index_table_destroy(index_table ** _table){
-  index_table * table = *_table;
-  *_table = NULL;
-  mem_area_free(table->area);
-  mem_area_free(table->free_indexes);
-}
-
-void * index_table_lookup(index_table * table, u32 index){
-  ASSERT(index < index_table_count(table));
-  ASSERT(index > 0);
-  return table->area->ptr + (4 + index) * table->element_size;
-}
-
-bool index_table_contains(index_table * table, u32 index){
-  if(index == 0)
-    return false;
-  if (index >= index_table_count(table))
-    return false;
-  u32 freecnt = _index_table_free_index_count(table);
-  u32 * start = table->free_indexes->ptr + sizeof(u32);
-  for(u32 i = 0; i < freecnt; i++){
-    if(start[i] == index)
-      return false;
-  }
-  return true;
-}
-
-void index_table_optimize(index_table * table){
-  int cmpfunc (const u32 * a, const u32 * b)
-  {
-    return ( *(int*)a - *(int*)b );
-  }
-  u32 cnt = _index_table_free_index_count(table);
-  if(table->free_indexes->ptr == NULL || cnt ==  0)
-    return;
-    
-  u32 * p = table->free_indexes->ptr;
-  qsort(p + 1,cnt , sizeof(u32), (void *) cmpfunc);
-  u32 icnt = index_table_count(table);
-  
-  u32 freedcount = 0;
-  while(icnt > 0 && p[cnt] >= icnt){
-    freedcount += 1;
-    cnt -= 1;
-    }
-  while(icnt > 0 && p[cnt] == icnt - 1){
-
-    icnt -= 1;
-    cnt -= 1;
-    freedcount += 1;
-  }
-  _index_table_free_index_count_set(table, cnt);
-  index_table_count_set(table, icnt);
-  u64 newsize = icnt * table->element_size + table->element_size * 5;
-  mem_area_realloc(table->area, newsize);
-  u64 newsize2 = cnt * table->element_size + sizeof(u32);
-  mem_area_realloc(table->free_indexes, newsize2);
-}
-
 
 u32 iterate_voxel_chunk(index_table * table, u32 start_index){
   u32 count = 0;
@@ -465,7 +223,6 @@ void measure_voxel_grid(u64 id, vec2 * size){
   *size = vec2_new(0, 0);
 }
 
-#include <sys/mman.h>
 bool index_table_test(){
   { // copy nth
     //bool copy_nth(string str, u32 index, char * buffer, u32 buffer_size)
@@ -480,49 +237,78 @@ bool index_table_test(){
   }
   
   if(true){// first test.
-    for(int k = 1; k < 5;k++){
-      logd("K: %i\n", k);
-      index_table * t = index_table_create(NULL, sizeof(i64));
-      index_table_optimize(t);
-      index_table_sequence seq = index_table_alloc_sequence(t, 20);
-      index_table_sequence seq3 = index_table_alloc_sequence(t, 10);      
-      index_table_resize_sequence(t, &seq, 9);
-      index_table_remove_sequence(t, &seq3);
 
+    { // this was a bug once:
+      index_table * t = index_table_create("__index_table_test__", sizeof(u32));
+      index_table_clear(t);
+      index_table_optimize(t);
+      index_table_sequence seq = index_table_alloc_sequence(t, 10);
+      index_table_sequence seq2 = index_table_alloc_sequence(t, 10);
+      index_table_remove_sequence(t, &seq2); // crash happened here.
+      index_table_remove_sequence(t, &seq); 
+      UNUSED(seq);
+      index_table_clear(t);
+      index_table_destroy(&t);
+    }
+
+    for(int k = 1; k < 4;k++){
+      logd("K: %i\n", k);
+      index_table * t = index_table_create("__index_table_test__", sizeof(u32));
+      index_table_clear(t);
+      index_table_optimize(t);
+      index_table_sequence seq = index_table_alloc_sequence(t, 10);
+      index_table_sequence seq2 = index_table_alloc_sequence(t, 10);
+      index_table_remove_sequence(t, &seq2);
+      index_table_remove_sequence(t,&seq);
+      seq = index_table_alloc_sequence(t, 20);
+      seq2 = index_table_alloc_sequence(t, 20);
+      index_table_remove_sequence(t,&seq2);
+      index_table_remove_sequence(t,&seq);
+      seq = index_table_alloc_sequence(t, 20);
+      seq2 = index_table_alloc_sequence(t, 20);
+    
+      index_table_resize_sequence(t, &seq, 22);
+      index_table_resize_sequence(t, &seq2, 22);
+      index_table_resize_sequence(t, &seq, 21);
+      index_table_resize_sequence(t, &seq2, 21);
+    
+      index_table_resize_sequence(t, &seq, 9);
       index_table_remove_sequence(t, &seq);      
       index_table_optimize(t);
-
-      
       seq = index_table_alloc_sequence(t, 20);
-      logd("%i \n", _index_table_free_index_count(t));
-      ASSERT(_index_table_free_index_count(t) == 0);
-      //u32 i1 = seq.index;
       ASSERT(seq.count == 20);
       ASSERT(seq.index > 0);
-      i64 * pts = index_table_lookup_sequence(t, seq);
-      for(int i = 0; i < 20; i++)
-	pts[i] = i;
-      index_table_resize_sequence(t, &seq, 21);
 
-      seq3 = index_table_alloc_sequence(t, 10);
-      index_table_sequence seq4 = index_table_alloc_sequence(t, 40);
-      ASSERT(seq.count == 21);
-      pts = index_table_lookup_sequence(t, seq);
-      for(int i = 0; i < 20; i++){
-	ASSERT(pts[i] == i);
+      for(u32 i = 1; i < 5; i++){
+	u32 * pts = index_table_lookup_sequence(t, seq);
+	u32 * pts2 = index_table_lookup_sequence(t, seq2);
+	for(u32 i = 0; i < 20; i++){
+	  pts[i] = i;
+	  pts2[i] = i + 50;
+	}
+	
+	index_table_resize_sequence(t, &seq, 21 + i * 50);
+	index_table_resize_sequence(t, &seq2, 21 + i * 50);
+	index_table_resize_sequence(t, &seq, 21);
+	index_table_resize_sequence(t, &seq2, 21);
+
+	pts = index_table_lookup_sequence(t, seq);
+	pts2 = index_table_lookup_sequence(t, seq2);
+	for(u32 i = 0; i < 20; i++){
+	  ASSERT(pts[i] == i);
+	  ASSERT(pts2[i] == i + 50);
+	}
       }
-     
-      memset(pts,255, sizeof(i64) * 21);
-      index_table_remove_sequence(t, &seq);
-      logd("Free count: %i\n", _index_table_free_index_count(t));
+      
+      {
+      index_table_sequence seq3 = index_table_alloc_sequence(t, 10);
+      index_table_sequence seq4 = index_table_alloc_sequence(t, 40);
       index_table_sequence seq2 = index_table_alloc_sequence(t, 20);
       //ASSERT(seq2.index == i1);
       index_table_remove_sequence(t, &seq2);
       index_table_remove_sequence(t, &seq3);
       index_table_remove_sequence(t, &seq4); 
       index_table_optimize(t);
-      logd("Free count: %i\n", _index_table_free_index_count(t));
-      ASSERT(_index_table_free_index_count(t) == 0);
       u32 idxes[200];
       for(u32 j = 3; j < 20; j++){
 	
@@ -532,94 +318,22 @@ bool index_table_test(){
 	  ((u32 *) index_table_lookup(t, idxes[i]))[0] = 0xFFDDCCAA * k;
 	for(u32 i = 0; i < j * 10; i++)
 	  ASSERT(((u32 *) index_table_lookup(t, idxes[i]))[0] == 0xFFDDCCAA * k);
-	ASSERT(_index_table_free_index_count(t) == 0);
 	for(u32 i = 0; i < j * 10; i++)
 	  index_table_remove(t, idxes[i]);
       }
       index_table_optimize(t);
-      ASSERT(index_table_count(t) == 1);
+      //ASSERT(index_table_count(t) == 1);
+      }
+      
+      index_table_clear(t);
       index_table_destroy(&t);
     }
   }
-  
-  if(false){
-    
-    board_data2_table * table = board_data2_table_create(NULL);
-    voxel_board_data bd = {.voxels = index_table_create("voxeltable2", sizeof(u32) * 8),
-			   .materials = index_table_create("materials2", sizeof(u32)),
-			   .index = 5};
-    board_data2_set(table, 0xbeef, bd);
+  return TEST_SUCCESS;
+}
 
-    auto bd2 = board_data2_get(table, 0xbeef);
+bool run_gui_test(){
 
-    TEST_ASSERT(bd2.index == 5);
-  }
-
-
-  
-  //return TEST_SUCCESS;
-  // the index table can be used for voxels.
-  if(false){
-    index_table * tab = index_table_create("voxeltable", sizeof(u32) * 8);
-    index_table * colors = index_table_create("colortable", 4);
-    u32 black = index_table_alloc(colors);
-    u32 white = index_table_alloc(colors);
-    *((u32 *) index_table_lookup(colors, black)) = 0x00FF00FF;
-    *((u32 *)index_table_lookup(colors, white)) = 0xFFF00FFF;
-
-    // Allocate 5 2x2x2 voxel chunks
-    u32 x1 = index_table_alloc(tab);
-    u32 x2 = index_table_alloc(tab);
-    u32 x3 = index_table_alloc(tab);
-    u32 x4 = index_table_alloc(tab);
-    u32 x5 = index_table_alloc(tab);
-    
-    voxel_board_data vboard = {
-      .index = x1,
-      .materials = colors,
-      .voxels = tab
-    };
-    
-    UNUSED(x4), UNUSED(x5);
-    u32 * d = index_table_lookup(tab, x1);
-    // insert the IDs.
-    d[0] = x2;
-    d[1] = x3;
-    d[3] = x2;
-    d[6] = x2;
-    d[2] = ~black;
-    calc_voxel_surface(tab, x1);
-    //  return TEST_SUCCESS;
-    //lookup the arrays for x2 x3  
-    u32 * d1 = index_table_lookup(tab, x2);
-    //u32 * d2 = index_table_lookup(tab, x3);
-    
-    // put in black and white colors.
-    for(int i = 0; i < 8; i++){
-      if((rand() % 2) == 0) continue;
-      //d1[i] = (rand()%2) == 0 ? ~white : ~black;
-      //d2[i] = (rand()%2) == 1 ? ~white : ~black;
-    }
-    d1[7] = x4;
-    d1[2] = x4;
-    d1[0] = x4;
-    u32 * d3 = index_table_lookup(tab, x4);
-    d3[7] = x5;
-    d3[2] = x5;
-    d3[0] = x5;
-    u32 * d4 = index_table_lookup(tab, x5);
-    d4[0] = ~white;
-    d4[7] = ~black;
-    
-    u32 count = iterate_voxel_chunk(tab, x1);
-    logd("Count: %i\n", count);
-
-    //TEST(simple_graphics_editor_test);
-    u64 voxel_board = intern_string("voxel board");
-    set_board_data2(voxel_board, vboard);
-    
-    mat4_print(get_camera_3d_position(voxel_board));
-  }
   init_gui();
   u64 game_board = intern_string("voxel board");
   u64 win_id = intern_string("voxel window");
@@ -959,15 +673,11 @@ int main(int argc, char ** argv){
   //TEST(test_elf_reader2);
   //TEST(test_elf_reader);
   TEST(test_abstract_sortable);
-
-  //return 0;
+  TEST(index_table_test);
   
   
   if (!glfwInit())
     return -1;
-  //gui_demo();
-
-  TEST(index_table_test);
-  //test_gui();
+  run_gui_test();
   return 0;
 }
