@@ -4,10 +4,11 @@
 #include "persist_oop.h"
 #include "gui.h"
 #include "index_table.h"
-#include "simple_graphics.h"
+
 #include "abstract_sortable.h"
 #include "u32_lookup.h"
 #include "u32_to_u32.h"
+#include "simple_graphics.h"
 #include "node_roguelike.h"
 #include "node_action_table.h"
 #include "node_action_table.c"

@@ -27,6 +27,102 @@
 #include "nr_ui_item.h"
 #include "nr_ui_item.c"
 
+typedef struct __attribute__ ((packed)){
+  u8 color1:4; // body color
+  u8 color2:4; // stripe color
+  u8 color3:4; // circ color
+  u8 has_circle:1;
+  u8 has_stripe:1;
+  i8 circle_offset:3;
+  i8 stripe_offset:3;
+}people_dna;
+
+people_dna sanitize_dna(people_dna dna){
+  if(dna.has_circle == false || dna.color3 == dna.color1){
+    dna.circle_offset = 0;
+    dna.color3 = 0;
+  }
+  if(dna.has_stripe == false){
+    dna.stripe_offset = 0;
+    dna.color2 = 0;
+  }
+  if(dna.has_stripe == false && dna.has_circle == false)
+    dna.color2 = 0;
+  return dna;
+}
+
+u32 people_dna_to_bit(people_dna dna){
+  dna = sanitize_dna(dna);
+  u32 * dp = (u32 *)&dna;
+  return *dp;
+}
+
+u32 people_dna_to_model(people_dna dna, graphics_context * ctx){
+  dna = sanitize_dna(dna);
+  static u32_to_u32 * dna_models;
+  if(dna_models == NULL) dna_models = u32_to_u32_create("nr-dna-models");
+  u32 bits = people_dna_to_bit(dna);
+  vec4 colors[16];
+  for(u32 i = 0; i < array_count(colors); i++){
+    colors[i] = vec4_new((i %2) * 0.5 + 0.5, ((i % 3) * 0.33) * 0.5 + 0.5, (i % 5) * 0.1 + 0.5, 1.0);
+  }
+  u32 model = 0;
+
+  if(u32_to_u32_try_get(dna_models, &bits, &model))
+    return model;
+  model = index_table_alloc(ctx->models);
+  model_data * md = index_table_lookup(ctx->models, model);
+  u32 polygons = 1 + dna.has_circle + dna.has_stripe;
+  md->polygons = index_table_alloc_sequence(ctx->polygon, polygons);
+  
+  polygon_data * pd = index_table_lookup_sequence(ctx->polygon, md->polygons);
+  {
+    index_table_resize_sequence(ctx->vertex, &(pd[0].vertexes), 4);
+    vertex_data * vd = index_table_lookup_sequence(ctx->vertex, pd[0].vertexes);
+    vd[0].position = vec2_new(-0.02, -0.02);
+    vd[1].position = vec2_new(-0.02, 0.05);
+    vd[2].position = vec2_new(0.02, -0.02);
+    vd[3].position = vec2_new(0.02, 0.05);
+    pd[0].material = get_unique_number();
+    polygon_color_set(ctx->poly_color, pd[0].material, colors[dna.color1]);
+  }
+  int circoffset = 1;
+  
+  if(dna.has_circle){
+    u32 n = 11;
+    index_table_resize_sequence(ctx->vertex, &(pd[circoffset].vertexes), n);
+    vertex_data * vd = index_table_lookup_sequence(ctx->vertex, pd[circoffset].vertexes);
+    for(u32 i = 0; i < n; i++){
+      float t = ((float) i) / ((float) n) * M_PI;
+      float x = cos(t);
+      float y = sin(t);
+      float sign = (i % 2) * 2.0 - 1.0f;
+      x = 0.02 * x;
+      y = -sign * 0.02 * y;
+      vd[i].position = vec2_new(x, y + 0.01 * dna.circle_offset);
+    }
+    pd[circoffset].material = get_unique_number();
+    polygon_color_set(ctx->poly_color, pd[circoffset].material, colors[dna.color3]);
+    circoffset += 1;
+  }
+  
+  if(dna.has_stripe){
+    index_table_resize_sequence(ctx->vertex, &(pd[circoffset].vertexes), 4);
+    vertex_data * vd = index_table_lookup_sequence(ctx->vertex, pd[circoffset].vertexes);
+    float offsety = dna.stripe_offset * 0.01f;
+    vd[0].position = vec2_new(-0.02, -0.02 + offsety + 0.035);
+    vd[1].position = vec2_new(-0.02, 0.00 + offsety + 0.035);
+    vd[2].position = vec2_new(0.02, -0.02 + offsety + 0.035);
+    vd[3].position = vec2_new(0.02, 0.00 + offsety + 0.035);
+    pd[circoffset].material = get_unique_number();
+    polygon_color_set(ctx->poly_color, pd[circoffset].material, colors[dna.color2]);
+    circoffset += 1;
+  }
+  
+  u32_to_u32_set(dna_models, bits, model);
+  return model;
+}
+
 
 typedef struct{
   float time_step;
@@ -89,7 +185,6 @@ void load_connection_entity(graphics_context * ctx, u32 entity, u32 entity2){
     connection_entities_set(connection_entities_table, connection_id, ced);
     active_entities_set(ctx->active_entities, ced, true);
   }
-  logd("load connection entity %i %i %i\n", entity, entity2, ced);
   entity_data * ed = index_table_lookup(ctx->entities, ced);
   entity_data * e1 = index_table_lookup(ctx->entities, entity);
   entity_data * e2 = index_table_lookup(ctx->entities, entity2);
@@ -125,7 +220,7 @@ void load_connection_entity(graphics_context * ctx, u32 entity, u32 entity2){
   graphics_context_reload_polygon(*ctx, ced);
 }
 
-bool are_connected(u32 a, u32 b){
+ bool are_connected(u32 a, u32 b){
   u64 iter = 0;
   u64 index = 0;
   while(connected_nodes_iter(connected_nodes_table, &a, 1, NULL, &index, 1, &iter)){
@@ -168,14 +263,13 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
       logd("Invalid entity selected\n");
       return true;
     }
+    
     if(entity2 == entity){
       logd("A node cannot be connected to itself\n");
       return true;
     }
 
     u64 count = connected_nodes_iter(connected_nodes_table, &entity, 1, NULL, NULL, connected_nodes_table->count, NULL);
-    connected_nodes_print(connected_nodes_table);
-    logd("connections for %i: %i\n", entity, count);
     bool connect = true;
     if(count > 1){
       u64 indexes[count];
@@ -185,7 +279,6 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
 	  logd("Node %i and %i are already connected!\n", entity, entity2);
 	  connect = false;
 	  break;
-	  //return true;
 	}
       }
     }
@@ -424,19 +517,18 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
     if(residential_city_nodes->count != residential_nodes->count + city_nodes->count){
       u32_lookup_insert(residential_city_nodes, residential_nodes->key + 1, residential_nodes->count);
       u32_lookup_insert(residential_city_nodes, city_nodes->key + 1, city_nodes->count);
-      logd("Refresh residential city:l\n");
       u32_lookup_print(residential_city_nodes);
     }
     
     u32 nodeidx = randu32(residential_nodes->count);
     u32 node = residential_nodes->key[nodeidx + 1];
-    logd("lives at: %i\n", node);
-    entity_data * node_entity = index_table_lookup(gctx->entities, node);
 
     u32 i1 = index_table_alloc(gctx->entities);
     entity_data * ed = index_table_lookup(gctx->entities, i1);
+    entity_data * node_entity = index_table_lookup(gctx->entities, node);
     ed->position = node_entity->position;
-    ed->model = nr_game_data->people_default_model;
+    people_dna dna = {rand(),rand(),rand(),rand(),rand(),rand(),rand()};
+    ed->model = people_dna_to_model(dna, gctx);
     character_table_set(characters, i1, node, 0);
     active_entities_set(gctx->active_entities, i1, true);
     const u32 ncount = 10;
@@ -479,13 +571,6 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
       }
       traversal_time_set(traversal_times, (traversal_time_key){i1, j - 1}, 1.0f);
     }
-    logd("Final path: %i\n", total_count);
-    for(u32 i = 0; i < total_count; i++){
-      logd("%i ", nodes[i]);
-
-    }
-    logd("\n");
-    
     for(u32 i = 0; i < total_count; i++){
       if(i > 0)
 	ASSERT(nodes[i] == nodes[i -1] || are_connected(nodes[i], nodes[i - 1]));
@@ -572,18 +657,12 @@ index_table_sequence find_path(u32 a, u32 b, index_table * outp_nodes, graphics_
   
   f32_to_u32_lookup_set(fronts, vec3_len(vec3_sub(eb->position, ab->position)), a);
   a_star_helper_set(helper, a, vec3_len(vec3_sub(eb->position, ab->position)), 0,  (u32)-1);
-  bool debug = false;
   while(true){
     if(fronts->count == 0){
       // this happens if there is no path between a and b.
       return seq;
     }
     u32 node = fronts->value[1];
-    if(debug){
-      f32_to_u32_lookup_print(fronts);
-      iron_usleep(100000);
-      logd("Node: %i\n", node);
-    }
     entity_data * ed = index_table_lookup(ctx->entities, node);
     f32_to_u32_lookup_unset(fronts, fronts->key[1]);
     u64 helper_idx = 0;
@@ -591,30 +670,31 @@ index_table_sequence find_path(u32 a, u32 b, index_table * outp_nodes, graphics_
     ASSERT(helper_idx > 0);
     f32 traveled = helper->traveled[helper_idx];
     u64 c1 = connected_nodes_iter(connected_nodes_table, &node, 1, NULL, NULL, 1000, NULL);
-    if(debug)
-      logd("Connected count: %i\n", c1);
+
     u64 ac[c1];
     connected_nodes_iter(connected_nodes_table, &node, 1, NULL, ac, c1, NULL);
     u32 cn[c1];
     for(u32 i = 0; i < c1; i++)
       cn[i] = connected_nodes_table->n2[ac[i]];
     sort_u32(cn, c1);
+    { // remove duplicates
+      u64 same = 0;
+      for(u32 i = 1; i < c1 - same; i++){
+	while(cn[i + same] == cn[i - 1])
+	  same++;
+	cn[i] = cn[i + same];
+      }
+      c1 -= same;
+    }
+
     a_star_helper_lookup(helper, cn, ac, c1);
     for(u32 i = 0; i < c1; i++){
       u32 newnode = cn[i];
-      if(debug){
-	iron_usleep(100000);
-	logd("newnode: %i\n", newnode);
-      }
       if(newnode == b){
 	index_table_resize_sequence(outp_nodes, &seq, helper->count + 1);
 	u32 * d = index_table_lookup_sequence(outp_nodes, seq);
 	u32 cnt = 0;
 	while(true){
-	  if(debug){
-	     iron_usleep(100000);
-	     logd("node: %i\n", newnode);
-	   }
 
 	  d[cnt] = newnode;
 	  cnt++;
@@ -638,7 +718,6 @@ index_table_sequence find_path(u32 a, u32 b, index_table * outp_nodes, graphics_
 	f32 expt = vec3_len(vec3_sub(ab->position, eb->position));
 	f32_to_u32_lookup_set(fronts, expt + d, newnode);
 	a_star_helper_set(helper, newnode, expt, d,  node);
-	
       }
     } 
   }
@@ -889,10 +968,13 @@ void node_roguelike_update(graphics_context * ctx){
     entity_data * node = index_table_lookup(ctx->entities, nodeid);
     ASSERT(ed != NULL);
     ASSERT(node != NULL);
-    vec3 n2c = vec3_sub(node->position, ed->position);
+    vec3 targetp = ed->position;
+    targetp.x += sin(entity) * 0.15;
+    targetp.z += cos(entity) * 0.15;
+    vec3 n2c = vec3_sub(node->position, targetp);
 
     auto len = vec3_len(n2c);
-    if(len > 0.2){
+    if(len > 0.15){
 
       vec3 d = vec3_scale(n2c, 0.3 * 1.0 / len);
       entity_velocity_set(ctx->entity_velocity, entity, d);
