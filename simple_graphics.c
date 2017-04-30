@@ -389,10 +389,8 @@ vec2 graphics_context_pixel_to_screen(const graphics_context ctx, vec2 pixel_coo
   return v;
 }
 
-loaded_polygon_data simple_grid_load_polygon(const graphics_context ctx, u32 polygon_id){
+loaded_polygon_data simple_grid_load_polygon(const graphics_context ctx,  polygon_data * pd){
   loaded_polygon_data loaded = {0};
-  ASSERT(polygon_id != 0);
-  polygon_data * pd = index_table_lookup(ctx.polygon, polygon_id);
   if(pd->vertexes.index == 0)
     return loaded;
   if(pd->material == 0)
@@ -426,31 +424,21 @@ CREATE_TABLE_DECL2(grid_poly, u32, u32);
 CREATE_TABLE2(grid_poly, u32, u32);
 
 
-void simple_grid_render_gl(const graphics_context ctx, u32 polygon_id, mat4 camera, bool draw_points, float depth){
-  loaded_polygon_data loaded = simple_grid_load_polygon(ctx, polygon_id);
+void simple_grid_render_gl(const graphics_context ctx, polygon_data * pd, mat4 camera, bool draw_points, float depth, vec4 color, bool load_shader){
+  loaded_polygon_data loaded = simple_grid_load_polygon(ctx, pd);
   if(loaded.gl_ref == 0)
     return;
-  polygon_data * pd = index_table_lookup(ctx.polygon, polygon_id);
-
   glBindBuffer(GL_ARRAY_BUFFER, loaded.gl_ref);  
-  simple_grid_shader shader = simple_grid_shader_get();
+  
   glFrontFace(GL_CW);
   glCullFace(GL_BACK);
   glEnable(GL_CULL_FACE);
-  
-  vec4 color = vec4_zero;
-  polygon_color_try_get(ctx.poly_color, pd->material, &color);
-  if(color.w <= 0.0f)
-    return;
-  
-  
-  glUseProgram(shader.shader);
-  glUniformMatrix4fv(shader.camera_loc,1,false, &(camera.data[0][0]));
-  if(color.w < 1){
-    glEnable(GL_BLEND);
-  }else{
-    glDisable(GL_BLEND);
+
+  simple_grid_shader shader = simple_grid_shader_get();  
+  if(load_shader){
+    glUseProgram(shader.shader);
   }
+  glUniformMatrix4fv(shader.camera_loc,1,false, &(camera.data[0][0]));  
   glUniform4f(shader.color_loc, color.x, color.y, color.z, color.w);
   //logd("Depth: %f\n", depth);
   glUniform1f(shader.depth_loc, depth);
@@ -591,12 +579,6 @@ void simple_graphics_editor_render(u64 id){
 	    editor_tform = mat4_mul(editor_tform, mat4_translate(-p.x, -p.y , -p.z));
 	  }
 	}
-      }else if(false && ed.focused_item_kind == SELECTED_MODEL){
-	model_data * model = index_table_lookup(gd.models, ed.focused_item);
-	for(u32 j = 0; j < model->polygons.count; j++){
-	  u32 index = j + model->polygons.index;
-	  simple_grid_render_gl(gd, index, mat4_identity(), true, 0);
-    }
       }
       
       editor_tform = mat4_mul(mat4_scaled(ed.zoom, ed.zoom, ed.zoom), editor_tform);
@@ -655,7 +637,7 @@ void simple_graphics_editor_render(u64 id){
 	    vec4 color = vec4_zero;
 	    if(polygon_color_try_get(gd.poly_color, pd->material, &color) && color.w != 1.0f)
 	      continue;
-	    simple_grid_render_gl(gd, index, mat, true, bias);
+	    simple_grid_render_gl(gd, pd, mat, true, bias, color, true);
 	    bias -= 0.000001;
 	    if(j == 0)
 	      break;
@@ -699,7 +681,7 @@ void simple_graphics_editor_render(u64 id){
 	    vec4 color = vec4_zero;
 	    if(false == (polygon_color_try_get(gd.poly_color, pd->material, &color) && color.w > 0.0f && color.w < 1.0f))
 	      continue;
-	    simple_grid_render_gl(gd, index, mat, true, bias);
+	    simple_grid_render_gl(gd, pd, mat, true, bias, color, true);
 
 	    bias -= 0.000001;
 	    if(j == 0)
@@ -725,10 +707,9 @@ void simple_graphics_editor_render(u64 id){
       offset = mat4_mul_vec4(editor_tform, p).xyz.xy;
     }
     auto tf = mat4_translate(offset.x, offset.y, 0);
-    simple_grid_render_gl(gd, gd.pointer_index, tf, false, 0);
-    polygon_color_set(gd.poly_color, pd->material, vec4_new(1, 1, 1, 1));
-    simple_grid_render_gl(gd, gd.pointer_index,
-			  mat4_mul(tf,  mat4_scaled(0.5, 0.5, 0.5)), false, 0); 
+    simple_grid_render_gl(gd, pd, tf, false, 0, vec4_new(1, 1, 1, 1), true);
+    simple_grid_render_gl(gd, pd,
+			  mat4_mul(tf,  mat4_scaled(0.5, 0.5, 0.5)), false, 0, vec4_new(0, 0, 0, 1), true); 
   }
 
   { // Here grid lines are rendered
@@ -769,7 +750,7 @@ void simple_graphics_editor_render(u64 id){
 	  vec4 v = vec4_new(px * grid_width, v1.y * grid_width,0,1);
 	  v = mat4_mul_vec4(editor_tform, v);
 	  mat4 cam = mat4_translate(v.x + 1, v.y, 0);
-	  auto loaded = simple_grid_load_polygon(gd, poly);
+	  auto loaded = simple_grid_load_polygon(gd, pd);
 	  glBindBuffer(GL_ARRAY_BUFFER, loaded.gl_ref);
 	  simple_grid_shader shader = simple_grid_shader_get();
 	  glUseProgram(shader.shader);
@@ -788,7 +769,7 @@ void simple_graphics_editor_render(u64 id){
 	  vec4 v = vec4_new(v1.x * grid_width, py * grid_width,0,1);
 	  v = mat4_mul_vec4(editor_tform, v);
 	  mat4 cam = mat4_mul(mat4_translate(v.x, v.y + 1, 0), rot);
-	  auto loaded = simple_grid_load_polygon(gd, poly);
+	  auto loaded = simple_grid_load_polygon(gd, pd);
 	  glBindBuffer(GL_ARRAY_BUFFER, loaded.gl_ref);
 	  simple_grid_shader shader = simple_grid_shader_get();
 	  glUseProgram(shader.shader);
@@ -1964,7 +1945,8 @@ void simple_grid_render(u64 id){
 
     {
       index_table_clear(gd.collision_table);
-      detect_collisions(entities, count, gd, gd.collision_table);
+      // performance issue if results are not used.
+      //detect_collisions(entities, count, gd, gd.collision_table);
       u64 collisions = 0;
 
       collision_data * cd = index_table_all(gd.collision_table, &collisions);
@@ -2023,6 +2005,11 @@ void simple_grid_render(u64 id){
   proj_mat.m21 = 1;
   
   mat4 scale = mat4_scaled(1.0 / _gd.zoom, 1.0 / _gd.zoom,1.0 / _gd.zoom);
+  mat4 scale_proj_mat = mat4_mul(proj_mat, scale);
+
+  
+  simple_grid_shader shader = simple_grid_shader_get();
+  glUseProgram(shader.shader);
   glDisable(GL_BLEND);
   glEnable(GL_DEPTH_TEST);
   glDepthFunc(GL_LEQUAL);
@@ -2053,14 +2040,13 @@ void simple_grid_render(u64 id){
 	}
 	
 	mat = mat4_mul(tform, mat);
-	mat = mat4_mul(scale, mat);
-	mat = mat4_mul(proj_mat, mat);
+	mat = mat4_mul(scale_proj_mat, mat);
 
 	vec4 color = vec4_zero;
 	if(polygon_color_try_get(gd.poly_color, pd->material, &color) == false || color.w < 1.0f || color.w <= 0.0001f)
 	  continue;
 	
-	simple_grid_render_gl(gd, index, mat, false, bias);
+	simple_grid_render_gl(gd, pd, mat, false, bias, color, false);
 	bias -= 0.000001;
 	if(j == 0)
 	  break;
@@ -2097,13 +2083,13 @@ void simple_grid_render(u64 id){
 	}
 	
 	mat = mat4_mul(tform, mat);
-	mat = mat4_mul(scale, mat);
-	mat = mat4_mul(proj_mat, mat);
+	mat = mat4_mul(scale_proj_mat, mat);
+
 
 	vec4 color = vec4_zero;
 	if(false == (polygon_color_try_get(gd.poly_color, pd->material, &color) && (color.w > 0.01f || color.w < 0.99f)))
 	  continue;
-	simple_grid_render_gl(gd, index, mat, false, bias);
+	simple_grid_render_gl(gd, pd, mat, false, bias, color, false);
 
 	bias -= 0.000001;
 	if(j == 0)

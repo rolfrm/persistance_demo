@@ -650,6 +650,8 @@ bool test_abstract_sortable(){
   return TEST_SUCCESS;
 
 }
+
+void table2_test();
 //int main2();
 int main(int argc, char ** argv){
   if(argc == 2){
@@ -669,12 +671,13 @@ int main(int argc, char ** argv){
   
   //table2_test();
   test_persist_oop();
-  test_walls();
+  //test_walls();
   //TEST(test_elf_reader2);
   //TEST(test_elf_reader);
   TEST(test_abstract_sortable);
   TEST(index_table_test);
-  
+  table2_test();
+  //return 0;
   
   if (!glfwInit())
     return -1;

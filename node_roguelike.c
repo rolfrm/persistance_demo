@@ -504,39 +504,44 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
   }
   
   if(nth_str_cmp(commands, 0, "load-people")){
-    if(nr_game_data->people_default_model == 0){
-      logd("Default model must be set.\n");
-      return true;
-    }
+    u32 count = 0;
+    nth_parse_u32(commands, 1, &count);
+    logd("LOADING %i people\n", count);
+    for(u32 i = 0; i < count; i++){
+      logd("???\n");
+      if(nr_game_data->people_default_model == 0){
+	logd("Default model must be set.\n");
+	goto __next;
+      }
 
-    if(residential_nodes->count == 0){
-      logd("No residential nodes created.\n");
-      return true;
-    }
+      if(residential_nodes->count == 0){
+	logd("No residential nodes created.\n");
+	goto __next;
+      }
 
-    if(residential_city_nodes->count != residential_nodes->count + city_nodes->count){
-      u32_lookup_insert(residential_city_nodes, residential_nodes->key + 1, residential_nodes->count);
-      u32_lookup_insert(residential_city_nodes, city_nodes->key + 1, city_nodes->count);
-      u32_lookup_print(residential_city_nodes);
-    }
-    
-    u32 nodeidx = randu32(residential_nodes->count);
-    u32 node = residential_nodes->key[nodeidx + 1];
-
-    u32 i1 = index_table_alloc(gctx->entities);
-    entity_data * ed = index_table_lookup(gctx->entities, i1);
-    entity_data * node_entity = index_table_lookup(gctx->entities, node);
-    ed->position = node_entity->position;
-    people_dna dna = {rand(),rand(),rand(),rand(),rand(),rand(),rand()};
-    ed->model = people_dna_to_model(dna, gctx);
+      if(residential_city_nodes->count != residential_nodes->count + city_nodes->count){
+	u32_lookup_insert(residential_city_nodes, residential_nodes->key + 1, residential_nodes->count);
+	u32_lookup_insert(residential_city_nodes, city_nodes->key + 1, city_nodes->count);
+	u32_lookup_print(residential_city_nodes);
+      }
+      
+      u32 nodeidx = randu32(residential_nodes->count);
+      u32 node = residential_nodes->key[nodeidx + 1];
+      
+      u32 i1 = index_table_alloc(gctx->entities);
+      entity_data * ed = index_table_lookup(gctx->entities, i1);
+      entity_data * node_entity = index_table_lookup(gctx->entities, node);
+      ed->position = node_entity->position;
+      people_dna dna = {rand(),rand(),rand(),rand(),rand(),rand(),rand()};
+      ed->model = people_dna_to_model(dna, gctx);
     character_table_set(characters, i1, node, 0);
     active_entities_set(gctx->active_entities, i1, true);
     const u32 ncount = 10;
-    u32 _nodes[ncount];
+    u32 _nodes[10];
     
     _nodes[0] = node;
     _nodes[ncount - 1] = node;
-    index_table_sequence seqs[ncount];
+    index_table_sequence seqs[10];
     static index_table * tab = NULL;
     if(tab == NULL)
       tab = index_table_create(NULL, sizeof(u32));
@@ -552,7 +557,7 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
       if(seqs[i].count == 0){
 	logd("ERROR: Invalid path from %i to %i\n", _nodes[i-1], _nodes[i]);
 
-	return true;
+	goto __next;
       }
     }
     
@@ -578,7 +583,8 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
     
     u32_to_sequence_set(node_traversal_index, i1, seq);
     
-    return true;
+    __next:;
+    }
   }
   if(nth_str_cmp(commands, 0, "find-path")){
     u32 n1, n2;
@@ -596,6 +602,7 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
       logd("Two u32s must be supplied\n");
     }
     return true;
+    
   }
 
   if(nth_str_cmp(commands, 0, "is-sub-node")){
@@ -976,7 +983,7 @@ void node_roguelike_update(graphics_context * ctx){
     auto len = vec3_len(n2c);
     if(len > 0.15){
 
-      vec3 d = vec3_scale(n2c, 0.3 * 1.0 / len);
+      vec3 d = vec3_scale(n2c, 0.1 * 1.0 / len);
       entity_velocity_set(ctx->entity_velocity, entity, d);
 
     }else{

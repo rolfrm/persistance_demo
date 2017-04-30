@@ -1,4 +1,4 @@
-OPT = -g3 -O0 -fPIC 
+OPT = -g3 -O4 -fPIC 
 LIB_SOURCES = node_roguelike.c node_roguelike_ui.c 
 CC = gcc
 TARGET = node_roguelike.so

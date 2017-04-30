@@ -143,6 +143,25 @@ u64 sorttable_insert_key(sorttable * table, void * key){
 void sorttable_insert(sorttable * table, void * key, void * value){
   sorttable_inserts(table, key, value, 1);
 }
+void * bsearch_bigger(int (*cmp)(void*, void*), void * key, void * pt, void * end, size_t keysize){
+
+  u64 a = 0;
+  u64 cnt = ((u64)(end - pt)) / keysize;
+  if(cnt == 0) return pt;
+  if(cmp(pt + a, key) > 0)
+    return pt;
+  u64 b = cnt - 1;
+
+  
+  while(a != b){
+    u32 c = (a + b) / 2;
+    if(cmp(pt + c * keysize, key) > 0)
+      b = c;
+    else
+      a = c + 1;
+  }
+  return pt + a * keysize;
+}
 
 void sorttable_insert_keys(sorttable * table, void * keys, u64 * out_indexes, u64 cnt){
   ASSERT(sorttable_keys_sorted(table, keys, cnt));
@@ -153,8 +172,10 @@ void sorttable_insert_keys(sorttable * table, void * keys, u64 * out_indexes, u6
   void * pt = table->key_area->ptr;
   void * end = pt + table->key_area->size - table->key_size * cnt;
   void * vend = table->value_area->ptr + table->value_area->size - table->value_size * cnt;
+  int (*cmp)(const void*, const void*) = table->cmp;
   for(u64 i = 0; i < cnt; i++){
-    while(pt < end && table->cmp(pt, keys) <= 0)
+    pt = bsearch_bigger((void*)cmp, keys, pt, end, table->key_size);
+    while(pt < end && cmp(pt, keys) <= 0)
       pt += table->key_size;
     u64 offset = (pt - table->key_area->ptr) / table->key_size;
 
@@ -255,6 +276,7 @@ void sorttable_removes(sorttable * table, void * keys, size_t cnt){
 }
 
 size_t sorttable_iter(sorttable * table, void * keys, size_t keycnt, void * out_keys, u64 * indexes, size_t cnt, size_t * idx){
+  void * orig_out_keys = out_keys;
   u64 idx_replacement = 0;
   u64 orig_cnt = cnt;
   if(idx == NULL)
@@ -284,6 +306,7 @@ size_t sorttable_iter(sorttable * table, void * keys, size_t keycnt, void * out_
     
     do{
       if(out_keys != NULL){
+	ASSERT(orig_out_keys == out_keys);
 	memcpy(out_keys, key, table->key_size);
 	out_keys += table->key_size;
       }
@@ -442,5 +465,11 @@ void table2_test(){
     ASSERT(tabl.key_area->size == tabl.key_size);
     
   }
-  //ASSERT(false);
+  {
+    u64 arraything[] = {1,4,6,7,7,7,7,7,7,7,7,7,7,8,8,9,19,20,111};
+    u64 key = 111;
+    u64 * x = bsearch_bigger((void *) keycmp,&key , arraything, arraything + sizeof(arraything), sizeof(arraything[0]));
+    logd("%i \n", *x);
+    ASSERT(x == arraything + array_count(arraything));
+  }
 }

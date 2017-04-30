@@ -33,7 +33,7 @@ void define_subclass(u64 class, u64 base_class){
 
 u64 get_baseclass(u64 class, u64 * index){
   u64 r = 0;
-  iter_base_class(&class, 1, &class, &r, 1, index);
+  iter_base_class(&class, 1, NULL, &r, 1, index);
 
   if(r != 0)
     return *ref_at_base_class(r);

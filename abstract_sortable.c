@@ -57,7 +57,7 @@ void abstract_sorttable_check_sanity(abstract_sorttable * table){
       ASSERT(cnt == areas[i]->size / type_size[i]);
   }
 }
-
+void * bsearch_bigger(int (*cmp)(void*, void*), void * key, void * pt, void * end, size_t keysize);
   
 bool abstract_sorttable_keys_sorted(abstract_sorttable * table, void * keys, u64 cnt){
   u64 key_size = get_type_sizes(table)[0];
@@ -152,6 +152,7 @@ void abstract_sorttable_finds(abstract_sorttable * table, void * keys, u64 * ind
   }
 }
 
+
 void abstract_sorttable_insert_keys(abstract_sorttable * table, void * keys, u64 * out_indexes, u64 cnt){
   ASSERT(abstract_sorttable_keys_sorted(table, keys, cnt));
   abstract_sorttable_check_sanity(table);
@@ -179,11 +180,12 @@ void abstract_sorttable_insert_keys(abstract_sorttable * table, void * keys, u64
   void * vend[column_count];
   for(u32 i = 0; i < column_count; i++)
     vend[i] = column_area[i]->ptr + column_area[i]->size - column_size[i] * cnt;
-  
+  int (*cmp)( void*,  void*) = table->cmp;
   for(u64 i = 0; i < cnt; i++){
-    while(pt < end && table->cmp(pt, keys) <= 0){
+    pt = bsearch_bigger((void *)cmp, keys, pt, end, key_size);
+    while(pt < end && cmp(pt, keys) <= 0)
       pt += key_size;
-    }
+    
     u64 offset = (pt - key_area->ptr) / key_size;
     // move everything from keysize up
     memmove(pt + key_size, pt , end - pt); 
@@ -208,7 +210,7 @@ void abstract_sorttable_insert_keys(abstract_sorttable * table, void * keys, u64
   table->count = key_area->size / key_size - 1;
   //todo: disable then when tables gets big enough
   // until then this will detect possible programming errors, causing the tables to rapidly expand.
-  ASSERT(table->count < 10000);
+  ASSERT(table->count < 100000);
 }
 
 void abstract_sorttable_inserts(abstract_sorttable * table, void ** values, u64 cnt){

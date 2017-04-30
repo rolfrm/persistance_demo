@@ -14,7 +14,7 @@ i32 make_shader(u32 kind, char * source, u32 length){
   glShaderSource(ref,1,(const GLchar **)&source,(i32 *) &length);
   glCompileShader(ref);
 
-  GLint status;
+  GLint status = 0;
   glGetShaderiv(ref, GL_COMPILE_STATUS, &status);
   if(status == GL_FALSE){
     GLint infoLogLength = 0;
@@ -33,6 +33,7 @@ i32 make_shader(u32 kind, char * source, u32 length){
     GLint infoLogLength = 0;
     glGetShaderiv(ref, GL_INFO_LOG_LENGTH, &infoLogLength);
     char log[infoLogLength];
+    memset(log, 0, sizeof(log));
     glGetShaderInfoLog(ref, infoLogLength, NULL, log);
     printf("Shader Info log:\n **************************\n");
     printf(log);
