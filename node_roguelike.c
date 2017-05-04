@@ -752,6 +752,7 @@ double game_time = 0;
 void node_roguelike_update(graphics_context * ctx){
   static u32_to_u32 * node_sub_nodes_lookup = NULL;
   static u32 last_sub_nodes_count = 0;
+
   if(node_sub_nodes_lookup == NULL){
     node_sub_nodes_lookup = u32_to_u32_create(NULL/*"node-sub-nodes-lookup*/);
     ((bool *)&node_sub_nodes_lookup->is_multi_table)[0] = true;
@@ -1034,7 +1035,18 @@ void node_roguelike_update(graphics_context * ctx){
     float zoom = ctx->game_data->zoom;
     ed->position = vec3_new(game_offset.x - offset.x * zoom, 10, game_offset.y - 10 + offset.y * zoom);
   }
+
+  static u32_to_u32 * node_character_lookup = NULL;
   
+  if(node_character_lookup == NULL){
+    node_character_lookup = u32_to_u32_create(NULL);
+    ((bool *)&node_character_lookup->is_multi_table)[0] = true;
+  }
+  u32_to_u32_clear(node_character_lookup);
+  for(u32 i = 0; i < characters->count; i++)
+    u32_to_u32_set(node_character_lookup, characters->current_node[i + 1], characters->entity[i + 1]);
+  
+					 
   { // do evil AI stuff
     u64 evil_nodes_idx[evil_npcs->count];
     character_table_lookup(characters, evil_npcs->key + 1, evil_nodes_idx, evil_npcs->count);
@@ -1043,7 +1055,31 @@ void node_roguelike_update(graphics_context * ctx){
       evil_nodes[i] = characters->current_node[evil_nodes_idx[i]];
       //logd("evil npcs: %i %i\n", evil_nodes[i], evil_npcs->count);
     }
+    logd("\n");
     u32 cnt = sort_distinct_u32(evil_nodes, array_count(evil_nodes_idx));
+    for(u32 i = 0; i < cnt; i++){
+      u32 node = evil_nodes[i];
+      u64 character_count = u32_to_u32_iter(node_character_lookup, &node, 1, NULL, NULL, 1000, NULL);
+      u64 indexes[character_count];
+      u32_to_u32_iter(node_character_lookup, &node, 1, NULL, indexes, character_count, NULL);
+      u32 chars[character_count];
+      for(u32 i = 0; i < character_count; i++)
+	chars[i] = node_character_lookup->value[indexes[i]];
+      sort_u32(chars, character_count);
+      u32_lookup_lookup(evil_npcs, chars, indexes, character_count);
+      u32 norm = 0, evil = 0;
+      for(u32 i = 0; i < character_count; i++)
+	if(indexes[i] == 0)
+	  norm += 1;
+	else
+	  evil += 1;
+      logd("Node: %i   good: %i   Evil: %i\n", node, norm, evil);
+      if(norm == 1 && evil > 0){
+	logd("Take over!\n");
+	
+      }
+      
+    }
     //logd("--- %i\n", cnt);
     UNUSED(cnt);
     //logd("\n");
