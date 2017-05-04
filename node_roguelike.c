@@ -138,6 +138,8 @@ typedef struct{
 #include "traversal_time.c"
 
 extern node_action_table * node_actions;
+
+// Sorts the u32s in items.
 void sort_u32(u32 * items, u64 cnt){
   int cmpfnc(u32 * a, u32 * b){
     if(*a > *b)
@@ -147,6 +149,18 @@ void sort_u32(u32 * items, u64 cnt){
     return 0;
   }
   qsort(items, cnt, sizeof(u32), (void *) cmpfnc);
+}
+
+// Sorts the u32s in items and remove dublicates. Returns the number of distinct items.
+u64 sort_distinct_u32(u32 * items, u64 cnt){
+  sort_u32(items, cnt);
+  u64 same = 0;
+  for(u32 i = 1; i < cnt - same; i++){
+    while(items[i + same] == items[i - 1])
+      same++;
+    items[i] = items[i + same];
+  }
+  return cnt - same;
 }
 
 u32_lookup * is_node_table;
@@ -169,7 +183,8 @@ u32_lookup * residential_city_nodes;
 traversal_time * traversal_times;
 
 u32_to_u32 * node_sub_nodes;
-
+u32_lookup * evil_npcs;
+u32_lookup * evil_houses;
 
 void load_connection_entity(graphics_context * ctx, u32 entity, u32 entity2){
   static connection_entities * connection_entities_table = NULL;
@@ -504,11 +519,10 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
   }
   
   if(nth_str_cmp(commands, 0, "load-people")){
+    bool isevil = nth_str_cmp(commands, 1, "evil");
     u32 count = 0;
-    nth_parse_u32(commands, 1, &count);
-    logd("LOADING %i people\n", count);
+    nth_parse_u32(commands, (isevil ? 1 : 0 ) + 1, &count);
     for(u32 i = 0; i < count; i++){
-      logd("???\n");
       if(nr_game_data->people_default_model == 0){
 	logd("Default model must be set.\n");
 	goto __next;
@@ -529,62 +543,65 @@ bool node_roguelike_interact(graphics_context * gctx, editor_context * ctx, char
       u32 node = residential_nodes->key[nodeidx + 1];
       
       u32 i1 = index_table_alloc(gctx->entities);
+      if(isevil)
+	u32_lookup_set(evil_npcs, i1);
       entity_data * ed = index_table_lookup(gctx->entities, i1);
       entity_data * node_entity = index_table_lookup(gctx->entities, node);
       ed->position = node_entity->position;
       people_dna dna = {rand(),rand(),rand(),rand(),rand(),rand(),rand()};
       ed->model = people_dna_to_model(dna, gctx);
-    character_table_set(characters, i1, node, 0);
-    active_entities_set(gctx->active_entities, i1, true);
-    const u32 ncount = 10;
-    u32 _nodes[10];
+      character_table_set(characters, i1, node, 0);
+      active_entities_set(gctx->active_entities, i1, true);
+      const u32 ncount = 10;
+      u32 _nodes[10];
     
-    _nodes[0] = node;
-    _nodes[ncount - 1] = node;
-    index_table_sequence seqs[10];
-    static index_table * tab = NULL;
-    if(tab == NULL)
-      tab = index_table_create(NULL, sizeof(u32));
-    index_table_clear(tab);
-    u32 total_count = 1;
-    for(u32 i = 1; i < ncount; i++){
-      u32 idx = randu32(residential_city_nodes->count);
-      u32 newnode = residential_city_nodes->key[idx + 1];
-      if(i < ncount - 1)
-	_nodes[i] = newnode;
-      seqs[i] = find_path(_nodes[i - 1], _nodes[i], tab, gctx);
-      total_count += seqs[i].count - 1;
-      if(seqs[i].count == 0){
-	logd("ERROR: Invalid path from %i to %i\n", _nodes[i-1], _nodes[i]);
+      _nodes[0] = node;
+      _nodes[ncount - 1] = node;
+      index_table_sequence seqs[10];
+      static index_table * tab = NULL;
+      if(tab == NULL)
+	tab = index_table_create(NULL, sizeof(u32));
+      index_table_clear(tab);
+      u32 total_count = 1;
+      for(u32 i = 1; i < ncount; i++){
+	u32 idx = randu32(residential_city_nodes->count);
+	u32 newnode = residential_city_nodes->key[idx + 1];
+	if(i < ncount - 1)
+	  _nodes[i] = newnode;
+	seqs[i] = find_path(_nodes[i - 1], _nodes[i], tab, gctx);
+	total_count += seqs[i].count - 1;
+	if(seqs[i].count == 0){
+	  logd("ERROR: Invalid path from %i to %i\n", _nodes[i-1], _nodes[i]);
 
-	goto __next;
+	  goto __next;
+	}
       }
-    }
     
-    index_table_sequence seq = {0};
-    u32_to_sequence_try_get(node_traversal_index, &i1, &seq);
-    index_table_resize_sequence(node_traversal, &seq, total_count);
+      index_table_sequence seq = {0};
+      u32_to_sequence_try_get(node_traversal_index, &i1, &seq);
+      index_table_resize_sequence(node_traversal, &seq, total_count);
 
-    u32 * nodes = index_table_lookup_sequence(node_traversal, seq);
-    nodes[0] = node;
-    traversal_time_set(traversal_times, (traversal_time_key){i1, 0}, 1.0f);
-    u32 j = 1;
-    for(u32 i = 1; i < ncount; i++){
-      u32 * newnodes = index_table_lookup_sequence(tab, seqs[i]);
-      for(u32 k = 1; k < seqs[i].count; k++){
-	nodes[j++] = newnodes[k];
+      u32 * nodes = index_table_lookup_sequence(node_traversal, seq);
+      nodes[0] = node;
+      traversal_time_set(traversal_times, (traversal_time_key){i1, 0}, 1.0f);
+      u32 j = 1;
+      for(u32 i = 1; i < ncount; i++){
+	u32 * newnodes = index_table_lookup_sequence(tab, seqs[i]);
+	for(u32 k = 1; k < seqs[i].count; k++){
+	  nodes[j++] = newnodes[k];
+	}
+	traversal_time_set(traversal_times, (traversal_time_key){i1, j - 1}, 1.0f);
       }
-      traversal_time_set(traversal_times, (traversal_time_key){i1, j - 1}, 1.0f);
-    }
-    for(u32 i = 0; i < total_count; i++){
-      if(i > 0)
-	ASSERT(nodes[i] == nodes[i -1] || are_connected(nodes[i], nodes[i - 1]));
-    }
+      for(u32 i = 0; i < total_count; i++){
+	if(i > 0)
+	  ASSERT(nodes[i] == nodes[i -1] || are_connected(nodes[i], nodes[i - 1]));
+      }
     
-    u32_to_sequence_set(node_traversal_index, i1, seq);
+      u32_to_sequence_set(node_traversal_index, i1, seq);
     
     __next:;
     }
+    return true;
   }
   if(nth_str_cmp(commands, 0, "find-path")){
     u32 n1, n2;
@@ -683,17 +700,8 @@ index_table_sequence find_path(u32 a, u32 b, index_table * outp_nodes, graphics_
     u32 cn[c1];
     for(u32 i = 0; i < c1; i++)
       cn[i] = connected_nodes_table->n2[ac[i]];
-    sort_u32(cn, c1);
-    { // remove duplicates
-      u64 same = 0;
-      for(u32 i = 1; i < c1 - same; i++){
-	while(cn[i + same] == cn[i - 1])
-	  same++;
-	cn[i] = cn[i + same];
-      }
-      c1 -= same;
-    }
-
+    c1 = sort_distinct_u32(cn, c1);
+    
     a_star_helper_lookup(helper, cn, ac, c1);
     for(u32 i = 0; i < c1; i++){
       u32 newnode = cn[i];
@@ -1026,6 +1034,20 @@ void node_roguelike_update(graphics_context * ctx){
     float zoom = ctx->game_data->zoom;
     ed->position = vec3_new(game_offset.x - offset.x * zoom, 10, game_offset.y - 10 + offset.y * zoom);
   }
+  
+  { // do evil AI stuff
+    u64 evil_nodes_idx[evil_npcs->count];
+    character_table_lookup(characters, evil_npcs->key + 1, evil_nodes_idx, evil_npcs->count);
+    u32 evil_nodes[evil_npcs->count];
+    for(u32 i = 0; i < evil_npcs->count; i++){
+      evil_nodes[i] = characters->current_node[evil_nodes_idx[i]];
+      //logd("evil npcs: %i %i\n", evil_nodes[i], evil_npcs->count);
+    }
+    u32 cnt = sort_distinct_u32(evil_nodes, array_count(evil_nodes_idx));
+    //logd("--- %i\n", cnt);
+    UNUSED(cnt);
+    //logd("\n");
+  }
   node_roguelike_ui_update(ctx);
 }
 
@@ -1140,7 +1162,8 @@ void init_module(graphics_context * ctx){
 
   node_sub_nodes = u32_to_u32_create("node-sub-nodes");
   ((bool *)&node_sub_nodes->is_multi_table)[0] = true;
-
+  evil_npcs = u32_lookup_create("evil npcs");;
+  evil_houses = u32_lookup_create("evil houses");
 
   static mem_area * game_data_mem_area = NULL;
   if(game_data_mem_area == NULL){

@@ -923,8 +923,9 @@ void render_window(u64 window_id){
   
     render_sub(child_control->child_id);
   }
-  if(last)
-    glfwSwapInterval(1);
+  bool vsync_enabled = false;
+  if(vsync_enabled)
+    glfwSwapInterval(last ? 1 : 0);
   else
     glfwSwapInterval(0);
   glfwSwapBuffers(glfwWin);
